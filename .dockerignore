@@ -25,7 +25,6 @@ htmlcov/
 tests/
 docs/
 *.md
-README*
 
 # 开发工具
 .env
