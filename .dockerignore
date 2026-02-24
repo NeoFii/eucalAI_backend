@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+.pytest_cache
+.coverage
+htmlcov/
+
+# 测试和文档
+tests/
+docs/
+*.md
+README*
+
+# 开发工具
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+logs/
+
+# Node（如果有）
+node_modules/
+
+# 其他
+.DS_Store
+Thumbs.db
+*.tmp
+temp/
