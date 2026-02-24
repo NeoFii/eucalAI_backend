@@ -1,4 +1,4 @@
-# 阶段1: 安装依赖
+# 阶段1: 构建依赖
 FROM python:3.11-slim AS builder
 
 # 安装构建依赖
@@ -12,13 +12,11 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# 复制依赖文件
+# 复制依赖文件并安装
 COPY pyproject.toml .
-
-# 使用 uv 安装依赖
-RUN uv venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
-RUN uv pip install --system -e .
+RUN uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    uv pip install --system fastapi uvicorn sqlalchemy aiomysql pydantic pydantic-settings python-jose passlib bcrypt python-multipart
 
 # 阶段2: 生产运行
 FROM python:3.11-slim AS runner
@@ -33,13 +31,16 @@ RUN useradd --create-home --shell /bin/bash appuser
 
 WORKDIR /app
 
-# 复制虚拟环境
-COPY --from=builder /app/.venv .venv
-ENV PATH="/app/.venv/bin:$PATH"
+# 复制虚拟环境（从 builder）
+COPY --from=builder /app/.venv /app/.venv
 
 # 复制应用代码
-COPY --chown=appuser:appuser app/ ./app/
-COPY --chown=appuser:appuser .env.example ./
+COPY --chown=appuser:appuser app/ /app/app/
+COPY --chown=appuser:appuser .env.example /app/.env
+
+# 设置环境
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH=/app
 
 # 切换到非 root 用户
 USER appuser
@@ -47,9 +48,5 @@ USER appuser
 # 暴露端口
 EXPOSE 8000
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
-
 # 启动命令
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
