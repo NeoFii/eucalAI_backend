@@ -1,0 +1,73 @@
+# 后端 Docker Compose 配置
+# 使用方式: docker-compose up -d
+# 注意: 此配置假设 MySQL 已使用 eucal_network 网络部署
+
+services:
+  backend:
+    build:
+      context: ..        # 指向上级目录
+      dockerfile: deploy/Dockerfile
+    container_name: eucal_backend
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      # 数据库配置
+      # 使用容器名 eucal_mysql 访问（需要与 MySQL 在同一网络）
+      DATABASE_URL: "mysql+aiomysql://root:EucalAI123%40456%2A@eucal_mysql:3306/eucal_ai"
+      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      DATABASE_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      DATABASE_ECHO: "false"
+
+      # JWT 配置
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-8b0cb941d6ea64bef8756492f1ce32b955b5759b36907dd7f2072b1e493ff8df}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+
+      # CORS 和安全配置
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-frontend,localhost,127.0.0.1}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+
+      # 调试模式
+      DEBUG: ${DEBUG:-false}
+
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+    volumes:
+      # 持久化日志
+      - backend_logs:/app/logs
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 资源限制（可选）
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # 加入 MySQL 所在的网络
+    networks:
+      - eucal_network
+
+networks:
+  eucal_network:
+    name: eucal_network
+    external: true
+
+volumes:
+  backend_logs:
+    name: eucal_backend_logs

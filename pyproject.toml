@@ -2,7 +2,6 @@
 name = "eucal-ai-backend"
 version = "0.1.0"
 description = "Eucal AI 官网后端 API - FastAPI 构建"
-readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.109.0",
