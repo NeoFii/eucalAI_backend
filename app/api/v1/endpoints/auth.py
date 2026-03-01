@@ -5,7 +5,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -23,6 +23,7 @@ from app.models.auth_schemas import (
     LoginWithCodeRequest,
     LogoutResponse,
     RefreshResponse,
+    RefreshResponseData,
     RegisterRequest,
     RegisterResponse,
     RegisterResponseData,
@@ -230,18 +231,45 @@ async def verify_email(
 @limiter.limit("5/minute")  # 限制每分钟5次注册
 async def register(
     request: Request,
+    response: Response,
     register_request: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> RegisterResponse:
     """
     用户注册
 
+    - 注册成功后返回 access_token 和 refresh_token（同时自动登录）
     - **email**: 登录邮箱（唯一）
     - **password**: 密码（至少8位，包含大小写+数字+特殊字符）
     - **nickname**: 显示昵称（可选）
     - **verification_code**: 邮箱验证码（预留字段，暂不校验）
     """
     user = await AuthService.register(db, register_request)
+
+    # 注册成功后自动登录，生成 Token
+    user_agent = request.headers.get("user-agent")
+    ip_address = request.client.host if request.client else None
+
+    _, access_token, refresh_token = await AuthService.login(
+        db,
+        email=user.email,
+        password=register_request.password,
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
+
+    # 获取 Token 过期时间
+    from app.config import settings
+    access_token_expire_seconds = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # 设置 Cookie（保留，用于 CSRF 防护）
+    set_auth_cookies(
+        response,
+        access_token,
+        refresh_token,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
 
     return RegisterResponse(
         code=201,
@@ -251,6 +279,9 @@ async def register(
             email=user.email,
             nickname=user.nickname,
             created_at=user.created_at,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=access_token_expire_seconds,
         ),
     )
 
@@ -274,7 +305,7 @@ async def login(
     """
     用户登录
 
-    - 成功后设置 access_token 和 refresh_token Cookie
+    - 成功后返回 access_token 和 refresh_token（同时设置 Cookie）
     - 采用互踢模式，新登录会注销其他设备的会话
 
     - **email**: 登录邮箱
@@ -292,9 +323,11 @@ async def login(
         ip_address=ip_address,
     )
 
-    # 设置 Cookie
+    # 获取 Token 过期时间
     from app.config import settings
+    access_token_expire_seconds = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
+    # 设置 Cookie（保留，用于 CSRF 防护）
     set_auth_cookies(
         response,
         access_token,
@@ -311,6 +344,9 @@ async def login(
             email=user.email,
             nickname=user.nickname,
             avatar_url=user.avatar_url,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=access_token_expire_seconds,
         ),
     )
 
@@ -346,37 +382,55 @@ async def logout(
 )
 async def refresh(
     response: Response,
+    authorization: Optional[str] = Header(None),
     refresh_token: Optional[str] = Cookie(None),
     db: AsyncSession = Depends(get_db),
 ) -> RefreshResponse:
     """
     刷新 access_token
 
-    - 使用 refresh_token 获取新的 access_token
-    - 同时更新 Cookie
+    - 支持两种方式提供 refresh_token：
+      1. Authorization: Bearer <refresh_token>
+      2. Cookie: refresh_token
+    - 成功后返回新的 access_token 和 refresh_token（同时更新 Cookie）
     """
-    if not refresh_token:
+    # 优先从 Authorization header 获取 token
+    token = refresh_token
+    if authorization and authorization.startswith('Bearer '):
+        token = authorization[7:]  # 去掉 "Bearer " 前缀
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="未提供刷新令牌",
         )
 
-    new_access_token = await AuthService.refresh_access_token(db, refresh_token)
+    new_access_token, new_refresh_token = await AuthService.refresh_access_token(db, token)
 
-    # 更新 access_token Cookie
+    # 获取 Token 过期时间
     from app.config import settings
+    access_token_expire_seconds = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
+    # 更新 Cookie（保留）
     response.set_cookie(
         key=COOKIE_KEY_ACCESS_TOKEN,
         value=new_access_token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
-        max_age=15 * 60,
+        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
 
-    return RefreshResponse(code=200, message="刷新成功")
+    return RefreshResponse(
+        code=200,
+        message="刷新成功",
+        data=RefreshResponseData(
+            access_token=new_access_token,
+            refresh_token=new_refresh_token,
+            expires_in=access_token_expire_seconds,
+        ),
+    )
 
 
 @router.get(
@@ -487,9 +541,11 @@ async def login_with_code(
         ip_address=ip_address,
     )
 
-    # 设置 Cookie
+    # 获取 Token 过期时间
     from app.config import settings
+    access_token_expire_seconds = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
+    # 设置 Cookie（保留，用于 CSRF 防护）
     set_auth_cookies(
         response,
         access_token,
@@ -506,6 +562,9 @@ async def login_with_code(
             email=user.email,
             nickname=user.nickname,
             avatar_url=user.avatar_url,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=access_token_expire_seconds,
         ),
     )
 

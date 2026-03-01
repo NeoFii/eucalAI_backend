@@ -298,7 +298,7 @@ class AuthService:
     async def refresh_access_token(
         db: AsyncSession,
         refresh_token: str,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         刷新 access_token
 
@@ -307,7 +307,7 @@ class AuthService:
             refresh_token: refresh_token
 
         Returns:
-            str: 新的 access_token
+            tuple[str, str]: 新的 (access_token, refresh_token)
 
         Raises:
             InvalidTokenException: 无效的令牌
@@ -355,8 +355,13 @@ class AuthService:
             data={"uid": user.uid, "sub": str(user.uid)}
         )
 
+        # 生成新的 refresh_token（可选：此处保留原 refresh_token）
+        new_refresh_token = create_refresh_token(
+            data={"uid": user.uid, "sub": str(user.uid)}
+        )
+
         logger.info(f"刷新 access_token 成功: uid={user.uid}")
-        return new_access_token
+        return new_access_token, new_refresh_token
 
     @staticmethod
     async def get_current_user(

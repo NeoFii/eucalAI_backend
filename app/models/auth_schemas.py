@@ -66,6 +66,9 @@ class RegisterResponseData(BaseModel):
     email: str = Field(..., description="注册邮箱")
     nickname: Optional[str] = Field(default=None, description="昵称")
     created_at: datetime = Field(..., description="注册时间")
+    access_token: Optional[str] = Field(default=None, description="访问令牌")
+    refresh_token: Optional[str] = Field(default=None, description="刷新令牌")
+    expires_in: Optional[int] = Field(default=None, description="访问令牌有效期（秒）")
 
 
 class RegisterResponse(AuthBaseResponse):
@@ -87,6 +90,9 @@ class LoginResponseData(BaseModel):
     email: str = Field(..., description="邮箱")
     nickname: Optional[str] = Field(default=None, description="昵称")
     avatar_url: Optional[str] = Field(default=None, description="头像URL")
+    access_token: Optional[str] = Field(default=None, description="访问令牌")
+    refresh_token: Optional[str] = Field(default=None, description="刷新令牌")
+    expires_in: Optional[int] = Field(default=None, description="访问令牌有效期（秒）")
 
 
 class LoginResponse(AuthBaseResponse):
@@ -137,9 +143,16 @@ class ChangePasswordResponse(AuthBaseResponse):
 
 # ==================== Token 刷新 ====================
 
+class RefreshResponseData(BaseModel):
+    """刷新 Token 响应数据"""
+    access_token: str = Field(..., description="新的访问令牌")
+    refresh_token: Optional[str] = Field(default=None, description="新的刷新令牌（可选）")
+    expires_in: int = Field(..., description="访问令牌有效期（秒）")
+
+
 class RefreshResponse(AuthBaseResponse):
     """刷新 Token 响应"""
-    pass
+    data: Optional[RefreshResponseData] = None
 
 
 # ==================== 登出 ====================
