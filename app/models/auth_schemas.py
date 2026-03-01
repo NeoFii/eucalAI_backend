@@ -67,7 +67,7 @@ class RegisterResponseData(BaseModel):
     nickname: Optional[str] = Field(default=None, description="昵称")
     created_at: datetime = Field(..., description="注册时间")
     access_token: Optional[str] = Field(default=None, description="访问令牌")
-    refresh_token: Optional[str] = Field(default=None, description="刷新令牌")
+    # refresh_token 已移除 - 通过 httpOnly Cookie 传输
     expires_in: Optional[int] = Field(default=None, description="访问令牌有效期（秒）")
 
 
@@ -84,14 +84,19 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="密码")
 
 
-class LoginResponseData(BaseModel):
-    """登录响应数据"""
+class UserData(BaseModel):
+    """用户数据嵌套模型（登录响应使用）"""
     uid: int = Field(..., description="用户唯一ID")
     email: str = Field(..., description="邮箱")
     nickname: Optional[str] = Field(default=None, description="昵称")
     avatar_url: Optional[str] = Field(default=None, description="头像URL")
+
+
+class LoginResponseData(BaseModel):
+    """登录响应数据"""
+    user: UserData = Field(..., description="用户信息")
     access_token: Optional[str] = Field(default=None, description="访问令牌")
-    refresh_token: Optional[str] = Field(default=None, description="刷新令牌")
+    # refresh_token 已移除 - 通过 httpOnly Cookie 传输，不在响应体暴露
     expires_in: Optional[int] = Field(default=None, description="访问令牌有效期（秒）")
 
 

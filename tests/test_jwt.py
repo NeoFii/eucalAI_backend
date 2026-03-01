@@ -212,3 +212,23 @@ class TestTokenIntegration:
 
         access_expiry = get_token_expiry(access_token)
         assert access_expiry is not None
+
+
+class TestSecurity:
+    """安全测试"""
+
+    def test_jwt_algorithm_none_rejected(self):
+        """验证 alg=none 攻击被拒绝"""
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}).encode()
+        ).rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"uid": 1, "type": "access"}).encode()
+        ).rstrip(b"=").decode()
+        forged_token = f"{header}.{payload}."
+
+        result = verify_access_token(forged_token)
+        assert result is None, "alg=none 的伪造 token 应被拒绝"

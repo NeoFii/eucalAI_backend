@@ -29,6 +29,7 @@ from app.models.auth_schemas import (
     RegisterResponseData,
     ResetPasswordRequest,
     SendEmailCodeRequest,
+    UserData,
     UserInfoResponse,
     UserInfoResponseData,
     VerifyEmailRequest,
@@ -52,7 +53,7 @@ def set_auth_cookies(
     response: Response,
     access_token: str,
     refresh_token: str,
-    secure: bool = False,
+    secure: bool = True,
     samesite: str = "lax",
 ) -> None:
     """
@@ -84,24 +85,26 @@ def set_auth_cookies(
         secure=secure,
         samesite=samesite,
         max_age=7 * 24 * 60 * 60,  # 7 天
-        path="/api/v1/auth",  # refresh_token 只在认证接口使用
+        path="/",  # 修复：与前端期望一致
     )
 
 
 def clear_auth_cookies(response: Response) -> None:
     """清除认证相关的 Cookie"""
     response.delete_cookie(key=COOKIE_KEY_ACCESS_TOKEN, path="/")
-    response.delete_cookie(key=COOKIE_KEY_REFRESH_TOKEN, path="/api/v1/auth")
+    response.delete_cookie(key=COOKIE_KEY_REFRESH_TOKEN, path="/")  # 修复：与 set_cookie 一致
 
 
 async def get_current_user_uid(
     access_token: Optional[str] = Cookie(None),
+    db: AsyncSession = Depends(get_db),
 ) -> int:
     """
     获取当前用户 UID
 
     Args:
         access_token: Cookie 中的 access_token
+        db: 数据库会话
 
     Returns:
         int: 用户 UID
@@ -127,6 +130,24 @@ async def get_current_user_uid(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的令牌",
+        )
+
+    # 校验用户存在性和状态
+    result = await db.execute(
+        select(User).where(User.uid == int(uid))
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在",
+        )
+
+    if user.status != 1:  # 0=禁用, 1=正常, 2=待验证
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已被禁用",
         )
 
     return int(uid)
@@ -280,7 +301,7 @@ async def register(
             nickname=user.nickname,
             created_at=user.created_at,
             access_token=access_token,
-            refresh_token=refresh_token,
+            # refresh_token 已通过 Set-Cookie 写入，此处不返回
             expires_in=access_token_expire_seconds,
         ),
     )
@@ -340,12 +361,14 @@ async def login(
         code=200,
         message="登录成功",
         data=LoginResponseData(
-            uid=user.uid,
-            email=user.email,
-            nickname=user.nickname,
-            avatar_url=user.avatar_url,
+            user=UserData(
+                uid=user.uid,
+                email=user.email,
+                nickname=user.nickname,
+                avatar_url=user.avatar_url,
+            ),
             access_token=access_token,
-            refresh_token=refresh_token,
+            # refresh_token 已通过 Set-Cookie 写入，此处不返回
             expires_in=access_token_expire_seconds,
         ),
     )
@@ -382,30 +405,23 @@ async def logout(
 )
 async def refresh(
     response: Response,
-    authorization: Optional[str] = Header(None),
     refresh_token: Optional[str] = Cookie(None),
     db: AsyncSession = Depends(get_db),
 ) -> RefreshResponse:
     """
     刷新 access_token
 
-    - 支持两种方式提供 refresh_token：
-      1. Authorization: Bearer <refresh_token>
-      2. Cookie: refresh_token
+    - 仅支持从 Cookie 读取 refresh_token（与前端契约一致）
     - 成功后返回新的 access_token 和 refresh_token（同时更新 Cookie）
     """
-    # 优先从 Authorization header 获取 token
-    token = refresh_token
-    if authorization and authorization.startswith('Bearer '):
-        token = authorization[7:]  # 去掉 "Bearer " 前缀
-
-    if not token:
+    # 只从 Cookie 获取 token
+    if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="未提供刷新令牌",
         )
 
-    new_access_token, new_refresh_token = await AuthService.refresh_access_token(db, token)
+    new_access_token, new_refresh_token = await AuthService.refresh_access_token(db, refresh_token)
 
     # 获取 Token 过期时间
     from app.config import settings
@@ -558,12 +574,14 @@ async def login_with_code(
         code=200,
         message="登录成功",
         data=LoginResponseData(
-            uid=user.uid,
-            email=user.email,
-            nickname=user.nickname,
-            avatar_url=user.avatar_url,
+            user=UserData(
+                uid=user.uid,
+                email=user.email,
+                nickname=user.nickname,
+                avatar_url=user.avatar_url,
+            ),
             access_token=access_token,
-            refresh_token=refresh_token,
+            # refresh_token 已通过 Set-Cookie 写入，此处不返回
             expires_in=access_token_expire_seconds,
         ),
     )
