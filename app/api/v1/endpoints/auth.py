@@ -91,8 +91,22 @@ def set_auth_cookies(
 
 def clear_auth_cookies(response: Response) -> None:
     """清除认证相关的 Cookie"""
-    response.delete_cookie(key=COOKIE_KEY_ACCESS_TOKEN, path="/")
-    response.delete_cookie(key=COOKIE_KEY_REFRESH_TOKEN, path="/")  # 修复：与 set_cookie 一致
+    # 必须传入与 set_cookie 相同的参数（从 settings 读取），否则浏览器不会清除
+    from app.config import settings
+    response.delete_cookie(
+        key=COOKIE_KEY_ACCESS_TOKEN,
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
+    response.delete_cookie(
+        key=COOKIE_KEY_REFRESH_TOKEN,
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
 
 
 async def get_current_user_uid(
@@ -388,10 +402,16 @@ async def logout(
     用户登出
 
     - 清除 Cookie
-    - 注销当前会话
+    - 注销当前会话（如果会话存在）
+    注意：即使会话不存在，也要清除 Cookie，确保用户能成功登出
     """
     if refresh_token:
-        await AuthService.logout(db, refresh_token)
+        try:
+            await AuthService.logout(db, refresh_token)
+        except Exception:
+            # 即使会话不存在或已注销，也要清除 Cookie
+            # 不影响用户登出流程
+            pass
 
     clear_auth_cookies(response)
 
