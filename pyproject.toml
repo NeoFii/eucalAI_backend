@@ -11,16 +11,17 @@ dependencies = [
     "python-multipart>=0.0.6",
     "email-validator>=2.1.0",
     "httpx>=0.26.0",
-    "slowapi>=0.1.9",  # 速率限制
+    "slowapi>=0.1.9", # 速率限制
     # 数据库和认证相关依赖
     "sqlalchemy[asyncio]>=2.0.0",
     "aiomysql>=0.2.0",
-    "cryptography>=42.0.0",  # aiomysql 需要的依赖
+    "cryptography>=42.0.0", # aiomysql 需要的依赖
     "python-jose[cryptography]>=3.3.1",
     "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=3.2.0,<4.0.0",  # passlib 兼容版本
+    "bcrypt>=3.2.0,<4.0.0", # passlib 兼容版本
     "snowflake-id>=1.0.0",
     "python-dotenv>=1.0.0",
+    "tzdata>=2025.3",
 ]
 
 [project.optional-dependencies]

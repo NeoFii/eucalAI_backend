@@ -3,13 +3,14 @@
 定义 users 和 user_sessions 表结构
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Column, BigInteger, Integer, SmallInteger, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base, SnowflakeIdMixin, TimestampMixin
+from app.utils.timezone import now
 
 if TYPE_CHECKING:
     from app.models.user_session import UserSession
@@ -50,20 +51,6 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
         String(255),
         nullable=False,
         comment="bcrypt密码哈希",
-    )
-
-    # 显示昵称
-    nickname = Column(
-        String(64),
-        nullable=True,
-        comment="显示昵称",
-    )
-
-    # 头像 URL
-    avatar_url = Column(
-        String(512),
-        nullable=True,
-        comment="头像URL",
     )
 
     # 用户状态：0=禁用 1=正常 2=待验证
@@ -133,4 +120,4 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
         """检查登录是否被锁定"""
         if self.login_locked_until is None:
             return False
-        return datetime.now(timezone.utc) < self.login_locked_until.replace(tzinfo=timezone.utc)
+        return now() < self.login_locked_until

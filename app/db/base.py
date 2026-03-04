@@ -3,10 +3,10 @@ SQLAlchemy 基础模型
 提供 declarative base 和通用字段
 """
 
-from datetime import datetime
-
 from sqlalchemy import Column, BigInteger, DateTime
 from sqlalchemy.orm import declarative_base
+
+from app.utils.timezone import now
 
 # 创建声明性基类
 Base = declarative_base()
@@ -16,18 +16,19 @@ class TimestampMixin:
     """
     时间戳混入类
     提供 created_at 和 updated_at 字段
+    使用上海时区 (UTC+8)
     """
 
     created_at = Column(
         DateTime,
-        default=datetime.utcnow,
+        default=now,
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=now,
+        onupdate=now,
         nullable=False,
         comment="更新时间",
     )

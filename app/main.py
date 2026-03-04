@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.v1.router import api_router
@@ -195,6 +196,25 @@ def create_application() -> FastAPI:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content=ApiResponse.error(message=str(exc)),
+        )
+
+    @application.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        """请求参数验证错误处理器（422）"""
+        # 提取第一个错误信息
+        errors = exc.errors()
+        if errors:
+            # 获取第一个错误的字段名和消息
+            error = errors[0]
+            field = error.get('loc', ['未知字段'])[-1]
+            msg = error.get('msg', '参数验证失败')
+            message = f"{field}: {msg}"
+        else:
+            message = "请求参数验证失败"
+
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=ApiResponse.error(message=message, code=422),
         )
 
     # 注册 API 路由

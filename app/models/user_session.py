@@ -10,6 +10,7 @@ from sqlalchemy import Column, BigInteger, ForeignKey, String, Text, DateTime
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base, SnowflakeIdMixin, TimestampMixin
+from app.utils.timezone import now
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -45,13 +46,20 @@ class UserSession(Base, SnowflakeIdMixin, TimestampMixin):
         comment="所属用户ID",
     )
 
-    # refresh_token 哈希
-    refresh_token_hash = Column(
-        String(255),
+    # refresh_token 标识（用于快速查找）
+    token_jti = Column(
+        String(64),
         unique=True,
         nullable=False,
         index=True,
-        comment="refresh_token哈希",
+        comment="refresh_token的jti标识（SHA256哈希）",
+    )
+
+    # refresh_token 哈希（bcrypt，用于验证真实性）
+    refresh_token_hash = Column(
+        String(255),
+        nullable=False,
+        comment="refresh_token的bcrypt哈希",
     )
 
     # 客户端标识
@@ -99,7 +107,7 @@ class UserSession(Base, SnowflakeIdMixin, TimestampMixin):
     @property
     def is_expired(self) -> bool:
         """检查会话是否已过期"""
-        return datetime.now(timezone.utc) > self.expires_at.replace(tzinfo=timezone.utc)
+        return now() > self.expires_at
 
     @property
     def is_valid(self) -> bool:

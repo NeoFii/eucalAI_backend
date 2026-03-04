@@ -23,12 +23,6 @@ CREATE TABLE `users` (
     -- 密码哈希（bcrypt）
     `password_hash` VARCHAR(255) NOT NULL COMMENT 'bcrypt密码哈希',
 
-    -- 显示昵称
-    `nickname` VARCHAR(64) NULL COMMENT '显示昵称',
-
-    -- 头像URL
-    `avatar_url` VARCHAR(512) NULL COMMENT '头像URL',
-
     -- 用户状态：0=禁用 1=正常 2=待验证
     `status` SMALLINT NOT NULL DEFAULT 1 COMMENT '状态：0=禁用 1=正常 2=待验证',
 
@@ -78,8 +72,9 @@ CREATE TABLE `user_sessions` (
     -- 关联用户ID
     `user_id` BIGINT NOT NULL COMMENT '关联用户ID',
 
-    -- refresh_token 哈希
-    `refresh_token_hash` VARCHAR(255) NOT NULL COMMENT 'refresh_token哈希',
+    -- refresh_token 标识和哈希
+    `token_jti` VARCHAR(64) NOT NULL COMMENT 'refresh_token的jti标识（SHA256哈希，用于快速查找）',
+    `refresh_token_hash` VARCHAR(255) NOT NULL COMMENT 'refresh_token的bcrypt哈希（用于验证真实性)',
 
     -- 客户端信息
     `user_agent` VARCHAR(512) NULL COMMENT '客户端User-Agent',
@@ -100,8 +95,9 @@ CREATE TABLE `user_sessions` (
     -- 主键和约束
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_sessions_session_id` (`session_id`),
+    UNIQUE KEY `uk_sessions_token_jti` (`token_jti`),
     KEY `idx_sessions_user_id` (`user_id`),
-    KEY `idx_sessions_refresh_token` (`refresh_token_hash`),
+    KEY `idx_sessions_token_jti` (`token_jti`),
     KEY `idx_sessions_expires_at` (`expires_at`),
     KEY `idx_sessions_revoked_at` (`revoked_at`),
 
@@ -161,6 +157,54 @@ CREATE TABLE `email_verification_codes` (
     COMMENT='邮箱验证码表';
 
 -- ============================================================
+-- 邀请码表
+-- 用于邀请注册机制，控制用户注册权限
+-- ============================================================
+DROP TABLE IF EXISTS `invitation_codes`;
+
+CREATE TABLE `invitation_codes` (
+    -- 内部自增主键
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '内部主键',
+
+    -- 邀请码字符串（对外使用，唯一）
+    `code` VARCHAR(64) NOT NULL COMMENT '邀请码字符串（22位高熵随机字符串）',
+
+    -- 邀请码状态：0=未使用, 1=已使用, 2=已弃用
+    `status` INT NOT NULL DEFAULT 0 COMMENT '状态：0=未使用, 1=已使用, 2=已弃用',
+
+    -- 创建者 uid（预留，管理员创建时填写）
+    `created_by` BIGINT NULL COMMENT '创建者 uid（管理员）',
+
+    -- 使用者 uid（注册成功后填写）
+    `used_by` BIGINT NULL COMMENT '使用者 uid（注册成功后填写）',
+
+    -- 使用时间
+    `used_at` DATETIME NULL COMMENT '使用时间',
+
+    -- 过期时间（NULL 表示永不过期）
+    `expires_at` DATETIME NULL COMMENT '过期时间（NULL表示永不过期）',
+
+    -- 管理备注
+    `remark` VARCHAR(255) NULL COMMENT '管理备注',
+
+    -- 时间戳
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    -- 主键和约束
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_invitation_codes_code` (`code`),
+    KEY `idx_invitation_codes_status` (`status`),
+    KEY `idx_invitation_codes_created_by` (`created_by`),
+    KEY `idx_invitation_codes_used_by` (`used_by`),
+    KEY `idx_invitation_codes_created_at` (`created_at`)
+
+) ENGINE=InnoDB
+    DEFAULT CHARSET=utf8mb4
+    COLLATE=utf8mb4_unicode_ci
+    COMMENT='邀请码表';
+
+-- ============================================================
 -- 索引优化说明
 -- ============================================================
 -- users 表:
@@ -172,6 +216,14 @@ CREATE TABLE `email_verification_codes` (
 -- user_sessions 表:
 --   - session_id: 用于快速定位会话
 --   - user_id: 用于查询用户的所有会话
---   - refresh_token_hash: 用于验证refresh_token
+--   - token_jti: 用于快速查找会话（SHA256索引）
+--   - refresh_token_hash: 用于验证refresh_token真实性（bcrypt）
 --   - expires_at: 用于清理过期会话
 --   - revoked_at: 用于查询有效会话
+--
+-- invitation_codes 表:
+--   - code: 用于验证邀请码（唯一索引）
+--   - status: 用于筛选未使用的邀请码
+--   - created_by: 用于查询管理员创建的邀请码
+--   - used_by: 用于查询用户使用的邀请码
+--   - created_at: 用于排序和统计

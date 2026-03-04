@@ -4,6 +4,7 @@
 """
 
 import pytest
+from app.utils.timezone import now
 
 
 class TestResponseStructure:
@@ -65,7 +66,7 @@ class TestResponseStructure:
             uid=1,
             email="test@example.com",
             nickname="test",
-            created_at=datetime.now(),
+            created_at=now(),
             access_token="test_token",
             expires_in=900
         )

@@ -6,7 +6,7 @@
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from app.utils.timezone import now
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any, Dict, Optional
 
@@ -214,7 +214,7 @@ def log_access(
         "duration_ms": round(duration, 2),
         "ip": ip,
         "user_agent": user_agent,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": now().isoformat(),
     }
     access_logger.info(f"访问日志: {log_data}")
 

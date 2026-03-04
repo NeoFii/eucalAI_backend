@@ -6,9 +6,10 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.utils.password import check_password_strength
+from app.utils.timezone import format_iso
 
 
 # ==================== 基础响应模型 ====================
@@ -29,16 +30,20 @@ class AuthErrorResponse(AuthBaseResponse):
 
 class RegisterRequest(BaseModel):
     """用户注册请求"""
+    invitation_code: str = Field(..., min_length=1, max_length=64, description="邀请码")
     email: EmailStr = Field(..., description="登录邮箱")
     password: str = Field(..., min_length=8, max_length=128, description="密码")
     confirm_password: str = Field(..., description="确认密码")
     verification_code: str = Field(..., min_length=6, max_length=6, description="邮箱验证码")
+    lang: str = Field(default="zh", description="语言代码：zh/en")
 
     @field_validator("password")
     @classmethod
-    def validate_password_strength(cls, v: str) -> str:
+    def validate_password_strength(cls, v: str, info) -> str:
         """验证密码强度"""
-        ok, msg = check_password_strength(v)
+        # 获取语言设置，默认为中文
+        lang = info.data.get("lang", "zh")
+        ok, msg = check_password_strength(v, lang=lang)
         if not ok:
             raise ValueError(msg)
         return v
@@ -62,9 +67,13 @@ class RegisterRequest(BaseModel):
 
 class RegisterResponseData(BaseModel):
     """注册响应数据"""
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda dt: format_iso(dt) if dt else None
+        }
+    )
     uid: int = Field(..., description="用户唯一ID")
     email: str = Field(..., description="注册邮箱")
-    nickname: Optional[str] = Field(default=None, description="昵称")
     created_at: datetime = Field(..., description="注册时间")
     access_token: Optional[str] = Field(default=None, description="访问令牌")
     # refresh_token 已移除 - 通过 httpOnly Cookie 传输
@@ -88,8 +97,6 @@ class UserData(BaseModel):
     """用户数据嵌套模型（登录响应使用）"""
     uid: int = Field(..., description="用户唯一ID")
     email: str = Field(..., description="邮箱")
-    nickname: Optional[str] = Field(default=None, description="昵称")
-    avatar_url: Optional[str] = Field(default=None, description="头像URL")
 
 
 class LoginResponseData(BaseModel):
@@ -109,10 +116,13 @@ class LoginResponse(AuthBaseResponse):
 
 class UserInfoResponseData(BaseModel):
     """用户信息响应数据"""
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda dt: format_iso(dt) if dt else None
+        }
+    )
     uid: int = Field(..., description="用户唯一ID")
     email: str = Field(..., description="邮箱")
-    nickname: Optional[str] = Field(default=None, description="昵称")
-    avatar_url: Optional[str] = Field(default=None, description="头像URL")
     status: int = Field(..., description="状态：0=禁用 1=正常 2=待验证")
     email_verified_at: Optional[datetime] = Field(default=None, description="邮箱验证时间")
     last_login_at: Optional[datetime] = Field(default=None, description="最近登录时间")
@@ -130,12 +140,15 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求"""
     old_password: str = Field(..., description="旧密码")
     new_password: str = Field(..., min_length=8, max_length=128, description="新密码")
+    lang: str = Field(default="zh", description="语言代码：zh/en")
 
     @field_validator("new_password")
     @classmethod
-    def validate_new_password(cls, v: str) -> str:
+    def validate_new_password(cls, v: str, info) -> str:
         """验证新密码强度"""
-        ok, msg = check_password_strength(v)
+        # 获取语言设置，默认为中文
+        lang = info.data.get("lang", "zh")
+        ok, msg = check_password_strength(v, lang=lang)
         if not ok:
             raise ValueError(msg)
         return v
@@ -196,12 +209,15 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr = Field(..., description="邮箱地址")
     code: str = Field(..., min_length=6, max_length=6, description="6位验证码")
     new_password: str = Field(..., min_length=8, max_length=128, description="新密码")
+    lang: str = Field(default="zh", description="语言代码：zh/en")
 
     @field_validator("new_password")
     @classmethod
-    def validate_new_password(cls, v: str) -> str:
+    def validate_new_password(cls, v: str, info) -> str:
         """验证新密码强度"""
-        ok, msg = check_password_strength(v)
+        # 获取语言设置，默认为中文
+        lang = info.data.get("lang", "zh")
+        ok, msg = check_password_strength(v, lang=lang)
         if not ok:
             raise ValueError(msg)
         return v

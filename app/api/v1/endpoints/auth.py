@@ -276,7 +276,7 @@ async def register(
     - 注册成功后返回 access_token 和 refresh_token（同时自动登录）
     - **email**: 登录邮箱（唯一）
     - **password**: 密码（至少8位，包含大小写+数字+特殊字符）
-    - **nickname**: 显示昵称（可选）
+    - 注册成功后自动登录，返回 access_token 和用户信息
     - **verification_code**: 邮箱验证码（预留字段，暂不校验）
     """
     user = await AuthService.register(db, register_request)
@@ -312,7 +312,6 @@ async def register(
         data=RegisterResponseData(
             uid=user.uid,
             email=user.email,
-            nickname=user.nickname,
             created_at=user.created_at,
             access_token=access_token,
             # refresh_token 已通过 Set-Cookie 写入，此处不返回
@@ -378,8 +377,6 @@ async def login(
             user=UserData(
                 uid=user.uid,
                 email=user.email,
-                nickname=user.nickname,
-                avatar_url=user.avatar_url,
             ),
             access_token=access_token,
             # refresh_token 已通过 Set-Cookie 写入，此处不返回
@@ -457,6 +454,16 @@ async def refresh(
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
+    # 同时更新 refresh_token Cookie
+    response.set_cookie(
+        key=COOKIE_KEY_REFRESH_TOKEN,
+        value=new_refresh_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
+    )
 
     return RefreshResponse(
         code=200,
@@ -497,8 +504,6 @@ async def get_me(
         data=UserInfoResponseData(
             uid=user.uid,
             email=user.email,
-            nickname=user.nickname,
-            avatar_url=user.avatar_url,
             status=user.status,
             email_verified_at=user.email_verified_at,
             last_login_at=user.last_login_at,
@@ -535,7 +540,7 @@ async def change_password(
         )
 
     await AuthService.change_password(
-        db, user, request.old_password, request.new_password
+        db, user, request.old_password, request.new_password, request.lang
     )
 
     return ChangePasswordResponse(code=200, message="密码修改成功，请重新登录")
@@ -597,8 +602,6 @@ async def login_with_code(
             user=UserData(
                 uid=user.uid,
                 email=user.email,
-                nickname=user.nickname,
-                avatar_url=user.avatar_url,
             ),
             access_token=access_token,
             # refresh_token 已通过 Set-Cookie 写入，此处不返回
@@ -635,6 +638,7 @@ async def reset_password(
         email=request.email,
         code=request.code,
         new_password=request.new_password,
+        lang=request.lang,
     )
 
     return ChangePasswordResponse(code=200, message="密码重置成功，请使用新密码登录")

@@ -4,11 +4,13 @@
 """
 
 # SQLAlchemy 模型
+from app.models.invitation_code import InvitationCode
 from app.models.user import User
 from app.models.user_session import UserSession
 
 __all__ = [
     # SQLAlchemy 模型
+    "InvitationCode",
     "User",
     "UserSession",
 ]

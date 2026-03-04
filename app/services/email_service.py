@@ -7,7 +7,9 @@ import logging
 import random
 import smtplib
 import ssl
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+
+from app.utils.timezone import now
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Tuple
@@ -188,12 +190,12 @@ Eucal AI 团队
         if row and row.locked_until:
             # 检查是否还在锁定期间
             # 使用 UTC 时间比较
-            if datetime.now(timezone.utc) < row.locked_until.replace(tzinfo=timezone.utc):
+            if now() < row.locked_until:
                 return False, "验证码输入错误次数过多，请稍后再试"
 
         # 生成验证码
         code = self.generate_code()
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.code_expire_minutes)
+        expires_at = now() + timedelta(minutes=self.code_expire_minutes)
 
         # 删除该邮箱之前的未使用验证码
         await db.execute(
@@ -248,10 +250,10 @@ Eucal AI 团队
             return False, "验证码不存在或已失效"
 
         # 检查是否被锁定
-        if row.locked_until and datetime.now(timezone.utc) < row.locked_until.replace(tzinfo=timezone.utc):
+        if row.locked_until and now() < row.locked_until:
             return False, "验证码输入错误次数过多，请稍后再试"
 
-        if datetime.now(timezone.utc) > row.expires_at.replace(tzinfo=timezone.utc):
+        if now() > row.expires_at:
             return False, "验证码已过期，请重新获取"
 
         # 使用哈希验证（constant-time 比较防止时序攻击）
@@ -261,7 +263,7 @@ Eucal AI 团队
 
             # 如果错误次数超过阈值，锁定账户
             if new_error_count >= self.MAX_CODE_ERRORS:
-                locked_until = datetime.now(timezone.utc) + timedelta(hours=self.ERROR_COUNT_EXPIRE_HOURS)
+                locked_until = now() + timedelta(hours=self.ERROR_COUNT_EXPIRE_HOURS)
                 await db.execute(
                     text("""
                         UPDATE email_verification_codes
@@ -329,10 +331,10 @@ Eucal AI 团队
             raise CodeNotFoundException()
 
         # 检查是否被锁定
-        if row.locked_until and datetime.now(timezone.utc) < row.locked_until.replace(tzinfo=timezone.utc):
+        if row.locked_until and now() < row.locked_until:
             raise InvalidCodeException(detail="验证码输入错误次数过多，请稍后再试")
 
-        if datetime.now(timezone.utc) > row.expires_at.replace(tzinfo=timezone.utc):
+        if now() > row.expires_at:
             raise CodeExpiredException()
 
         # 使用哈希验证（constant-time 比较防止时序攻击）
@@ -342,7 +344,7 @@ Eucal AI 团队
 
             # 如果错误次数超过阈值，锁定账户
             if new_error_count >= self.MAX_CODE_ERRORS:
-                locked_until = datetime.now(timezone.utc) + timedelta(hours=self.ERROR_COUNT_EXPIRE_HOURS)
+                locked_until = now() + timedelta(hours=self.ERROR_COUNT_EXPIRE_HOURS)
                 await db.execute(
                     text("""
                         UPDATE email_verification_codes

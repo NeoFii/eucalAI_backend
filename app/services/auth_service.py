@@ -4,7 +4,9 @@
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+
+from app.utils.timezone import now
 from typing import Optional
 
 from sqlalchemy import select
@@ -27,9 +29,10 @@ from app.core.exceptions import (
     UserNotFoundException,
     WeakPasswordException,
 )
-from app.models import User, UserSession
+from app.models import InvitationCode, User, UserSession
 from app.models.auth_schemas import RegisterRequest
 from app.services.email_service import email_service
+from app.services.invitation_service import invitation_service
 from app.utils import (
     check_password_strength,
     create_access_token,
@@ -38,7 +41,7 @@ from app.utils import (
     hash_password,
     verify_password,
 )
-from app.utils.jwt import decode_token
+from app.utils.jwt import decode_token, get_token_jti
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
@@ -84,7 +87,7 @@ class AuthService:
             raise EmailAlreadyExistsException()
 
         # 检查密码强度
-        ok, msg = check_password_strength(data.password)
+        ok, msg = check_password_strength(data.password, lang=data.lang)
         if not ok:
             raise WeakPasswordException(detail=msg)
 
@@ -96,6 +99,9 @@ class AuthService:
         # 生成雪花 ID 作为 uid
         uid = generate_snowflake_id()
 
+        # 验证并核销邀请码（与用户创建在同一个事务中）
+        await invitation_service.verify_and_use(db, data.invitation_code, uid)
+
         # 哈希密码
         password_hash = hash_password(data.password)
 
@@ -105,7 +111,7 @@ class AuthService:
             email=data.email,
             password_hash=password_hash,
             status=1,  # 正常状态（验证码已验证）
-            email_verified_at=datetime.now(timezone.utc),
+            email_verified_at=now(),
         )
 
         db.add(user)
@@ -152,7 +158,7 @@ class AuthService:
 
         # 更新用户状态
         user.status = 1
-        user.email_verified_at = datetime.now(timezone.utc)
+        user.email_verified_at = now()
         await db.commit()
 
         logger.info(f"邮箱验证成功: {email}")
@@ -197,7 +203,7 @@ class AuthService:
         # 检查登录是否被锁定
         if user.is_login_locked:
             raise InvalidCredentialsException(
-                detail=f"登录失败次数过多，账户已被锁定，请{int((user.login_locked_until - datetime.now(timezone.utc)).total_seconds() / 60)}分钟后再试"
+                detail=f"登录失败次数过多，账户已被锁定，请{int((user.login_locked_until - now()).total_seconds() / 60)}分钟后再试"
             )
 
         # 验证密码
@@ -207,7 +213,7 @@ class AuthService:
 
             if user.login_fail_count >= LOGIN_MAX_FAILURES:
                 # 锁定账户
-                user.login_locked_until = datetime.now(timezone.utc) + timedelta(hours=LOGIN_LOCK_DURATION_HOURS)
+                user.login_locked_until = now() + timedelta(hours=LOGIN_LOCK_DURATION_HOURS)
                 logger.warning(f"用户 {email} 登录失败次数过多，账户已被锁定")
                 await db.commit()
                 raise InvalidCredentialsException(
@@ -245,16 +251,17 @@ class AuthService:
         session = UserSession(
             session_id=session_id,
             user_id=user.id,
+            token_jti=get_token_jti(refresh_token),
             refresh_token_hash=hash_password(refresh_token),
             user_agent=user_agent,
             ip_address=ip_address,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
         )
 
         db.add(session)
 
         # 更新用户最后登录信息
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = now()
         user.last_login_ip = ip_address
 
         await db.commit()
@@ -277,11 +284,13 @@ class AuthService:
         Raises:
             SessionNotFoundException: 会话不存在
         """
-        # 查找并注销会话
+        # 计算 token_jti
+        token_jti = get_token_jti(refresh_token)
+
+        # 查找会话（通过 token_jti）
         result = await db.execute(
             select(UserSession).where(
-                UserSession.refresh_token_hash == refresh_token,
-                UserSession.revoked_at.is_(None),
+                UserSession.token_jti == token_jti,
             )
         )
         session = result.scalar_one_or_none()
@@ -289,7 +298,14 @@ class AuthService:
         if not session:
             raise SessionNotFoundException()
 
-        session.revoked_at = datetime.now(timezone.utc)
+        # 使用 bcrypt 验证令牌真实性
+        if not verify_password(refresh_token, session.refresh_token_hash):
+            raise SessionNotFoundException()
+
+        if session.is_revoked:
+            raise SessionNotFoundException()
+
+        session.revoked_at = now()
         await db.commit()
 
         logger.info("用户登出成功")
@@ -317,7 +333,7 @@ class AuthService:
             SessionExpiredException: 会话已过期
             UserNotFoundException: 用户不存在或已被禁用
         """
-        # 解码 refresh_token
+        # 解码 refresh_token 获取基本信息
         payload = decode_token(refresh_token)
         if not payload:
             raise InvalidTokenException()
@@ -325,16 +341,23 @@ class AuthService:
         if payload.get("type") != "refresh":
             raise TokenExpiredException(detail="无效的令牌类型")
 
-        # 查找会话
+        # 计算 token_jti（用于快速查找）
+        token_jti = get_token_jti(refresh_token)
+
+        # 查找会话（通过 token_jti）
         result = await db.execute(
             select(UserSession).where(
-                UserSession.refresh_token_hash == refresh_token,
+                UserSession.token_jti == token_jti,
             )
         )
         session = result.scalar_one_or_none()
 
         if not session:
             raise SessionNotFoundException()
+
+        # 使用 bcrypt 验证令牌真实性（防止伪造 jti）
+        if not verify_password(refresh_token, session.refresh_token_hash):
+            raise InvalidTokenException()
 
         if session.is_revoked:
             raise SessionRevokedException()
@@ -389,6 +412,7 @@ class AuthService:
         user: User,
         old_password: str,
         new_password: str,
+        lang: str = "zh",
     ) -> None:
         """
         修改密码
@@ -398,6 +422,7 @@ class AuthService:
             user: 用户对象
             old_password: 旧密码
             new_password: 新密码
+            lang: 语言代码（zh/en），默认中文
 
         Raises:
             InvalidCredentialsException: 旧密码错误
@@ -408,7 +433,7 @@ class AuthService:
             raise InvalidCredentialsException(detail="旧密码错误")
 
         # 检查新密码强度
-        ok, msg = check_password_strength(new_password)
+        ok, msg = check_password_strength(new_password, lang=lang)
         if not ok:
             raise WeakPasswordException(detail=msg)
 
@@ -442,7 +467,7 @@ class AuthService:
         sessions = result.scalars().all()
 
         for session in sessions:
-            session.revoked_at = datetime.now(timezone.utc)
+            session.revoked_at = now()
 
         await db.commit()
 
@@ -511,16 +536,17 @@ class AuthService:
         session = UserSession(
             session_id=session_id,
             user_id=user.id,
+            token_jti=get_token_jti(refresh_token),
             refresh_token_hash=hash_password(refresh_token),
             user_agent=user_agent,
             ip_address=ip_address,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
         )
 
         db.add(session)
 
         # 更新用户最后登录信息
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = now()
         user.last_login_ip = ip_address
 
         await db.commit()
@@ -534,6 +560,7 @@ class AuthService:
         email: str,
         code: str,
         new_password: str,
+        lang: str = "zh",
     ) -> None:
         """
         通过邮箱验证码重置密码
@@ -543,6 +570,7 @@ class AuthService:
             email: 邮箱地址
             code: 验证码
             new_password: 新密码
+            lang: 语言代码（zh/en），默认中文
 
         Raises:
             CodeNotFoundException: 验证码不存在
@@ -564,7 +592,7 @@ class AuthService:
             raise UserNotFoundException()
 
         # 检查新密码强度
-        ok, msg = check_password_strength(new_password)
+        ok, msg = check_password_strength(new_password, lang=lang)
         if not ok:
             raise WeakPasswordException(detail=msg)
 

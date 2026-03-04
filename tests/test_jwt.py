@@ -4,7 +4,8 @@ JWT 工具模块测试
 """
 
 import pytest
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta
+from app.utils.timezone import now
 
 from app.utils.jwt import (
     create_access_token,
@@ -131,7 +132,7 @@ class TestTokenExpiry:
 
         expiry = get_token_expiry(token)
         assert expiry is not None
-        assert expiry > datetime.now(timezone.utc)
+        assert expiry > now()
 
     def test_get_expiry_invalid_token(self):
         """测试获取无效令牌的过期时间"""
