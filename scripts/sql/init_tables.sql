@@ -6,6 +6,63 @@
 
 
 -- ============================================================
+-- 管理员用户表
+-- 用于管理员登录认证，与普通用户表分离
+-- ============================================================
+DROP TABLE IF EXISTS `admin_users`;
+
+CREATE TABLE `admin_users` (
+    -- 内部自增主键
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '内部主键',
+
+    -- 对外管理员ID（雪花ID）
+    `uid` BIGINT NOT NULL COMMENT '对外管理员ID（雪花ID）',
+
+    -- 登录邮箱（唯一）
+    `email` VARCHAR(255) NOT NULL COMMENT '登录邮箱',
+
+    -- bcrypt密码哈希
+    `password_hash` VARCHAR(255) NOT NULL COMMENT 'bcrypt密码哈希',
+
+    -- 管理员姓名
+    `name` VARCHAR(100) NOT NULL COMMENT '管理员姓名',
+
+    -- 管理员状态：0=禁用 1=正常
+    `status` INT NOT NULL DEFAULT 1 COMMENT '状态：0=禁用 1=正常',
+
+    -- 角色：super=超级管理员 admin=普通管理员
+    `role` VARCHAR(20) NOT NULL DEFAULT 'admin' COMMENT '角色：super=超级管理员 admin=普通管理员',
+
+    -- 最近登录时间
+    `last_login_at` DATETIME NULL COMMENT '最近登录时间',
+
+    -- 最近登录IP
+    `last_login_ip` VARCHAR(45) NULL COMMENT '最近登录IP',
+
+    -- 登录失败次数
+    `login_fail_count` INT NOT NULL DEFAULT 0 COMMENT '登录失败次数',
+
+    -- 登录锁定截止时间
+    `login_locked_until` DATETIME NULL COMMENT '登录锁定截止时间',
+
+    -- 时间戳
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    -- 主键和约束
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_admin_users_uid` (`uid`),
+    UNIQUE KEY `uk_admin_users_email` (`email`),
+    KEY `idx_admin_users_status` (`status`),
+    KEY `idx_admin_users_role` (`role`)
+
+) ENGINE=InnoDB
+    DEFAULT CHARSET=utf8mb4
+    COLLATE=utf8mb4_unicode_ci
+    COMMENT='管理员用户表';
+
+
+-- ============================================================
 -- 用户表
 -- ============================================================
 DROP TABLE IF EXISTS `users`;
@@ -169,11 +226,14 @@ CREATE TABLE `invitation_codes` (
     -- 邀请码字符串（对外使用，唯一）
     `code` VARCHAR(64) NOT NULL COMMENT '邀请码字符串（22位高熵随机字符串）',
 
-    -- 邀请码状态：0=未使用, 1=已使用, 2=已弃用
-    `status` INT NOT NULL DEFAULT 0 COMMENT '状态：0=未使用, 1=已使用, 2=已弃用',
+    -- 邀请码类型：register=注册邀请
+    `type` VARCHAR(20) NOT NULL DEFAULT 'register' COMMENT '邀请码类型：register=注册邀请',
 
-    -- 创建者 uid（预留，管理员创建时填写）
-    `created_by` BIGINT NULL COMMENT '创建者 uid（管理员）',
+    -- 邀请码状态：0=已弃用, 1=有效, 2=已使用
+    `status` SMALLINT NOT NULL DEFAULT 1 COMMENT '状态：0=已弃用, 1=有效, 2=已使用',
+
+    -- 创建者 uid（管理员）
+    `created_by` BIGINT NOT NULL COMMENT '创建者 uid（管理员）',
 
     -- 使用者 uid（注册成功后填写）
     `used_by` BIGINT NULL COMMENT '使用者 uid（注册成功后填写）',
@@ -184,8 +244,14 @@ CREATE TABLE `invitation_codes` (
     -- 过期时间（NULL 表示永不过期）
     `expires_at` DATETIME NULL COMMENT '过期时间（NULL表示永不过期）',
 
-    -- 管理备注
-    `remark` VARCHAR(255) NULL COMMENT '管理备注',
+    -- 备注
+    `remark` TEXT NULL COMMENT '管理备注',
+
+    -- 最大使用次数（-1表示无限制）
+    `max_uses` INT NOT NULL DEFAULT 1 COMMENT '最大使用次数（-1表示无限制）',
+
+    -- 当前使用次数
+    `used_count` INT NOT NULL DEFAULT 0 COMMENT '当前使用次数',
 
     -- 时间戳
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -226,4 +292,75 @@ CREATE TABLE `invitation_codes` (
 --   - status: 用于筛选未使用的邀请码
 --   - created_by: 用于查询管理员创建的邀请码
 --   - used_by: 用于查询用户使用的邀请码
+--   - created_at: 用于排序和统计
+
+-- ============================================================
+-- 新闻表
+-- 用于存储官网新闻内容，支持 Markdown 和双语
+-- ============================================================
+DROP TABLE IF EXISTS `news`;
+
+CREATE TABLE `news` (
+    -- 内部自增主键
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '内部主键',
+
+    -- 对外新闻ID（雪花ID）
+    `uid` BIGINT NOT NULL COMMENT '对外新闻ID（雪花ID）',
+
+    -- 语言：zh=中文 en=英文
+    `language` VARCHAR(10) NOT NULL DEFAULT 'zh' COMMENT '语言: zh=中文 en=英文',
+
+    -- 新闻标题
+    `title` VARCHAR(255) NOT NULL COMMENT '新闻标题',
+
+    -- URL路径标识
+    `slug` VARCHAR(255) NOT NULL COMMENT 'URL路径标识',
+
+    -- 摘要
+    `summary` VARCHAR(500) NULL COMMENT '摘要',
+
+    -- 封面图URL
+    `cover_image` VARCHAR(500) NULL COMMENT '封面图URL',
+
+    -- Markdown正文内容
+    `content` LONGTEXT NOT NULL COMMENT 'Markdown正文内容',
+
+    -- 新闻状态：0=草稿 1=已发布 2=已下线
+    `status` SMALLINT NOT NULL DEFAULT 0 COMMENT '状态：0=草稿 1=已发布 2=已下线',
+
+    -- 发布时间
+    `published_at` DATETIME NULL COMMENT '发布时间',
+
+    -- 作者ID（关联admin_users.id）
+    `author_id` BIGINT NULL COMMENT '作者ID（关联admin_users.id）',
+
+    -- 时间戳
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    -- 主键和约束
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_news_uid` (`uid`),
+    UNIQUE KEY `uk_news_language_slug` (`language`, `slug`),
+    KEY `idx_news_language` (`language`),
+    KEY `idx_news_status` (`status`),
+    KEY `idx_news_published_at` (`published_at`),
+    KEY `idx_news_language_status_published` (`language`, `status`, `published_at`),
+    KEY `idx_news_created_at` (`created_at`)
+
+) ENGINE=InnoDB
+    DEFAULT CHARSET=utf8mb4
+    COLLATE=utf8mb4_unicode_ci
+    COMMENT='新闻表';
+
+-- ============================================================
+-- 索引优化说明
+-- ============================================================
+-- news 表:
+--   - uid: 用于快速查找新闻（雪花ID查询）
+--   - language + slug: 用于URL访问，确保同一语言下slug唯一
+--   - language: 用于筛选特定语言新闻
+--   - status: 用于筛选已发布新闻
+--   - language + status + published_at: 用于前台按语言和状态查询已发布新闻
+--   - published_at: 用于按发布时间排序
 --   - created_at: 用于排序和统计
