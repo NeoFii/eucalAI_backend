@@ -12,12 +12,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Tuple
 
-from sqlalchemy import text
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.password import hash_password, verify_password
 from common.utils.timezone import now
 from user.config import settings
+from user.models.email_verification_code import EmailVerificationCode
 from common.core.exceptions import (
     CodeExpiredException,
     CodeNotFoundException,
@@ -41,36 +42,10 @@ class EmailService:
         self.smtp_tls = settings.SMTP_TLS
         self.smtp_from = settings.SMTP_FROM
         self.code_expire_minutes = settings.EMAIL_CODE_EXPIRE_MINUTES
-        self._table_created = False
 
     def generate_code(self) -> str:
         """生成6位随机验证码"""
         return f"{random.randint(0, 999999):06d}"
-
-    async def _ensure_table(self, db: AsyncSession) -> None:
-        """确保验证码表存在"""
-        if self._table_created:
-            return
-
-        await db.execute(text("""
-            CREATE TABLE IF NOT EXISTS `email_verification_codes` (
-                `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
-                `email` VARCHAR(255) NOT NULL COMMENT '邮箱地址',
-                `code_hash` VARCHAR(255) NOT NULL COMMENT '验证码哈希',
-                `purpose` VARCHAR(20) NOT NULL DEFAULT 'register' COMMENT '用途',
-                `expires_at` DATETIME NOT NULL COMMENT '过期时间',
-                `used_at` DATETIME NULL COMMENT '使用时间',
-                `error_count` INT NOT NULL DEFAULT 0 COMMENT '错误次数',
-                `locked_until` DATETIME NULL COMMENT '锁定截止时间',
-                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-                PRIMARY KEY (`id`),
-                KEY `idx_codes_email` (`email`),
-                KEY `idx_codes_email_purpose` (`email`, `purpose`),
-                KEY `idx_codes_expires_at` (`expires_at`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邮箱验证码表'
-        """))
-        await db.commit()
-        self._table_created = True
 
     def _send_email(self, email: str, code: str, purpose: str) -> Tuple[bool, str]:
         """发送邮件"""
@@ -117,50 +92,55 @@ class EmailService:
         self, db: AsyncSession, email: str, purpose: str = "register"
     ) -> Tuple[bool, str]:
         """发送验证码"""
-        await self._ensure_table(db)
-
+        # 检查今日发送次数
+        today_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
         result = await db.execute(
-            text("""
-                SELECT COUNT(*) as cnt
-                FROM email_verification_codes
-                WHERE email = :email AND purpose = :purpose AND DATE(created_at) = CURDATE()
-            """),
-            {"email": email, "purpose": purpose}
+            select(func.count()).select_from(EmailVerificationCode).where(
+                EmailVerificationCode.email == email,
+                EmailVerificationCode.purpose == purpose,
+                EmailVerificationCode.created_at >= today_start,
+            )
         )
-        row = result.fetchone()
-        if row and row.cnt >= 3:
+        count = result.scalar() or 0
+        if count >= 3:
             return False, "今日发送次数已达上限（3次），请明天再试"
 
+        # 检查是否被锁定
         result = await db.execute(
-            text("""
-                SELECT locked_until
-                FROM email_verification_codes
-                WHERE email = :email AND purpose = :purpose
-                ORDER BY created_at DESC LIMIT 1
-            """),
-            {"email": email, "purpose": purpose}
+            select(EmailVerificationCode).where(
+                EmailVerificationCode.email == email,
+                EmailVerificationCode.purpose == purpose,
+            ).order_by(EmailVerificationCode.created_at.desc()).limit(1)
         )
-        row = result.fetchone()
-        if row and row.locked_until and now() < row.locked_until:
+        latest = result.scalar_one_or_none()
+        if latest and latest.locked_until and now() < latest.locked_until:
             return False, "验证码输入错误次数过多，请稍后再试"
 
+        # 生成验证码
         code = self.generate_code()
         expires_at = now() + timedelta(minutes=self.code_expire_minutes)
 
-        await db.execute(
-            text("DELETE FROM email_verification_codes WHERE email = :email AND purpose = :purpose AND used_at IS NULL"),
-            {"email": email, "purpose": purpose}
+        # 删除该邮箱该用途下未使用的旧验证码
+        result = await db.execute(
+            select(EmailVerificationCode).where(
+                EmailVerificationCode.email == email,
+                EmailVerificationCode.purpose == purpose,
+                EmailVerificationCode.used_at.is_(None),
+            )
         )
+        old_codes = result.scalars().all()
+        for old_code in old_codes:
+            await db.delete(old_code)
 
+        # 创建新验证码记录
         code_hash = hash_password(code)
-
-        await db.execute(
-            text("""
-                INSERT INTO email_verification_codes (email, code_hash, purpose, expires_at, created_at)
-                VALUES (:email, :code_hash, :purpose, :expires_at, NOW())
-            """),
-            {"email": email, "code_hash": code_hash, "purpose": purpose, "expires_at": expires_at}
+        verification = EmailVerificationCode(
+            email=email,
+            code_hash=code_hash,
+            purpose=purpose,
+            expires_at=expires_at,
         )
+        db.add(verification)
         await db.commit()
 
         logger.info(f"验证码已保存至数据库（哈希存储），邮箱: {email}, 用途: {purpose}")
@@ -171,52 +151,36 @@ class EmailService:
     ) -> None:
         """验证验证码，验证失败则抛出异常"""
         result = await db.execute(
-            text("""
-                SELECT id, code_hash, expires_at, error_count, locked_until
-                FROM email_verification_codes
-                WHERE email = :email AND purpose = :purpose AND used_at IS NULL
-                ORDER BY created_at DESC LIMIT 1
-            """),
-            {"email": email, "purpose": purpose}
+            select(EmailVerificationCode).where(
+                EmailVerificationCode.email == email,
+                EmailVerificationCode.purpose == purpose,
+                EmailVerificationCode.used_at.is_(None),
+            ).order_by(EmailVerificationCode.created_at.desc()).limit(1)
         )
-        row = result.fetchone()
+        record = result.scalar_one_or_none()
 
-        if not row:
+        if not record:
             raise CodeNotFoundException()
 
-        if row.locked_until and now() < row.locked_until:
+        if record.locked_until and now() < record.locked_until:
             raise InvalidCodeException(detail="验证码输入错误次数过多，请稍后再试")
 
-        if now() > row.expires_at:
+        if now() > record.expires_at:
             raise CodeExpiredException()
 
-        if not verify_password(code, row.code_hash):
-            new_error_count = (row.error_count or 0) + 1
+        if not verify_password(code, record.code_hash):
+            record.error_count = (record.error_count or 0) + 1
 
-            if new_error_count >= self.MAX_CODE_ERRORS:
-                locked_until = now() + timedelta(hours=self.ERROR_COUNT_EXPIRE_HOURS)
-                await db.execute(
-                    text("""
-                        UPDATE email_verification_codes
-                        SET error_count = :error_count, locked_until = :locked_until
-                        WHERE id = :id
-                    """),
-                    {"error_count": new_error_count, "locked_until": locked_until, "id": row.id}
-                )
+            if record.error_count >= self.MAX_CODE_ERRORS:
+                record.locked_until = now() + timedelta(hours=self.ERROR_COUNT_EXPIRE_HOURS)
                 await db.commit()
                 raise InvalidCodeException(detail=f"验证码错误次数过多，请{self.ERROR_COUNT_EXPIRE_HOURS}小时后再试")
 
-            await db.execute(
-                text("UPDATE email_verification_codes SET error_count = :error_count WHERE id = :id"),
-                {"error_count": new_error_count, "id": row.id}
-            )
             await db.commit()
             raise InvalidCodeException()
 
-        await db.execute(
-            text("UPDATE email_verification_codes SET used_at = NOW(), error_count = 0 WHERE id = :id"),
-            {"id": row.id}
-        )
+        record.used_at = now()
+        record.error_count = 0
         await db.commit()
         logger.info(f"验证码验证成功: 邮箱={email}, 用途={purpose}")
 

@@ -1,310 +1,287 @@
 # -*- coding: utf-8 -*-
 """
-Testing 服务 Pydantic 模型
+Testing 服务 Pydantic Schema
+定义 API 请求/响应的数据结构，与数据库表结构严格对应
 """
 
-from datetime import datetime
-from typing import List, Optional
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
-
-# ========== 分类相关 ==========
-
-class CategoryBase(BaseModel):
-    """分类基础字段"""
-    name_zh: str = Field(..., description="中文名称")
-    name_en: str = Field(..., description="英文名称")
-    slug: str = Field(..., description="英文别名")
-    description_zh: Optional[str] = Field(None, description="中文描述")
-    description_en: Optional[str] = Field(None, description="英文描述")
-    icon: Optional[str] = Field(None, description="图标标识")
-    sort_order: int = Field(0, description="排序顺序")
+T = TypeVar("T")
 
 
-class CategoryCreate(CategoryBase):
-    """创建分类请求"""
-    pass
+# ========== 通用响应 ==========
+
+class ApiResponse(BaseModel, Generic[T]):
+    """通用 API 响应"""
+    code: int = Field(default=200, description="状态码")
+    message: str = Field(default="success", description="消息")
+    data: Optional[T] = Field(None, description="数据")
 
 
-class CategoryUpdate(BaseModel):
-    """更新分类请求"""
-    name_zh: Optional[str] = None
-    name_en: Optional[str] = None
-    description_zh: Optional[str] = None
-    description_en: Optional[str] = None
-    icon: Optional[str] = None
-    sort_order: Optional[int] = None
+class ListResponse(BaseModel, Generic[T]):
+    """分页列表数据"""
+    items: List[T]
+    total: int
+    page: int
+    page_size: int
 
 
-class CategoryResponse(BaseModel):
-    """分类响应"""
+# ========== 研发商（model_vendors）==========
+
+class ModelVendorResponse(BaseModel):
+    """研发商响应（创造模型的公司，≠ 服务提供商）"""
     id: int
-    name_zh: str
-    name_en: str
-    slug: str
-    description_zh: Optional[str]
-    description_en: Optional[str]
-    icon: Optional[str]
-    sort_order: int
-
-    class Config:
-        from_attributes = True
-
-
-class CategoryWithModels(CategoryResponse):
-    """带模型列表的分类"""
-    model_count: int = Field(0, description="模型数量")
-
-    class Config:
-        from_attributes = True
-
-
-# ========== 模型相关 ==========
-
-class ModelTagBase(BaseModel):
-    """模型标签基础字段"""
-    tag: str
-    tag_type: str = "feature"
-
-
-class ModelTagCreate(ModelTagBase):
-    """创建模型标签请求"""
-    model_id: int
-
-
-class ModelTagResponse(ModelTagBase):
-    """模型标签响应"""
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-class ModelProviderBase(BaseModel):
-    """模型供应商关联基础字段"""
-    provider_id: int
-    api_model_name: str
-    routing_alias: Optional[str] = None
-    input_price_cny_1m: Optional[float] = None
-    output_price_cny_1m: Optional[float] = None
-    rate_limit_rpm: int = 60
-    is_default: bool = False
-    is_active: bool = True
-
-
-class ModelProviderCreate(ModelProviderBase):
-    """创建模型供应商关联请求"""
-    model_id: int
-
-
-class ModelProviderResponse(ModelProviderBase):
-    """模型供应商关联响应"""
-    id: int
-    model_id: int
-
-    class Config:
-        from_attributes = True
-
-
-class ModelBase(BaseModel):
-    """模型基础字段"""
-    model_id: str = Field(..., description="对外模型ID")
+    slug: str = Field(..., description="研发商标识，如 anthropic / openai")
     name: str = Field(..., description="显示名称")
-    name_zh: Optional[str] = Field(None, description="中文名称")
-    description_zh: Optional[str] = Field(None, description="中文描述")
-    description_en: Optional[str] = Field(None, description="英文描述")
-    context_length: int = Field(0, description="上下文长度")
-    model_size: Optional[str] = Field(None, description="模型大小")
-    is_open_source: bool = Field(False, description="是否开源")
+    logo_url: Optional[str] = Field(None, description="Logo 图片地址")
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class ModelVendorBrief(BaseModel):
+    """研发商简要信息（嵌入模型响应中）"""
+    id: int
+    slug: str
+    name: str
+    logo_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VendorCreate(BaseModel):
+    """创建研发商"""
+    slug: str = Field(..., description="研发商标识，如 anthropic / openai")
+    name: str = Field(..., description="显示名称")
+    logo_url: Optional[str] = Field(None, description="Logo 图片地址")
     is_active: bool = Field(True, description="是否启用")
 
 
-class ModelCreate(ModelBase):
-    """创建模型请求"""
-    category_ids: List[int] = Field(default_factory=list, description="分类ID列表")
-    tag_names: List[str] = Field(default_factory=list, description="标签列表")
-
-
-class ModelUpdate(BaseModel):
-    """更新模型请求"""
+class VendorUpdate(BaseModel):
+    """更新研发商（所有字段可选）"""
     name: Optional[str] = None
-    name_zh: Optional[str] = None
-    description_zh: Optional[str] = None
-    description_en: Optional[str] = None
-    context_length: Optional[int] = None
-    model_size: Optional[str] = None
-    is_open_source: Optional[bool] = None
+    logo_url: Optional[str] = None
     is_active: Optional[bool] = None
 
 
-class ModelCategoryInfo(BaseModel):
-    """模型分类信息"""
-    slug: str
-    name_zh: str
+# ========== 分类（model_categories）==========
+
+class ModelCategoryResponse(BaseModel):
+    """模型能力分类响应"""
+    id: int
+    key: str = Field(..., description="分类键，如 reasoning / coding")
+    name: str = Field(..., description="显示名，如 逻辑推理与规划")
+    sort_order: int
+    is_active: bool
 
     class Config:
         from_attributes = True
 
 
-class ModelListItem(BaseModel):
-    """模型列表项"""
-    id: int
-    model_id: str
+class ModelCategoryBrief(BaseModel):
+    """分类简要信息（嵌入模型响应中）"""
+    key: str
     name: str
-    name_zh: Optional[str]
-    description_zh: Optional[str]
-    context_length: int
-    model_size: Optional[str]
-    is_open_source: bool
-    tags: List[str] = []
-    category: Optional[ModelCategoryInfo] = None
-    provider_count: int = 0
+    sort_order: int = Field(..., description="模型在该分类下的排序权重（来自 model_category_map）")
+
+    class Config:
+        from_attributes = True
+
+
+# ========== 服务提供商（providers）==========
+
+class ProviderResponse(BaseModel):
+    """服务提供商响应（提供 API 访问的公司，≠ 研发商）"""
+    id: int
+    slug: str = Field(..., description="提供商标识，如 openrouter / azure")
+    name: str = Field(..., description="显示名称")
+    logo_url: Optional[str] = Field(None, description="Logo 图片地址")
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class ProviderCreate(BaseModel):
+    """创建服务提供商（必填 slug + name）"""
+    slug: str = Field(..., description="提供商标识，如 openrouter / azure")
+    name: str = Field(..., description="显示名称")
+    logo_url: Optional[str] = Field(None, description="Logo 图片地址")
+    is_active: bool = Field(True, description="是否启用")
+
+
+class ProviderUpdate(BaseModel):
+    """更新服务提供商（所有字段可选）"""
+    name: Optional[str] = Field(None, description="显示名称")
+    logo_url: Optional[str] = Field(None, description="Logo 图片地址")
+    is_active: Optional[bool] = Field(None, description="是否启用")
+
+
+class ProviderBrief(BaseModel):
+    """提供商简要信息（嵌入报价响应中）"""
+    id: int
+    slug: str
+    name: str
+    logo_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ========== 性能指标（聚合自 provider_metrics_ranked 视图）==========
+
+class OfferingMetricsResponse(BaseModel):
+    """
+    单个报价的性能指标（聚合近 N 次成功探测均值）
+    数据来源：provider_metrics_ranked 视图 WHERE rn <= N
+    """
+    probe_region: Optional[str] = Field(None, description="探测区域，如 cn-east")
+    avg_throughput_tps: Optional[float] = Field(None, description="平均吞吐量（tokens/秒）")
+    avg_ttft_ms: Optional[int] = Field(None, description="平均首字延迟（毫秒）")
+    avg_e2e_latency_ms: Optional[int] = Field(None, description="平均端到端延迟（毫秒）")
+    sample_count: int = Field(0, description="参与聚合的样本数量（≤N）")
+    last_measured_at: Optional[datetime] = Field(None, description="最近一次探测时间")
+
+
+# ========== 模型-提供商报价（model_provider_offerings）==========
+
+class ModelOfferingResponse(BaseModel):
+    """
+    模型在某提供商的报价配置（附带性能指标）
+    用于模型详情页的提供商卡片
+    """
+    id: int
+    provider: ProviderBrief
+    price_input_per_m: Optional[Decimal] = Field(None, description="每百万输入 token 价格（人民币，NULL=未知）")
+    price_output_per_m: Optional[Decimal] = Field(None, description="每百万输出 token 价格（人民币，NULL=未知）")
+    provider_model_id: Optional[str] = Field(None, description="在该提供商的模型标识")
+    price_updated_at: Optional[datetime] = Field(None, description="价格最后更新时间")
+    is_active: bool
+    # 性能指标，由 service 层聚合注入；可能为空（从未探测或全部失败）
+    metrics: Optional[OfferingMetricsResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ========== 模型（models）==========
+
+class ModelListItem(BaseModel):
+    """
+    模型列表项（用于分类页卡片展示）
+    前端按 category_maps[].sort_order → sort_order → name 排序
+    """
+    id: int
+    slug: str = Field(..., description="对外模型标识，如 gpt-4o")
+    name: str = Field(..., description="显示名称")
+    description: Optional[str] = None
+    # JSON 数组，如 ["chat","reasoning","vision","tool_calling"]
+    capability_tags: List[str] = Field(default_factory=list, description="能力标签")
+    context_window: Optional[int] = Field(None, description="上下文窗口（tokens）")
+    max_output_tokens: Optional[int] = Field(None, description="最大输出 tokens")
+    knowledge_cutoff: Optional[date] = Field(None, description="知识截止日期")
+    is_reasoning_model: bool = Field(False, description="是否为推理模型")
+    sort_order: int = Field(0, description="全局排序权重")
+    # 嵌套研发商简要信息
+    vendor: ModelVendorBrief
+    # 该模型所属的分类（含在该分类下的 sort_order）
+    categories: List[ModelCategoryBrief] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
 
 
 class ModelDetailResponse(BaseModel):
-    """模型详情响应"""
+    """
+    模型详情（用于详情页）
+    附带所有报价配置（含性能指标）
+    """
     id: int
-    model_id: str
+    slug: str
     name: str
-    name_zh: Optional[str]
-    description_zh: Optional[str]
-    description_en: Optional[str]
-    context_length: int
-    model_size: Optional[str]
-    is_open_source: bool
-    is_active: bool
-    tags: List[str] = []
-    categories: List[ModelCategoryInfo] = []
+    description: Optional[str] = None
+    capability_tags: List[str] = Field(default_factory=list)
+    context_window: Optional[int] = None
+    max_output_tokens: Optional[int] = None
+    knowledge_cutoff: Optional[date] = None
+    is_reasoning_model: bool = False
+    is_active: bool = True
+    vendor: ModelVendorBrief
+    categories: List[ModelCategoryBrief] = Field(default_factory=list)
+    # 各提供商的报价（含性能指标）
+    offerings: List[ModelOfferingResponse] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
 
 
-# ========== 供应商相关 ==========
+# ========== 模型写操作 Schema ==========
 
-class ProviderBase(BaseModel):
-    """供应商基础字段"""
-    provider_id: str = Field(..., description="供应商ID")
+class ModelCategoryAssign(BaseModel):
+    """模型-分类关联条目（含该模型在此分类下的排序权重）"""
+    category_id: int = Field(..., description="分类 ID")
+    sort_order: int = Field(0, description="模型在该分类下的排序权重")
+
+
+class ModelCreate(BaseModel):
+    """创建模型"""
+    vendor_id: int = Field(..., description="研发商 ID")
+    slug: str = Field(..., description="模型标识，如 gpt-4o")
     name: str = Field(..., description="显示名称")
-    name_zh: Optional[str] = Field(None, description="中文名称")
-    logo_url: Optional[str] = Field(None, description="Logo URL")
-    color: Optional[str] = Field(None, description="主题色")
+    description: Optional[str] = None
+    capability_tags: List[str] = Field(default_factory=list, description="能力标签数组")
+    context_window: Optional[int] = Field(None, description="上下文窗口（tokens）")
+    max_output_tokens: Optional[int] = Field(None, description="最大输出 tokens")
+    knowledge_cutoff: Optional[date] = Field(None, description="知识截止日期")
+    is_reasoning_model: bool = Field(False, description="是否为推理模型")
+    sort_order: int = Field(0, description="全局排序权重")
     is_active: bool = Field(True, description="是否启用")
-    sort_order: int = Field(0, description="排序顺序")
+    categories: List[ModelCategoryAssign] = Field(default_factory=list, description="分类关联列表")
 
 
-class ProviderCreate(ProviderBase):
-    """创建供应商请求"""
-    pass
-
-
-class ProviderUpdate(BaseModel):
-    """更新供应商请求"""
+class ModelUpdate(BaseModel):
+    """更新模型（所有字段可选；categories=None 时不变更分类关联）"""
     name: Optional[str] = None
-    name_zh: Optional[str] = None
-    logo_url: Optional[str] = None
-    color: Optional[str] = None
-    is_active: Optional[bool] = None
+    description: Optional[str] = None
+    capability_tags: Optional[List[str]] = None
+    context_window: Optional[int] = None
+    max_output_tokens: Optional[int] = None
+    knowledge_cutoff: Optional[date] = None
+    is_reasoning_model: Optional[bool] = None
     sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+    categories: Optional[List[ModelCategoryAssign]] = None
 
 
-class ProviderResponse(ProviderBase):
-    """供应商响应"""
-    id: int
+# ========== 报价写操作 Schema ==========
 
-    class Config:
-        from_attributes = True
-
-
-class ProviderWithModels(ProviderResponse):
-    """带模型列表的供应商"""
-    model_count: int = Field(0, description="模型数量")
-
-    class Config:
-        from_attributes = True
+class OfferingCreate(BaseModel):
+    """添加模型-服务商报价配置"""
+    provider_id: int = Field(..., description="服务商 ID")
+    price_input_per_m: Optional[Decimal] = Field(None, description="每百万输入 token 价格（人民币）")
+    price_output_per_m: Optional[Decimal] = Field(None, description="每百万输出 token 价格（人民币）")
+    provider_model_id: Optional[str] = Field(None, description="在该服务商的 API 模型 ID，如 anthropic/claude-3-7-sonnet")
 
 
-# ========== 性能测试相关 ==========
+# ========== 探测原始记录写入（供定时任务使用）==========
 
-class BenchmarkResultBase(BaseModel):
-    """性能测试结果基础字段"""
-    model_provider_id: int
-    latency_ttft: Optional[float] = None
-    latency_total: Optional[float] = None
-    throughput: Optional[float] = None
-    success_count: int = 1
-    fail_count: int = 0
-    test_prompt: Optional[str] = None
-
-
-class BenchmarkResultCreate(BenchmarkResultBase):
-    """创建性能测试结果请求"""
-    pass
-
-
-class BenchmarkStatsResponse(BaseModel):
-    """性能统计响应"""
-    model_provider_id: int
-    avg_latency_ttft: Optional[float] = None
-    avg_latency_total: Optional[float] = None
-    avg_throughput: Optional[float] = None
-    success_rate: Optional[float] = None
-    success_count: int = 0
-    fail_count: int = 0
-    test_count: int = 0
-    last_test_at: Optional[datetime] = None
-
-
-class ProviderStatsResponse(BaseModel):
-    """供应商性能统计"""
-    provider_id: int
-    provider_name: str
-    color: Optional[str]
-    model_provider_id: int
-    model_name: str
-    api_model_name: str
-    input_price_cny_1m: Optional[float]
-    output_price_cny_1m: Optional[float]
-    stats: BenchmarkStatsResponse
-
-
-class BenchmarkRunRequest(BaseModel):
-    """触发性能测试请求"""
-    model_provider_ids: Optional[List[int]] = None
-    concurrency: int = Field(10, description="并发数")
-    timeout: int = Field(60, description="超时时间(秒)")
-
-
-class BenchmarkRunResponse(BaseModel):
-    """性能测试运行响应"""
-    task_id: str
-    status: str
-    total: int
-    submitted: int
-
-
-# ========== 通用响应 ==========
-
-class ListResponse(BaseModel):
-    """列表响应"""
-    items: List
-    total: int
-    page: int
-    page_size: int
-
-
-class BaseResponse(BaseModel):
-    """基础响应"""
-    code: int = 200
-    message: str = "操作成功"
-
-
-class DataResponse(BaseModel):
-    """数据响应"""
-    code: int = 200
-    message: str = "操作成功"
-    data: Optional[dict] = None
+class PerformanceMetricCreate(BaseModel):
+    """
+    性能探测记录写入（append-only，由 APScheduler 定时任务调用）
+    """
+    offering_id: int = Field(..., description="报价 ID")
+    throughput_tps: Optional[float] = Field(None, description="吞吐量（tokens/秒）")
+    ttft_ms: Optional[int] = Field(None, description="首字延迟（毫秒）")
+    e2e_latency_ms: Optional[int] = Field(None, description="端到端延迟（毫秒）")
+    success: bool = Field(True, description="是否成功")
+    error_code: Optional[str] = Field(None, description="错误码")
+    prompt_tokens: Optional[int] = Field(None, description="prompt tokens 数")
+    output_tokens: Optional[int] = Field(None, description="输出 tokens 数")
+    probe_region: Optional[str] = Field(None, description="探测区域，如 cn-east")
+    measured_at: datetime = Field(..., description="探测时间")

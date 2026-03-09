@@ -527,15 +527,12 @@ async def verify_email(
     验证成功后标记用户邮箱为已验证。
     """
     try:
-        is_valid = await email_service.verify_code(db, request.email, request.code, "verify")
-
-        if not is_valid:
-            raise InvalidCredentialsException(detail="验证码无效或已过期")
+        await email_service.verify_code_or_raise(db, request.email, request.code, "verify")
 
         return AuthBaseResponse(code=200, message="邮箱验证成功")
 
-    except InvalidCredentialsException as e:
-        raise e
-    except Exception as e:
+    except (InvalidCredentialsException, Exception) as e:
+        if isinstance(e, InvalidCredentialsException):
+            raise
         logger.exception("验证邮箱失败")
         raise e

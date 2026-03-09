@@ -48,10 +48,13 @@ WORKDIR /app
 # 从 builder 复制虚拟环境
 COPY --from=builder /app/.venv /app/.venv
 
-# 复制应用代码
-COPY --chown=appuser:appuser app/ /app/app/
+# 复制应用代码（各服务模块）
+COPY --chown=appuser:appuser common/ /app/common/
+COPY --chown=appuser:appuser user/ /app/user/
+COPY --chown=appuser:appuser admin/ /app/admin/
+COPY --chown=appuser:appuser testing/ /app/testing/
 COPY --chown=appuser:appuser pyproject.toml /app/
-COPY --chown=appuser:appuser .env.example /app/.env
+COPY --chown=appuser:appuser deploy/.env.example /app/.env
 
 # 设置环境变量
 ENV PATH="/app/.venv/bin:$PATH" \
@@ -62,12 +65,12 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # 切换到非 root 用户
 USER appuser
 
-# 暴露端口
-EXPOSE 8000
+# 暴露端口（user:8000, admin:8001, testing:8002）
+EXPOSE 8000 8001 8002
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# 启动命令 - 使用 uv run 运行
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# 默认启动用户服务，可通过 docker-compose command 覆盖
+CMD ["/app/.venv/bin/uvicorn", "user.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

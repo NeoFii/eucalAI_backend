@@ -53,10 +53,9 @@ class News(Base, SnowflakeIdMixin, TimestampMixin):
         comment="新闻标题",
     )
 
-    # URL 路径标识
+    # URL 路径标识（同一语言内唯一，由 idx_language_slug 复合唯一索引保证）
     slug = Column(
         String(255),
-        unique=True,
         nullable=False,
         index=True,
         comment="URL路径标识",

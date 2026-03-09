@@ -3,53 +3,41 @@
 # 注意: 此配置假设 MySQL 已使用 eucal_network 网络部署
 
 services:
-  backend:
+  user:
     build:
       context: ..        # 指向上级目录
       dockerfile: deploy/Dockerfile
-    container_name: eucal_backend
+    container_name: eucal_user
     env_file:
       - .env
     restart: unless-stopped
     environment:
-      # 数据库配置
-      # 使用容器名 eucal_mysql 访问（需要与 MySQL 在同一网络）
-      DATABASE_URL: "mysql+aiomysql://root:EucalAI123%40456%2A@eucal_mysql:3306/eucal_ai"
+      DATABASE_URL: "mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/${DB_NAME}"
       DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       DATABASE_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
       DATABASE_ECHO: "false"
-
-      # JWT 配置
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-8b0cb941d6ea64bef8756492f1ce32b955b5759b36907dd7f2072b1e493ff8df}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
-
-      # CORS 和安全配置
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-frontend,localhost,127.0.0.1}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
-
-      # 调试模式
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      ADMIN_SERVICE_URL: "http://eucal_admin:8001"
       DEBUG: ${DEBUG:-false}
-
+    command: ["/app/.venv/bin/uvicorn", "user.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
     ports:
       - "${BACKEND_PORT:-8000}:8000"
-
     volumes:
-      # 持久化日志
       - backend_logs:/app/logs
-
-    # 健康检查
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-    # 资源限制（可选）
     deploy:
       resources:
         limits:
@@ -58,8 +46,84 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+    networks:
+      - eucal_network
+    depends_on:
+      admin:
+        condition: service_healthy
 
-    # 加入 MySQL 所在的网络
+  admin:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: eucal_admin
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/${DB_NAME}"
+      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DATABASE_ECHO: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/uvicorn", "admin.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.15'
+          memory: 64M
+    networks:
+      - eucal_network
+
+  testing:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: eucal_testing
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/${DB_NAME}"
+      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DATABASE_ECHO: "false"
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/uvicorn", "testing.main:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "2"]
+    ports:
+      - "8002:8002"
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.15'
+          memory: 64M
     networks:
       - eucal_network
 

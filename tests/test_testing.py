@@ -49,13 +49,17 @@ class TestModelsImport:
 
         # 检查主要字段存在
         assert hasattr(ModelCategory, 'id')
-        assert hasattr(ModelCategory, 'name_zh')
-        assert hasattr(ModelCategory, 'name_en')
+        assert hasattr(ModelCategory, 'name')
         assert hasattr(ModelCategory, 'slug')
-        assert hasattr(ModelCategory, 'description_zh')
-        assert hasattr(ModelCategory, 'description_en')
+        assert hasattr(ModelCategory, 'description')
         assert hasattr(ModelCategory, 'icon')
         assert hasattr(ModelCategory, 'sort_order')
+
+        # 验证旧字段已被删除
+        assert not hasattr(ModelCategory, 'name_zh')
+        assert not hasattr(ModelCategory, 'name_en')
+        assert not hasattr(ModelCategory, 'description_zh')
+        assert not hasattr(ModelCategory, 'description_en')
 
     def test_model_columns(self):
         """测试 Model 字段"""
@@ -65,13 +69,16 @@ class TestModelsImport:
         assert hasattr(Model, 'id')
         assert hasattr(Model, 'model_id')
         assert hasattr(Model, 'name')
-        assert hasattr(Model, 'name_zh')
-        assert hasattr(Model, 'description_zh')
-        assert hasattr(Model, 'description_en')
+        assert hasattr(Model, 'description')
         assert hasattr(Model, 'context_length')
         assert hasattr(Model, 'model_size')
         assert hasattr(Model, 'is_open_source')
         assert hasattr(Model, 'is_active')
+
+        # 验证旧字段已被删除
+        assert not hasattr(Model, 'name_zh')
+        assert not hasattr(Model, 'description_zh')
+        assert not hasattr(Model, 'description_en')
 
     def test_provider_columns(self):
         """测试 Provider 字段"""
@@ -81,11 +88,13 @@ class TestModelsImport:
         assert hasattr(Provider, 'id')
         assert hasattr(Provider, 'provider_id')
         assert hasattr(Provider, 'name')
-        assert hasattr(Provider, 'name_zh')
         assert hasattr(Provider, 'logo_url')
-        assert hasattr(Provider, 'color')
         assert hasattr(Provider, 'is_active')
         assert hasattr(Provider, 'sort_order')
+
+        # 验证旧字段已被删除
+        assert not hasattr(Provider, 'name_zh')
+        assert not hasattr(Provider, 'color')
 
     def test_model_provider_columns(self):
         """测试 ModelProvider 字段"""
@@ -150,14 +159,20 @@ class TestSchemasImport:
         from testing.schemas import CategoryCreate
 
         schema = CategoryCreate(
-            name_zh="测试分类",
-            name_en="Test Category",
+            name="Test Category",
             slug="test-category",
+            description="This is a test category",
         )
 
-        assert schema.name_zh == "测试分类"
-        assert schema.name_en == "Test Category"
+        assert schema.name == "Test Category"
         assert schema.slug == "test-category"
+        assert schema.description == "This is a test category"
+
+        # 验证旧字段已被删除
+        assert not hasattr(schema, 'name_zh')
+        assert not hasattr(schema, 'name_en')
+        assert not hasattr(schema, 'description_zh')
+        assert not hasattr(schema, 'description_en')
 
     def test_model_schema_fields(self):
         """测试 Model Schema 字段"""
@@ -166,18 +181,23 @@ class TestSchemasImport:
         schema = ModelCreate(
             model_id="test-model",
             name="Test Model",
-            name_zh="测试模型",
-            description_zh="这是一个测试模型",
+            description="This is a test model",
             context_length=4096,
             category_ids=[1, 2],
-            tag_names=["文本", "推理"],
+            tag_names=["text", "reasoning"],
         )
 
         assert schema.model_id == "test-model"
         assert schema.name == "Test Model"
+        assert schema.description == "This is a test model"
         assert schema.context_length == 4096
         assert schema.category_ids == [1, 2]
-        assert schema.tag_names == ["文本", "推理"]
+        assert schema.tag_names == ["text", "reasoning"]
+
+        # 验证旧字段已被删除
+        assert not hasattr(schema, 'name_zh')
+        assert not hasattr(schema, 'description_zh')
+        assert not hasattr(schema, 'description_en')
 
     def test_provider_schema_fields(self):
         """测试 Provider Schema 字段"""
@@ -186,14 +206,18 @@ class TestSchemasImport:
         schema = ProviderCreate(
             provider_id="test-provider",
             name="Test Provider",
-            name_zh="测试供应商",
-            color="#ff0000",
+            logo_url="https://example.com/logo.png",
             sort_order=1,
         )
 
         assert schema.provider_id == "test-provider"
         assert schema.name == "Test Provider"
-        assert schema.color == "#ff0000"
+        assert schema.logo_url == "https://example.com/logo.png"
+        assert schema.sort_order == 1
+
+        # 验证旧字段已被删除
+        assert not hasattr(schema, 'name_zh')
+        assert not hasattr(schema, 'color')
 
     def test_benchmark_run_request_schema(self):
         """测试 BenchmarkRunRequest Schema"""

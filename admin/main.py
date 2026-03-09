@@ -17,22 +17,12 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-from common.core.exceptions import (
-    AuthenticationException,
-    InvalidCredentialsException,
-    InvalidInvitationCodeException,
-    InvalidTokenException,
-    InvitationCodeDisabledException,
-    InvitationCodeExpiredException,
-    InvitationCodeUsedException,
-    ServiceUnavailableException,
-    TokenExpiredException,
-    WeakPasswordException,
-)
+from common.core.exception_handlers import register_exception_handlers
 from common.db import close_db, create_engine, init_db, init_session_factory
 from common.utils.snowflake import configure_snowflake
 from admin.api import api_router
 from admin.config import settings
+import admin.models  # noqa: F401 — 显式注册所有模型到 Base.metadata
 
 # 配置日志
 logging.basicConfig(
@@ -103,110 +93,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 配置 CORS - 允许前端开发服务器访问
+# 配置 CORS - 使用配置文件中的允许域名列表
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=settings.cors_allowed_hosts,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# ==================== 异常处理器 ====================
-
-@app.exception_handler(AuthenticationException)
-async def authentication_exception_handler(request: Request, exc: AuthenticationException):
-    """认证异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"code": 401, "message": exc.detail or "认证失败"},
-    )
-
-
-@app.exception_handler(InvalidCredentialsException)
-async def invalid_credentials_exception_handler(request: Request, exc: InvalidCredentialsException):
-    """无效凭证异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"code": 401, "message": exc.detail or "邮箱或密码错误"},
-    )
-
-
-@app.exception_handler(InvalidTokenException)
-async def invalid_token_exception_handler(request: Request, exc: InvalidTokenException):
-    """无效令牌异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"code": 401, "message": exc.detail or "无效的令牌"},
-    )
-
-
-@app.exception_handler(TokenExpiredException)
-async def token_expired_exception_handler(request: Request, exc: TokenExpiredException):
-    """令牌过期异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"code": 401, "message": exc.detail or "令牌已过期"},
-    )
-
-
-@app.exception_handler(InvalidInvitationCodeException)
-async def invalid_invitation_code_exception_handler(request: Request, exc: InvalidInvitationCodeException):
-    """无效邀请码异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": 400, "message": exc.detail or "无效的邀请码"},
-    )
-
-
-@app.exception_handler(InvitationCodeUsedException)
-async def invitation_code_used_exception_handler(request: Request, exc: InvitationCodeUsedException):
-    """邀请码已使用异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": 400, "message": exc.detail or "邀请码已被使用"},
-    )
-
-
-@app.exception_handler(InvitationCodeDisabledException)
-async def invitation_code_disabled_exception_handler(request: Request, exc: InvitationCodeDisabledException):
-    """邀请码已禁用异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": 400, "message": exc.detail or "邀请码已被禁用"},
-    )
-
-
-@app.exception_handler(InvitationCodeExpiredException)
-async def invitation_code_expired_exception_handler(request: Request, exc: InvitationCodeExpiredException):
-    """邀请码已过期异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": 400, "message": exc.detail or "邀请码已过期"},
-    )
-
-
-@app.exception_handler(WeakPasswordException)
-async def weak_password_exception_handler(request: Request, exc: WeakPasswordException):
-    """密码强度不足异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": 400, "message": exc.detail or "密码强度不足"},
-    )
-
-
-@app.exception_handler(ServiceUnavailableException)
-async def service_unavailable_exception_handler(request: Request, exc: ServiceUnavailableException):
-    """服务不可用异常处理"""
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"code": 503, "message": exc.detail or "服务暂时不可用"},
-    )
-
+# 注册统一异常处理器
+register_exception_handlers(app)
 
 # 注册 API 路由
 app.include_router(api_router)

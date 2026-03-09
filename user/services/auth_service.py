@@ -239,6 +239,12 @@ class AuthService:
             expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
         )
 
+        # 更新 session 记录中的 token_jti 和 refresh_token_hash
+        session.token_jti = get_token_jti(new_refresh_token)
+        session.refresh_token_hash = hash_password(new_refresh_token)
+        session.expires_at = now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+        await db.commit()
+
         logger.info(f"刷新 access_token 成功: uid={user.uid}")
         return new_access_token, new_refresh_token
 

@@ -117,13 +117,18 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """
     初始化数据库
-    创建所有表结构
+    创建所有实体表结构，跳过视图映射（info.is_view=True）
     注意：生产环境建议使用 Alembic 进行迁移
     """
     if _engine is None:
         raise RuntimeError("数据库引擎尚未初始化，请先调用 create_engine()")
+    # 过滤掉视图映射，只创建真实表
+    tables = [
+        t for t in Base.metadata.sorted_tables
+        if not t.info.get("is_view", False)
+    ]
     async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all, tables=tables)
 
 
 async def close_db() -> None:

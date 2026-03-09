@@ -5,7 +5,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,12 @@ async def verify_internal_secret(x_internal_secret: str = Header(...)) -> None:
         raise ServiceUnavailableException("内部服务密钥验证失败")
 
 
+class InternalVerifyRequest(BaseModel):
+    """内部验证请求体"""
+    code: str
+    used_by: int
+
+
 class InternalVerifyResponse(BaseModel):
     """内部验证响应"""
     success: bool
@@ -38,8 +44,8 @@ class InternalVerifyResponse(BaseModel):
     description="供用户服务内部调用的接口",
 )
 async def verify_and_use_invitation_code(
-    request: Request,
-    x_internal_secret: str = Header(...),
+    body: InternalVerifyRequest,
+    _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalVerifyResponse:
     """
@@ -47,18 +53,8 @@ async def verify_and_use_invitation_code(
 
     内部接口，供用户服务在用户注册时调用
     """
-    # 验证内部密钥
-    await verify_internal_secret(x_internal_secret)
-
-    body = await request.json()
-    code = body.get("code")
-    used_by = body.get("used_by")
-
-    if not code or not used_by:
-        raise InvalidInvitationCodeException()
-
     try:
-        await InvitationCodeService.verify_and_use(db, code, used_by)
+        await InvitationCodeService.verify_and_use(db, body.code, body.used_by)
         return InternalVerifyResponse(
             success=True,
             message="邀请码验证成功",

@@ -50,16 +50,16 @@ def utc_to_shanghai(dt: datetime) -> datetime:
     return dt.astimezone(SHANGHAI_TZ).replace(tzinfo=None)
 
 
-def format_iso(dt: datetime) -> str:
+def format_iso(dt: datetime | None) -> str | None:
     """将 datetime 格式化为 ISO 8601 字符串（不带时区后缀）
 
     用于 API 响应中的时间字段序列化。
 
     Args:
-        dt: datetime 对象
+        dt: datetime 对象，可为 None
 
     Returns:
-        str: ISO 8601 格式字符串，如 "2026-03-04T13:43:20"
+        ISO 8601 格式字符串（如 "2026-03-04T13:43:20"），或 None
     """
     if dt is None:
         return None

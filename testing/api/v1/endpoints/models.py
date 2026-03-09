@@ -1,40 +1,33 @@
 # -*- coding: utf-8 -*-
 """
 Testing 服务模型管理端点
+提供模型列表、详情（含报价和性能指标）和分类列表查询
 """
 
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from testing.api.dependencies import get_db_session
 from testing.schemas import (
-    CategoryCreate,
-    CategoryResponse,
-    CategoryWithModels,
-    ModelCreate,
-    ModelUpdate,
+    ApiResponse,
+    ListResponse,
+    ModelCategoryResponse,
     ModelListItem,
     ModelDetailResponse,
-    ProviderCreate,
-    ProviderResponse,
-    ProviderWithModels,
-    ProviderStatsResponse,
-    BenchmarkStatsResponse,
-    ListResponse,
-    BaseResponse,
+    ModelVendorBrief,
+    ProviderBrief,
+    ModelOfferingResponse,
+    ModelCreate,
+    ModelUpdate,
+    OfferingCreate,
 )
 from testing.services import (
     CategoryService,
     ModelService,
-    ProviderService,
-    ModelProviderService,
-    BenchmarkService,
+    OfferingService,
 )
-from sqlalchemy import func, select
-
-from testing.models import ModelCategoryMapping
 
 router = APIRouter(prefix="/models", tags=["模型管理"])
 
@@ -43,284 +36,355 @@ router = APIRouter(prefix="/models", tags=["模型管理"])
 
 @router.get(
     "/categories",
-    response_model=ListResponse,
+    response_model=ApiResponse[ListResponse[ModelCategoryResponse]],
     summary="获取分类列表",
-    description="获取所有模型分类",
+    description="获取所有启用的模型能力分类，按 sort_order 排序",
 )
 async def list_categories(
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     """获取所有分类"""
     categories = await CategoryService.list_all(db)
-
-    # 获取每个分类的模型数量
-    items = []
-    for cat in categories:
-        # 使用数据库查询获取模型数量，避免懒加载问题
-        count_result = await db.execute(
-            select(func.count()).select_from(ModelCategoryMapping).where(
-                ModelCategoryMapping.category_id == cat.id
-            )
+    items = [
+        ModelCategoryResponse(
+            id=cat.id,
+            key=cat.key,
+            name=cat.name,
+            sort_order=cat.sort_order,
+            is_active=cat.is_active,
         )
-        model_count = count_result.scalar() or 0
-
-        items.append({
-            "id": cat.id,
-            "name_zh": cat.name_zh,
-            "name_en": cat.name_en,
-            "slug": cat.slug,
-            "description_zh": cat.description_zh,
-            "description_en": cat.description_en,
-            "icon": cat.icon,
-            "sort_order": cat.sort_order,
-            "model_count": model_count,
-        })
-
+        for cat in categories
+    ]
     return {
-        "items": items,
-        "total": len(items),
-        "page": 1,
-        "page_size": len(items),
+        "code": 200,
+        "message": "success",
+        "data": {"items": items, "total": len(items), "page": 1, "page_size": len(items)},
     }
 
+
+# ========== 模型列表端点 ==========
 
 @router.get(
-    "/categories/{slug}",
-    response_model=CategoryWithModels,
-    summary="获取分类详情",
-    description="根据slug获取分类详情",
-)
-async def get_category(
-    slug: str,
-    db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """获取分类详情"""
-    category = await CategoryService.get_by_slug(db, slug)
-    if not category:
-        return {"code": 404, "message": "分类不存在"}
-
-    # 使用数据库查询获取模型数量
-    count_result = await db.execute(
-        select(func.count()).select_from(ModelCategoryMapping).where(
-            ModelCategoryMapping.category_id == category.id
-        )
-    )
-    model_count = count_result.scalar() or 0
-
-    return {
-        "id": category.id,
-        "name_zh": category.name_zh,
-        "name_en": category.name_en,
-        "slug": category.slug,
-        "description_zh": category.description_zh,
-        "description_en": category.description_en,
-        "icon": category.icon,
-        "sort_order": category.sort_order,
-        "model_count": model_count,
-    }
-
-
-@router.post(
-    "/categories",
-    response_model=CategoryResponse,
-    summary="创建分类",
-    description="创建新的模型分类",
-)
-async def create_category(
-    request: CategoryCreate,
-    db: AsyncSession = Depends(get_db_session),
-) -> dict:
-    """创建分类"""
-    category = await CategoryService.create(
-        db=db,
-        name_zh=request.name_zh,
-        name_en=request.name_en,
-        slug=request.slug,
-        description_zh=request.description_zh,
-        description_en=request.description_en,
-        icon=request.icon,
-        sort_order=request.sort_order,
-    )
-
-    return {
-        "id": category.id,
-        "name_zh": category.name_zh,
-        "name_en": category.name_en,
-        "slug": category.slug,
-        "description_zh": category.description_zh,
-        "description_en": category.description_en,
-        "icon": category.icon,
-        "sort_order": category.sort_order,
-    }
-
-
-# ========== 模型端点 ==========
-
-@router.get(
-    "/",
-    response_model=ListResponse,
+    "",
+    response_model=ApiResponse[ListResponse[ModelListItem]],
     summary="获取模型列表",
-    description="获取模型列表，支持分类筛选和分页",
+    description=(
+        "获取模型列表，支持三个维度筛选（AND 逻辑）：\n"
+        "- category：分类键筛选（如 reasoning / coding）\n"
+        "- vendors：研发商 slug 多选，逗号分隔（如 anthropic,openai）\n"
+        "- q：关键词搜索（匹配 name / slug / description）\n\n"
+        "排序：分类内按 model_category_map.sort_order → models.sort_order → name"
+    ),
 )
 async def list_models(
-    category: Optional[str] = Query(None, description="分类slug"),
+    category: Optional[str] = Query(None, description="分类键，如 reasoning / coding"),
+    vendors: Optional[str] = Query(None, description="研发商 slug 多选，逗号分隔，如 anthropic,openai"),
+    q: Optional[str] = Query(None, description="关键词搜索"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     """获取模型列表"""
+    vendor_slugs: Optional[List[str]] = (
+        [s.strip() for s in vendors.split(",") if s.strip()] if vendors else None
+    )
+
     models, total = await ModelService.list_all(
         db=db,
-        category_slug=category,
+        category_key=category,
+        vendor_slugs=vendor_slugs,
+        q=q,
         page=page,
         page_size=page_size,
     )
 
     items = []
     for model in models:
-        tags = await ModelService.get_tags(db, model.id)
-        categories = await ModelService.get_categories_info(db, model.id)
-        provider_count = await ModelService.get_provider_count(db, model.id)
-
-        primary_cat = categories[0] if categories else None
-
-        items.append({
-            "id": model.id,
-            "model_id": model.model_id,
-            "name": model.name,
-            "name_zh": model.name_zh,
-            "description_zh": model.description_zh,
-            "context_length": model.context_length,
-            "model_size": model.model_size,
-            "is_open_source": model.is_open_source,
-            "tags": tags,
-            "category": primary_cat,
-            "provider_count": provider_count,
-        })
+        category_briefs = await ModelService.get_category_briefs(db, model.id)
+        items.append(
+            ModelListItem(
+                id=model.id,
+                slug=model.slug,
+                name=model.name,
+                description=model.description,
+                capability_tags=model.capability_tags or [],
+                context_window=model.context_window,
+                max_output_tokens=model.max_output_tokens,
+                knowledge_cutoff=model.knowledge_cutoff,
+                is_reasoning_model=model.is_reasoning_model,
+                sort_order=model.sort_order,
+                vendor=ModelVendorBrief(
+                    id=model.vendor.id,
+                    slug=model.vendor.slug,
+                    name=model.vendor.name,
+                    logo_url=model.vendor.logo_url,
+                ),
+                categories=category_briefs,
+            )
+        )
 
     return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "code": 200,
+        "message": "success",
+        "data": {"items": items, "total": total, "page": page, "page_size": page_size},
     }
 
+
+# ========== 模型详情端点 ==========
 
 @router.get(
-    "/{model_id}",
-    response_model=ModelDetailResponse,
+    "/{slug}",
+    response_model=ApiResponse[ModelDetailResponse],
     summary="获取模型详情",
-    description="根据model_id获取模型详情",
+    description="根据 slug 获取模型详情，附带所有提供商报价和近 N 次性能指标均值",
 )
 async def get_model(
-    model_id: str,
+    slug: str,
+    n: int = Query(5, ge=1, le=20, description="聚合最近 N 次成功探测（默认 5）"),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """获取模型详情"""
-    model = await ModelService.get_by_model_id(db, model_id)
+    """获取模型详情（含报价和性能指标）"""
+    model = await ModelService.get_by_slug(db, slug)
     if not model:
-        return {"code": 404, "message": "模型不存在"}
+        return {"code": 404, "message": "模型不存在", "data": None}
 
-    tags = await ModelService.get_tags(db, model.id)
-    categories = await ModelService.get_categories_info(db, model.id)
+    category_briefs = await ModelService.get_category_briefs(db, model.id)
+    offerings_orm = await OfferingService.list_by_model(db, model.id)
+
+    # 组装每个报价的响应（含性能指标）
+    offerings: List[ModelOfferingResponse] = []
+    for offering in offerings_orm:
+        metrics_list = await OfferingService.get_metrics(db, offering.id, n=n)
+        # 取第一个区域的指标作为默认（若有多区域，前端可按需展示所有区域）
+        metrics = metrics_list[0] if metrics_list else None
+        offerings.append(
+            ModelOfferingResponse(
+                id=offering.id,
+                provider=ProviderBrief(
+                    id=offering.provider.id,
+                    slug=offering.provider.slug,
+                    name=offering.provider.name,
+                    logo_url=offering.provider.logo_url,
+                ),
+                price_input_per_m=offering.price_input_per_m,
+                price_output_per_m=offering.price_output_per_m,
+                provider_model_id=offering.provider_model_id,
+                price_updated_at=offering.price_updated_at,
+                is_active=offering.is_active,
+                metrics=metrics,
+            )
+        )
 
     return {
-        "id": model.id,
-        "model_id": model.model_id,
-        "name": model.name,
-        "name_zh": model.name_zh,
-        "description_zh": model.description_zh,
-        "description_en": model.description_en,
-        "context_length": model.context_length,
-        "model_size": model.model_size,
-        "is_open_source": model.is_open_source,
-        "is_active": model.is_active,
-        "tags": tags,
-        "categories": categories,
+        "code": 200,
+        "message": "success",
+        "data": ModelDetailResponse(
+            id=model.id,
+            slug=model.slug,
+            name=model.name,
+            description=model.description,
+            capability_tags=model.capability_tags or [],
+            context_window=model.context_window,
+            max_output_tokens=model.max_output_tokens,
+            knowledge_cutoff=model.knowledge_cutoff,
+            is_reasoning_model=model.is_reasoning_model,
+            is_active=model.is_active,
+            vendor=ModelVendorBrief(
+                id=model.vendor.id,
+                slug=model.vendor.slug,
+                name=model.vendor.name,
+                logo_url=model.vendor.logo_url,
+            ),
+            categories=category_briefs,
+            offerings=offerings,
+        ),
     }
+
+
+# ========== 模型写操作端点 ==========
+
+
+# ---------- offerings 管理（管理端专用）----------
+
+@router.get(
+    "/{slug}/offerings",
+    response_model=ApiResponse[List[ModelOfferingResponse]],
+    summary="获取模型所有报价配置（管理端）",
+    description="返回该模型的全部报价配置（含已废弃），供管理员查看",
+)
+async def list_model_offerings(
+    slug: str,
+    n: int = Query(5, ge=1, le=20, description="聚合最近 N 次探测（默认 5）"),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """管理端：获取模型全部报价（含废弃），附带性能指标"""
+    model = await ModelService.get_by_slug(db, slug)
+    if not model:
+        return {"code": 404, "message": "模型不存在", "data": []}
+
+    offerings_orm = await OfferingService.list_all_by_model(db, model.id)
+    offerings: List[ModelOfferingResponse] = []
+    for offering in offerings_orm:
+        metrics_list = await OfferingService.get_metrics(db, offering.id, n=n)
+        metrics = metrics_list[0] if metrics_list else None
+        offerings.append(
+            ModelOfferingResponse(
+                id=offering.id,
+                provider=ProviderBrief(
+                    id=offering.provider.id,
+                    slug=offering.provider.slug,
+                    name=offering.provider.name,
+                    logo_url=offering.provider.logo_url,
+                ),
+                price_input_per_m=offering.price_input_per_m,
+                price_output_per_m=offering.price_output_per_m,
+                provider_model_id=offering.provider_model_id,
+                price_updated_at=offering.price_updated_at,
+                is_active=offering.is_active,
+                metrics=metrics,
+            )
+        )
+    return {"code": 200, "message": "success", "data": offerings}
 
 
 @router.post(
-    "/",
-    response_model=ModelDetailResponse,
+    "/{slug}/offerings",
+    response_model=ApiResponse[ModelOfferingResponse],
+    status_code=201,
+    summary="为模型添加服务商报价",
+)
+async def add_model_offering(
+    slug: str,
+    data: OfferingCreate,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """为指定模型添加服务商报价配置"""
+    model = await ModelService.get_by_slug(db, slug)
+    if not model:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    try:
+        offering = await OfferingService.create(db, model.id, data)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {
+        "code": 201,
+        "message": "created",
+        "data": ModelOfferingResponse(
+            id=offering.id,
+            provider=ProviderBrief(
+                id=offering.provider.id,
+                slug=offering.provider.slug,
+                name=offering.provider.name,
+                logo_url=offering.provider.logo_url,
+            ),
+            price_input_per_m=offering.price_input_per_m,
+            price_output_per_m=offering.price_output_per_m,
+            provider_model_id=offering.provider_model_id,
+            price_updated_at=offering.price_updated_at,
+            is_active=offering.is_active,
+            metrics=None,
+        ),
+    }
+
+
+# ========== 模型写操作端点 ==========
+
+@router.post(
+    "",
+    response_model=ApiResponse[ModelDetailResponse],
+    status_code=201,
     summary="创建模型",
-    description="创建新的模型",
 )
 async def create_model(
-    request: ModelCreate,
+    data: ModelCreate,
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """创建模型"""
-    model = await ModelService.create(
-        db=db,
-        model_id=request.model_id,
-        name=request.name,
-        name_zh=request.name_zh,
-        description_zh=request.description_zh,
-        description_en=request.description_en,
-        context_length=request.context_length,
-        model_size=request.model_size,
-        is_open_source=request.is_open_source,
-        is_active=request.is_active,
-        category_ids=request.category_ids,
-        tag_names=request.tag_names,
-    )
-
+    """创建新模型（含分类关联）"""
+    try:
+        model = await ModelService.create(db, data)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    category_briefs = await ModelService.get_category_briefs(db, model.id)
     return {
-        "id": model.id,
-        "model_id": model.model_id,
-        "name": model.name,
-        "name_zh": model.name_zh,
-        "description_zh": model.description_zh,
-        "description_en": model.description_en,
-        "context_length": model.context_length,
-        "model_size": model.model_size,
-        "is_open_source": model.is_open_source,
-        "is_active": model.is_active,
-        "tags": request.tag_names,
-        "categories": [],
+        "code": 201,
+        "message": "created",
+        "data": ModelDetailResponse(
+            id=model.id,
+            slug=model.slug,
+            name=model.name,
+            description=model.description,
+            capability_tags=model.capability_tags or [],
+            context_window=model.context_window,
+            max_output_tokens=model.max_output_tokens,
+            knowledge_cutoff=model.knowledge_cutoff,
+            is_reasoning_model=model.is_reasoning_model,
+            is_active=model.is_active,
+            vendor=ModelVendorBrief(
+                id=model.vendor.id,
+                slug=model.vendor.slug,
+                name=model.vendor.name,
+                logo_url=model.vendor.logo_url,
+            ),
+            categories=category_briefs,
+            offerings=[],
+        ),
     }
 
 
-@router.get(
-    "/{model_id}/providers",
-    response_model=ListResponse,
-    summary="获取模型的供应商",
-    description="获取指定模型的所有供应商配置",
+@router.put(
+    "/{slug}",
+    response_model=ApiResponse[ModelDetailResponse],
+    summary="更新模型",
 )
-async def get_model_providers(
-    model_id: str,
+async def update_model(
+    slug: str,
+    data: ModelUpdate,
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """获取模型的供应商列表"""
-    model = await ModelService.get_by_model_id(db, model_id)
+    """更新模型字段（含可选分类关联替换）"""
+    model = await ModelService.update(db, slug, data)
     if not model:
-        return {"code": 404, "message": "模型不存在"}
-
-    model_providers = await ModelProviderService.list_by_model(db, model.id)
-
-    items = []
-    for mp in model_providers:
-        provider = await ProviderService.get_by_id(db, mp.provider_id)
-        stats = await BenchmarkService.get_stats(db, mp.id)
-
-        items.append({
-            "provider_id": provider.provider_id if provider else None,
-            "provider_name": provider.name if provider else None,
-            "provider_name_zh": provider.name_zh if provider else None,
-            "color": provider.color if provider else None,
-            "api_model_name": mp.api_model_name,
-            "routing_alias": mp.routing_alias,
-            "input_price_cny_1m": float(mp.input_price_cny_1m) if mp.input_price_cny_1m else None,
-            "output_price_cny_1m": float(mp.output_price_cny_1m) if mp.output_price_cny_1m else None,
-            "rate_limit_rpm": mp.rate_limit_rpm,
-            "is_default": mp.is_default,
-            "stats": stats,
-        })
-
+        raise HTTPException(status_code=404, detail="模型不存在")
+    category_briefs = await ModelService.get_category_briefs(db, model.id)
     return {
-        "items": items,
-        "total": len(items),
-        "page": 1,
-        "page_size": len(items),
+        "code": 200,
+        "message": "success",
+        "data": ModelDetailResponse(
+            id=model.id,
+            slug=model.slug,
+            name=model.name,
+            description=model.description,
+            capability_tags=model.capability_tags or [],
+            context_window=model.context_window,
+            max_output_tokens=model.max_output_tokens,
+            knowledge_cutoff=model.knowledge_cutoff,
+            is_reasoning_model=model.is_reasoning_model,
+            is_active=model.is_active,
+            vendor=ModelVendorBrief(
+                id=model.vendor.id,
+                slug=model.vendor.slug,
+                name=model.vendor.name,
+                logo_url=model.vendor.logo_url,
+            ),
+            categories=category_briefs,
+            offerings=[],
+        ),
     }
+
+
+@router.delete(
+    "/{slug}",
+    response_model=ApiResponse[None],
+    summary="删除模型（软删除）",
+)
+async def delete_model(
+    slug: str,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """软删除模型（设置 is_active=False）"""
+    ok, reason = await ModelService.delete(db, slug)
+    if not ok:
+        if reason == "not_found":
+            raise HTTPException(status_code=404, detail="模型不存在")
+        raise HTTPException(status_code=400, detail=reason)
+    return {"code": 200, "message": "deleted", "data": None}

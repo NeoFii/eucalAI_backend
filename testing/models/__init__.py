@@ -5,20 +5,22 @@ Testing 服务数据库模型
 
 from testing.models.model import (
     ModelCategory,
-    ModelCategoryMapping,
+    ModelVendor,
     Model,
-    ModelTag,
+    ModelCategoryMap,
     Provider,
-    ModelProvider,
-    BenchmarkResult,
+    ModelProviderOffering,
+    ProviderPerformanceMetric,
+    ProviderMetricsRanked,
 )
 
 __all__ = [
     "ModelCategory",
-    "ModelCategoryMapping",
+    "ModelVendor",
     "Model",
-    "ModelTag",
+    "ModelCategoryMap",
     "Provider",
-    "ModelProvider",
-    "BenchmarkResult",
+    "ModelProviderOffering",
+    "ProviderPerformanceMetric",
+    "ProviderMetricsRanked",
 ]

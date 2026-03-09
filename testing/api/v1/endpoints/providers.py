@@ -1,163 +1,122 @@
 # -*- coding: utf-8 -*-
 """
-Testing 服务供应商管理端点
+Testing 服务提供商端点
+提供 API 服务提供商的查询与管理接口
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from testing.api.dependencies import get_db_session
-from testing.schemas import (
-    ProviderCreate,
-    ProviderResponse,
-    ProviderWithModels,
-    ProviderStatsResponse,
-    ListResponse,
-)
-from testing.services import (
-    ProviderService,
-    ModelProviderService,
-    ModelService,
-    BenchmarkService,
-)
+from testing.schemas import ApiResponse, ListResponse, ProviderResponse, ProviderCreate, ProviderUpdate
+from testing.services import ProviderService
 
-router = APIRouter(prefix="/providers", tags=["供应商管理"])
+router = APIRouter(prefix="/providers", tags=["服务提供商"])
 
 
 @router.get(
-    "/",
-    response_model=ListResponse,
-    summary="获取供应商列表",
-    description="获取所有活跃的供应商",
+    "",
+    response_model=ApiResponse[ListResponse[ProviderResponse]],
+    summary="获取服务提供商列表",
+    description="获取所有启用的 API 服务提供商，按名称排序",
 )
 async def list_providers(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=200, description="每页数量"),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """获取供应商列表"""
-    providers = await ProviderService.list_all(db)
-
-    items = []
-    for provider in providers:
-        model_count = await ProviderService.get_model_count(db, provider.id)
-        items.append({
-            "id": provider.id,
-            "provider_id": provider.provider_id,
-            "name": provider.name,
-            "name_zh": provider.name_zh,
-            "logo_url": provider.logo_url,
-            "color": provider.color,
-            "is_active": provider.is_active,
-            "sort_order": provider.sort_order,
-            "model_count": model_count,
-        })
-
+    """获取所有服务提供商列表，支持分页"""
+    items_raw, total = await ProviderService.list_all(db, page, page_size)
+    items = [ProviderResponse.model_validate(p) for p in items_raw]
     return {
-        "items": items,
-        "total": len(items),
-        "page": 1,
-        "page_size": len(items),
+        "code": 200,
+        "message": "success",
+        "data": {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     }
 
 
 @router.get(
-    "/{provider_id}",
-    response_model=ProviderWithModels,
-    summary="获取供应商详情",
-    description="根据ID获取供应商详情",
+    "/{slug}",
+    response_model=ApiResponse[ProviderResponse],
+    summary="获取服务提供商详情",
+    description="根据 slug 获取服务提供商详情",
 )
 async def get_provider(
-    provider_id: int,
+    slug: str,
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """获取供应商详情"""
-    provider = await ProviderService.get_by_id(db, provider_id)
+    """根据 slug 获取服务提供商详情"""
+    provider = await ProviderService.get_by_slug(db, slug)
     if not provider:
-        return {"code": 404, "message": "供应商不存在"}
-
-    model_count = await ProviderService.get_model_count(db, provider.id)
-
+        raise HTTPException(status_code=404, detail="提供商不存在")
     return {
-        "id": provider.id,
-        "provider_id": provider.provider_id,
-        "name": provider.name,
-        "name_zh": provider.name_zh,
-        "logo_url": provider.logo_url,
-        "color": provider.color,
-        "is_active": provider.is_active,
-        "sort_order": provider.sort_order,
-        "model_count": model_count,
+        "code": 200,
+        "message": "success",
+        "data": ProviderResponse.model_validate(provider),
     }
 
 
 @router.post(
-    "/",
-    response_model=ProviderResponse,
-    summary="创建供应商",
-    description="创建新的供应商",
+    "",
+    response_model=ApiResponse[ProviderResponse],
+    status_code=201,
+    summary="创建服务提供商",
 )
 async def create_provider(
-    request: ProviderCreate,
+    data: ProviderCreate,
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """创建供应商"""
-    provider = await ProviderService.create(
-        db=db,
-        provider_id=request.provider_id,
-        name=request.name,
-        name_zh=request.name_zh,
-        logo_url=request.logo_url,
-        color=request.color,
-        is_active=request.is_active,
-        sort_order=request.sort_order,
-    )
-
+    """创建新服务提供商"""
+    try:
+        provider = await ProviderService.create(db, data)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return {
-        "id": provider.id,
-        "provider_id": provider.provider_id,
-        "name": provider.name,
-        "name_zh": provider.name_zh,
-        "logo_url": provider.logo_url,
-        "color": provider.color,
-        "is_active": provider.is_active,
-        "sort_order": provider.sort_order,
+        "code": 201,
+        "message": "created",
+        "data": ProviderResponse.model_validate(provider),
     }
 
 
-@router.get(
-    "/{provider_id}/stats",
-    response_model=ListResponse,
-    summary="获取供应商性能统计",
-    description="获取供应商的性能统计数据",
+@router.put(
+    "/{provider_id}",
+    response_model=ApiResponse[ProviderResponse],
+    summary="更新服务提供商",
 )
-async def get_provider_stats(
+async def update_provider(
+    provider_id: int,
+    data: ProviderUpdate,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """更新服务提供商信息"""
+    provider = await ProviderService.update(db, provider_id, data)
+    if not provider:
+        raise HTTPException(status_code=404, detail="提供商不存在")
+    return {
+        "code": 200,
+        "message": "success",
+        "data": ProviderResponse.model_validate(provider),
+    }
+
+
+@router.delete(
+    "/{provider_id}",
+    response_model=ApiResponse[None],
+    summary="删除服务提供商",
+)
+async def delete_provider(
     provider_id: int,
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    """获取供应商性能统计"""
-    provider = await ProviderService.get_by_id(db, provider_id)
-    if not provider:
-        return {"code": 404, "message": "供应商不存在"}
-
-    stats_list = await BenchmarkService.get_provider_stats(db, provider_id)
-
-    items = []
-    for item in stats_list:
-        model = await ModelService.get_by_id(db, item["model_id"])
-        items.append({
-            "provider_id": provider.id,
-            "provider_name": provider.name,
-            "color": provider.color,
-            "model_provider_id": item["model_provider_id"],
-            "model_name": model.name if model else None,
-            "api_model_name": item["api_model_name"],
-            "input_price_cny_1m": item["input_price_cny_1m"],
-            "output_price_cny_1m": item["output_price_cny_1m"],
-            "stats": item["stats"],
-        })
-
-    return {
-        "items": items,
-        "total": len(items),
-        "page": 1,
-        "page_size": len(items),
-    }
+    """删除服务提供商（存在关联报价时拒绝）"""
+    ok, reason = await ProviderService.delete(db, provider_id)
+    if not ok:
+        if reason == "not_found":
+            raise HTTPException(status_code=404, detail="提供商不存在")
+        raise HTTPException(status_code=400, detail=reason)
+    return {"code": 200, "message": "deleted", "data": None}

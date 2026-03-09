@@ -6,7 +6,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.models.news import News
@@ -104,7 +104,7 @@ async def get_news(
     news = result.scalar_one_or_none()
 
     if not news:
-        return {"code": 404, "message": "新闻不存在"}
+        raise HTTPException(status_code=404, detail="新闻不存在")
 
     return {
         "code": 200,

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from common.db import create_engine, init_session_factory, init_db, close_db
 from testing.config import get_settings
+import testing.models  # noqa: F401 — 显式注册所有模型到 Base.metadata
 from testing.api.v1.router import api_router
 
 # 配置日志
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
         logger.info("Database initialized")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
+        raise
 
     yield
 
@@ -53,12 +55,20 @@ app = FastAPI(
     description="模型管理、供应商管理和性能测试 API",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 # 添加 CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

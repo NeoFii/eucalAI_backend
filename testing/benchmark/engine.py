@@ -210,7 +210,7 @@ class BenchmarkEngine:
 
         # 对每个供应商依次执行（避免触发限速）
         for provider, provider_configs_list in provider_configs.items():
-            rate_limit = config.get("rate_limit_rpm", default_rate_limit)
+            rate_limit = provider_configs_list[0].get("rate_limit_rpm", default_rate_limit)
             # 计算合适的并发数（留20%余量）
             concurrency = max(1, int(rate_limit * 0.8))
 

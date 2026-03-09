@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"sed -i 's/allow_origins=settings.cors_allowed_hosts/allow_origin_regex=[\\\"http://localhost:.*\\\", \\\"http://127.0.0.1:.*\\\"]/' f:/Eucal_AI/backend/admin/main.py\"}",
-  "error": "Exit code 1\nsed: -e expression #1, char 72: unknown option to `s'\n\nsed: -e expression #1, char 72: unknown option to `s'",
-  "timestamp": "2026-03-05T10:23:25.390Z",
-  "retry_count": 1
-}

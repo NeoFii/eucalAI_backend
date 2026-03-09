@@ -38,6 +38,9 @@ dev = [
     "pre-commit>=3.6.0",
 ]
 
+[project.scripts]
+start = "scripts.start_services:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

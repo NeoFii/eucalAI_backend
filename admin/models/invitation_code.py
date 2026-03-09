@@ -3,13 +3,12 @@
 定义 invitation_codes 表结构
 """
 
-from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, BigInteger, DateTime, SmallInteger, String, Text
-from sqlalchemy.orm import relationship
 
 from common.db.base import Base, SnowflakeIdMixin, TimestampMixin
+from common.utils.timezone import now
 
 if TYPE_CHECKING:
     from admin.models.admin_user import AdminUser
@@ -19,6 +18,11 @@ class InvitationCode(Base, SnowflakeIdMixin, TimestampMixin):
     """
     邀请码表
     存储用户注册邀请码信息
+
+    状态定义：
+    - 0: 未使用（有效）
+    - 1: 已使用
+    - 2: 已弃用
     """
 
     __tablename__ = "invitation_codes"
@@ -83,7 +87,7 @@ class InvitationCode(Base, SnowflakeIdMixin, TimestampMixin):
         """检查邀请码是否有效"""
         if self.status != 0:
             return False
-        if self.expires_at and self.expires_at < datetime.now():
+        if self.expires_at and self.expires_at < now():
             return False
         return True
 
@@ -102,4 +106,4 @@ class InvitationCode(Base, SnowflakeIdMixin, TimestampMixin):
         """检查邀请码是否已过期"""
         if self.expires_at is None:
             return False
-        return self.expires_at < datetime.now()
+        return self.expires_at < now()
