@@ -1,0 +1,86 @@
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+CREATE TABLE IF NOT EXISTS `router_api_keys` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `owner_user_id` BIGINT NOT NULL COMMENT 'Owner user id',
+    `name` VARCHAR(100) NOT NULL COMMENT 'User-defined key name',
+    `key_hash` VARCHAR(64) NOT NULL COMMENT 'SHA-256 key hash',
+    `key_ciphertext` TEXT NULL COMMENT 'Encrypted raw key payload',
+    `token_preview` VARCHAR(32) NOT NULL COMMENT 'Masked key preview',
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether active',
+    `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether deleted',
+    `last_used_at` DATETIME NULL COMMENT 'Last used at',
+    `billing_mode` VARCHAR(20) NOT NULL DEFAULT 'postpaid' COMMENT 'prepaid/postpaid',
+    `balance` DECIMAL(18, 6) NULL COMMENT 'Prepaid balance',
+    `daily_quota_tokens` BIGINT NULL COMMENT 'Daily token quota',
+    `monthly_quota_tokens` BIGINT NULL COMMENT 'Monthly token quota',
+    `daily_quota_cost` DECIMAL(18, 6) NULL COMMENT 'Daily cost quota',
+    `monthly_quota_cost` DECIMAL(18, 6) NULL COMMENT 'Monthly cost quota',
+    `rate_limit_rpm` INT NULL COMMENT 'Per-minute rate limit',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_router_api_keys_key_hash` (`key_hash`),
+    KEY `idx_router_api_keys_owner_user_id` (`owner_user_id`),
+    KEY `idx_router_api_keys_is_active` (`is_active`),
+    KEY `idx_router_api_keys_is_deleted` (`is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Router API keys';
+
+CREATE TABLE IF NOT EXISTS `router_usage_events` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `request_id` VARCHAR(64) NOT NULL COMMENT 'Request id',
+    `router_api_key_id` BIGINT NULL COMMENT 'Router API key id',
+    `owner_user_id` BIGINT NULL COMMENT 'Owner user id',
+    `key_hash` VARCHAR(64) NOT NULL COMMENT 'Router key hash',
+    `endpoint` VARCHAR(64) NOT NULL COMMENT 'Endpoint path',
+    `provider_slug` VARCHAR(100) NULL COMMENT 'Resolved provider slug',
+    `requested_model` VARCHAR(255) NOT NULL COMMENT 'Requested model',
+    `resolved_model` VARCHAR(255) NOT NULL COMMENT 'Resolved logical model',
+    `usage_source` VARCHAR(20) NOT NULL DEFAULT 'none' COMMENT 'actual/estimated/none',
+    `prompt_tokens` INT NOT NULL DEFAULT 0 COMMENT 'Prompt tokens',
+    `completion_tokens` INT NOT NULL DEFAULT 0 COMMENT 'Completion tokens',
+    `total_tokens` INT NOT NULL DEFAULT 0 COMMENT 'Total tokens',
+    `input_price_per_m` DECIMAL(18, 6) NULL COMMENT 'Input price snapshot per million tokens',
+    `output_price_per_m` DECIMAL(18, 6) NULL COMMENT 'Output price snapshot per million tokens',
+    `cost_input` DECIMAL(18, 6) NOT NULL DEFAULT 0 COMMENT 'Input cost',
+    `cost_output` DECIMAL(18, 6) NOT NULL DEFAULT 0 COMMENT 'Output cost',
+    `cost_total` DECIMAL(18, 6) NOT NULL DEFAULT 0 COMMENT 'Total cost',
+    `currency` VARCHAR(16) NOT NULL DEFAULT 'CNY' COMMENT 'Currency',
+    `status_code` INT NOT NULL COMMENT 'HTTP status code',
+    `error_code` VARCHAR(128) NULL COMMENT 'Error code',
+    `error_message` TEXT NULL COMMENT 'Error message',
+    `latency_ms` INT NULL COMMENT 'Latency in milliseconds',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_router_usage_events_request_id` (`request_id`),
+    KEY `idx_router_usage_events_key_id` (`router_api_key_id`),
+    KEY `idx_router_usage_events_owner_user_id` (`owner_user_id`),
+    KEY `idx_router_usage_events_key_hash` (`key_hash`),
+    KEY `idx_router_usage_events_provider_slug` (`provider_slug`),
+    KEY `idx_router_usage_events_created_at` (`created_at`),
+    CONSTRAINT `fk_router_usage_events_key_id` FOREIGN KEY (`router_api_key_id`) REFERENCES `router_api_keys` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Router usage events';
+
+CREATE TABLE IF NOT EXISTS `router_billing_ledger` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `usage_event_id` BIGINT NULL COMMENT 'Usage event id',
+    `router_api_key_id` BIGINT NULL COMMENT 'Router API key id',
+    `owner_user_id` BIGINT NULL COMMENT 'Owner user id',
+    `direction` VARCHAR(16) NOT NULL COMMENT 'debit/credit/adjust',
+    `amount` DECIMAL(18, 6) NOT NULL COMMENT 'Amount',
+    `currency` VARCHAR(16) NOT NULL DEFAULT 'CNY' COMMENT 'Currency',
+    `balance_before` DECIMAL(18, 6) NULL COMMENT 'Balance before change',
+    `balance_after` DECIMAL(18, 6) NULL COMMENT 'Balance after change',
+    `description` VARCHAR(255) NULL COMMENT 'Description',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    PRIMARY KEY (`id`),
+    KEY `idx_router_billing_ledger_usage_event` (`usage_event_id`),
+    KEY `idx_router_billing_ledger_key_id` (`router_api_key_id`),
+    KEY `idx_router_billing_ledger_owner_user_id` (`owner_user_id`),
+    KEY `idx_router_billing_ledger_created_at` (`created_at`),
+    CONSTRAINT `fk_router_billing_ledger_usage_event` FOREIGN KEY (`usage_event_id`) REFERENCES `router_usage_events` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_router_billing_ledger_key_id` FOREIGN KEY (`router_api_key_id`) REFERENCES `router_api_keys` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Router billing ledger';
+
+SET FOREIGN_KEY_CHECKS = 1;

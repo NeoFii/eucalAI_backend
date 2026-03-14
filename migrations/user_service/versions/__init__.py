@@ -1,0 +1,1 @@
+"""User-service Alembic revisions."""

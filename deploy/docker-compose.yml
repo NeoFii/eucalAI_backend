@@ -1,22 +1,54 @@
-# 后端 Docker Compose 配置
-# 使用方式: docker-compose up -d
-# 注意: 此配置假设 MySQL 已使用 eucal_network 网络部署
+# Backend compose topology for the shared-database transition phase.
 
 services:
-  user:
+  admin-service:
     build:
-      context: ..        # 指向上级目录
+      context: ..
       dockerfile: deploy/Dockerfile
-    container_name: eucal_user
+    container_name: admin-service
     env_file:
-      - .env
+      - ../.env
     restart: unless-stopped
     environment:
-      DATABASE_URL: "mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/${DB_NAME}"
+      ADMIN_DATABASE_URL: "${ADMIN_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_admin}"
+      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DATABASE_ECHO: "false"
+      AUTO_INIT_DB: ${AUTO_INIT_DB:-false}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      USER_SERVICE_URL: "http://user-service:8000"
+      CONTENT_SERVICE_URL: "http://content-service:8004"
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/uvicorn", "admin_service.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - eucal_network
+
+  user-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: user-service
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    environment:
+      USER_DATABASE_URL: "${USER_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_user}"
       DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
-      DATABASE_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
       DATABASE_ECHO: "false"
+      AUTO_INIT_DB: ${AUTO_INIT_DB:-false}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
@@ -25,43 +57,81 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
       INTERNAL_SECRET: ${INTERNAL_SECRET}
-      ADMIN_SERVICE_URL: "http://eucal_admin:8001"
+      ADMIN_SERVICE_URL: "http://admin-service:8001"
+      CONTENT_SERVICE_URL: "http://content-service:8004"
+      ROUTER_SERVICE_URL: "http://router-service:8003"
       DEBUG: ${DEBUG:-false}
-    command: ["/app/.venv/bin/uvicorn", "user.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    command: ["/app/.venv/bin/uvicorn", "user_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - backend_logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8000"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+    depends_on:
+      admin-service:
+        condition: service_healthy
     networks:
       - eucal_network
-    depends_on:
-      admin:
-        condition: service_healthy
 
-  admin:
+  router-service:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    container_name: eucal_admin
+    container_name: router-service
     env_file:
-      - .env
+      - ../.env
     restart: unless-stopped
     environment:
-      DATABASE_URL: "mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/${DB_NAME}"
+      ROUTER_DATABASE_URL: "${ROUTER_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_router}"
+      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DATABASE_ECHO: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      USER_SERVICE_URL: "http://user-service:8000"
+      TESTING_SERVICE_URL: "http://testing-service:8002"
+      ROUTER_SECRET_MASTER_KEY: ${ROUTER_SECRET_MASTER_KEY:-}
+      PROVIDER_SECRET_MASTER_KEY: ${PROVIDER_SECRET_MASTER_KEY:-}
+      SMART_ROUTER_ENABLED: ${SMART_ROUTER_ENABLED:-false}
+      SMART_ROUTER_ALIAS: ${SMART_ROUTER_ALIAS:-smart-router}
+      SMART_ROUTER_DIFFICULTY_MODEL_MAP: ${SMART_ROUTER_DIFFICULTY_MODEL_MAP:-}
+      SMART_ROUTER_FALLBACK_MODEL: ${SMART_ROUTER_FALLBACK_MODEL:-}
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/uvicorn", "router_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "2"]
+    ports:
+      - "8003:8003"
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8003"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      user-service:
+        condition: service_healthy
+      testing-service:
+        condition: service_healthy
+    networks:
+      - eucal_network
+
+  content-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: content-service
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    environment:
+      CONTENT_DATABASE_URL: "${CONTENT_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_content}"
       DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       DATABASE_ECHO: "false"
@@ -69,61 +139,144 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       INTERNAL_SECRET: ${INTERNAL_SECRET}
       DEBUG: ${DEBUG:-false}
-    command: ["/app/.venv/bin/uvicorn", "admin.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+    command: ["/app/.venv/bin/uvicorn", "content_service.main:app", "--host", "0.0.0.0", "--port", "8004", "--workers", "2"]
     ports:
-      - "8001:8001"
+      - "8004:8004"
     volumes:
       - backend_logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8004"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.15'
-          memory: 64M
+    depends_on:
+      admin-service:
+        condition: service_healthy
     networks:
       - eucal_network
 
-  testing:
+  redis:
+    image: redis:7-alpine
+    container_name: testing-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eucal_network
+
+  testing-service:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    container_name: eucal_testing
+    container_name: testing-service
     env_file:
-      - .env
+      - ../.env
     restart: unless-stopped
     environment:
-      DATABASE_URL: "mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/${DB_NAME}"
-      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
-      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
-      DATABASE_ECHO: "false"
+      TESTING_DATABASE_URL: "${TESTING_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_testing}"
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      ADMIN_SERVICE_URL: "http://admin-service:8001"
+      BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
+      TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
       DEBUG: ${DEBUG:-false}
-    command: ["/app/.venv/bin/uvicorn", "testing.main:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "2"]
+      PROBE_ENABLED: ${PROBE_ENABLED:-true}
+      PROBE_SCHEDULER_ENABLED: ${PROBE_SCHEDULER_ENABLED:-false}
+      PROBE_CRON_HOURS: ${PROBE_CRON_HOURS:-0,6,12,18}
+    command: ["/app/.venv/bin/uvicorn", "testing_service.main:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "2"]
     ports:
       - "8002:8002"
     volumes:
       - backend_logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8002"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.15'
-          memory: 64M
+    depends_on:
+      admin-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eucal_network
+
+  testing-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: testing-worker
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    environment:
+      TESTING_DATABASE_URL: "${TESTING_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_testing}"
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      ADMIN_SERVICE_URL: "http://admin-service:8001"
+      BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
+      TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
+      PROBE_ENABLED: ${PROBE_ENABLED:-true}
+      PROBE_SCHEDULER_ENABLED: "false"
+      PROBE_CRON_HOURS: ${PROBE_CRON_HOURS:-0,6,12,18}
+    command: ["/app/.venv/bin/python", "-m", "arq", "testing_service.worker.WorkerSettings"]
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "worker-ready", "--database-url-env", "TESTING_DATABASE_URL", "--redis-url-env", "BENCHMARK_QUEUE_REDIS_URL"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      testing-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eucal_network
+
+  testing-scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: testing-scheduler
+    profiles: ["scheduler"]
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    environment:
+      TESTING_DATABASE_URL: "${TESTING_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_testing}"
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      ADMIN_SERVICE_URL: "http://admin-service:8001"
+      BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
+      TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
+      DEBUG: ${DEBUG:-false}
+      PROBE_ENABLED: ${PROBE_ENABLED:-true}
+      PROBE_SCHEDULER_ENABLED: "true"
+      PROBE_CRON_HOURS: ${PROBE_CRON_HOURS:-0,6,12,18}
+    command: ["/app/.venv/bin/uvicorn", "testing_service.main:app", "--host", "0.0.0.0", "--port", "8012", "--workers", "1"]
+    volumes:
+      - backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8012"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      admin-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      testing-service:
+        condition: service_healthy
     networks:
       - eucal_network
 
@@ -135,3 +288,5 @@ networks:
 volumes:
   backend_logs:
     name: eucal_backend_logs
+  redis_data:
+    name: eucal_redis_data

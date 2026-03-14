@@ -1,50 +1,35 @@
-"""
-SQLAlchemy 基础模型
-提供 declarative base 和通用字段
-"""
+"""Shared ORM mixins reused by service-local declarative bases."""
 
-from sqlalchemy import Column, BigInteger, DateTime
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import BigInteger, Column, DateTime
 
 from common.utils.timezone import now
 
-# 创建声明性基类
-Base = declarative_base()
-
 
 class TimestampMixin:
-    """
-    时间戳混入类
-    提供 created_at 和 updated_at 字段
-    使用上海时区 (UTC+8)
-    """
+    """Provide shared created/updated timestamp columns."""
 
     created_at = Column(
         DateTime,
         default=now,
         nullable=False,
-        comment="创建时间",
+        comment="Created at",
     )
     updated_at = Column(
         DateTime,
         default=now,
         onupdate=now,
         nullable=False,
-        comment="更新时间",
+        comment="Updated at",
     )
 
 
 class SnowflakeIdMixin:
-    """
-    雪花 ID 混入类
-    提供 id 主键字段（使用自增 ID）
-    注意：对外使用 uid（雪花 ID），内部关联使用自增 id
-    """
+    """Provide a shared internal bigint primary-key column."""
 
     id = Column(
         BigInteger,
         primary_key=True,
         autoincrement=True,
         index=True,
-        comment="内部主键",
+        comment="Internal primary key",
     )

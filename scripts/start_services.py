@@ -1,14 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Eucal AI 后端服务一键启动脚本
+"""Start backend services together."""
 
-用法:
-    python scripts/start_services.py              # 启动全部服务（生产模式）
-    python scripts/start_services.py --dev         # 启动全部服务（开发模式，自动重载）
-    python scripts/start_services.py user testing  # 仅启动指定服务
-    python scripts/start_services.py --dev admin   # 开发模式启动指定服务
-"""
+from __future__ import annotations
 
 import argparse
 import os
@@ -18,29 +12,92 @@ import threading
 import time
 from pathlib import Path
 
-# 后端根目录
+from scripts.check_service_environment import (
+    format_validation_result,
+    load_project_dotenv,
+    validate_environment,
+)
+from scripts.runtime_probe import probe_http_ready
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-# 服务定义：key 用于命令行参数选择
 SERVICES = {
-    "user": {
-        "name": "用户服务",
-        "app": "user.main:app",
-        "port": 8000,
-        "color": "\033[92m",  # 绿色
-    },
-    "admin": {
-        "name": "管理服务",
-        "app": "admin.main:app",
+    "admin-service": {
+        "name": "admin-service",
+        "app": "admin_service.main:app",
         "port": 8001,
-        "color": "\033[94m",  # 蓝色
+        "color": "\033[94m",
     },
-    "testing": {
-        "name": "测试服务",
-        "app": "testing.main:app",
+    "user-service": {
+        "name": "user-service",
+        "app": "user_service.main:app",
+        "port": 8000,
+        "color": "\033[92m",
+    },
+    "content-service": {
+        "name": "content-service",
+        "app": "content_service.main:app",
+        "port": 8004,
+        "color": "\033[97m",
+    },
+    "testing-service": {
+        "name": "testing-service",
+        "app": "testing_service.main:app",
         "port": 8002,
-        "color": "\033[95m",  # 紫色
+        "color": "\033[95m",
+        "env": {
+            "PROBE_SCHEDULER_ENABLED": "false",
+            "PORT": "8002",
+        },
     },
+    "router-service": {
+        "name": "router-service",
+        "app": "router_service.main:app",
+        "port": 8003,
+        "color": "\033[96m",
+    },
+    "testing-scheduler": {
+        "name": "testing-scheduler",
+        "app": "testing_service.main:app",
+        "port": 8012,
+        "color": "\033[90m",
+        "env": {
+            "PROBE_SCHEDULER_ENABLED": "true",
+            "PORT": "8012",
+        },
+    },
+    "testing-worker": {
+        "name": "testing-worker",
+        "cmd": [sys.executable, "-m", "arq", "testing_service.worker.WorkerSettings"],
+        "color": "\033[93m",
+        "healthcheck": False,
+        "env": {
+            "PROBE_SCHEDULER_ENABLED": "false",
+        },
+    },
+}
+DEFAULT_SERVICES = [
+    "admin-service",
+    "user-service",
+    "content-service",
+    "testing-service",
+    "router-service",
+    "testing-worker",
+    "testing-scheduler",
+]
+START_ORDER = {
+    service_name: index
+    for index, service_name in enumerate(
+        [
+            "admin-service",
+            "user-service",
+            "content-service",
+            "testing-service",
+            "router-service",
+            "testing-worker",
+            "testing-scheduler",
+        ]
+    )
 }
 
 RESET = "\033[0m"
@@ -48,39 +105,46 @@ BOLD = "\033[1m"
 RED = "\033[91m"
 YELLOW = "\033[93m"
 
-# 全局进程列表
 _processes: list[subprocess.Popen] = []
 _shutdown = threading.Event()
+_reported_exits: set[int] = set()
 
 
-def _log(msg: str, color: str = "") -> None:
-    print(f"{color}{msg}{RESET}", flush=True)
+def _log(message: str, color: str = "") -> None:
+    print(f"{color}{message}{RESET}", flush=True)
 
 
 def _stream_output(proc: subprocess.Popen, label: str, color: str) -> None:
-    """持续读取子进程输出并加上服务标签前缀"""
-    tag = f"{color}[{label}]{RESET} "
+    """Stream child process output with a service prefix."""
+    prefix = f"{color}[{label}]{RESET} "
     try:
         for line in iter(proc.stdout.readline, ""):
             if _shutdown.is_set():
                 break
             if line:
-                sys.stdout.write(f"{tag}{line}")
+                sys.stdout.write(f"{prefix}{line}")
                 sys.stdout.flush()
     except (ValueError, OSError):
-        pass
+        return
 
 
-def _start_one(key: str, svc: dict, dev: bool) -> subprocess.Popen:
-    """启动单个 uvicorn 服务"""
-    cmd = [
-        sys.executable, "-m", "uvicorn",
-        svc["app"],
-        "--host", "0.0.0.0",
-        "--port", str(svc["port"]),
-    ]
-    if dev:
-        cmd.append("--reload")
+def _start_one(service: dict[str, object], dev: bool) -> subprocess.Popen:
+    """Start a single uvicorn app."""
+    if "cmd" in service:
+        cmd = [str(part) for part in service["cmd"]]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            str(service["app"]),
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(service["port"]),
+        ]
+        if dev:
+            cmd.append("--reload")
 
     proc = subprocess.Popen(
         cmd,
@@ -90,38 +154,33 @@ def _start_one(key: str, svc: dict, dev: bool) -> subprocess.Popen:
         text=True,
         encoding="utf-8",
         errors="replace",
-        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+        env={
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONIOENCODING": "utf-8",
+            **{str(key): str(value) for key, value in service.get("env", {}).items()},
+        },
     )
-
-    # 后台线程读取日志
     threading.Thread(
         target=_stream_output,
-        args=(proc, svc["name"], svc["color"]),
+        args=(proc, str(service["name"]), str(service["color"])),
         daemon=True,
     ).start()
-
     return proc
 
 
 def _health_check(port: int, timeout: int = 15) -> bool:
-    """轮询 /health 端点，确认服务可用"""
-    import urllib.request
-    import urllib.error
-
+    """Poll the health endpoint until a service is ready."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        try:
-            resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
-            if resp.status == 200:
-                return True
-        except (urllib.error.URLError, OSError):
-            pass
+        if probe_http_ready(host="127.0.0.1", port=port, path="/ready", timeout=2.0):
+            return True
         time.sleep(0.5)
     return False
 
 
 def _shutdown_all() -> None:
-    """终止全部子进程"""
+    """Terminate all child processes."""
     _shutdown.set()
     for proc in _processes:
         if proc.poll() is None:
@@ -134,62 +193,87 @@ def _shutdown_all() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Eucal AI 后端服务一键启动器")
+    """CLI entrypoint."""
+    parser = argparse.ArgumentParser(description="Start Eucal AI backend services")
     parser.add_argument(
         "services",
         nargs="*",
-        choices=[*SERVICES.keys(), []],
-        default=[],
-        help="要启动的服务名（留空则启动全部）",
+        help="Services to start, defaults to all",
     )
-    parser.add_argument("--dev", action="store_true", help="开发模式（启用 uvicorn --reload）")
-    parser.add_argument("--no-check", action="store_true", help="跳过启动后健康检查")
+    parser.add_argument("--dev", action="store_true", help="Enable uvicorn --reload")
+    parser.add_argument("--no-check", action="store_true", help="Skip health checks")
+    parser.add_argument("--skip-preflight", action="store_true", help="Skip environment validation")
     args = parser.parse_args()
 
-    selected = args.services or list(SERVICES.keys())
-    mode_label = "开发" if args.dev else "生产"
+    unknown = sorted(service for service in args.services if service not in SERVICES)
+    if unknown:
+        parser.error(
+            "invalid choice: "
+            + ", ".join(unknown)
+            + " (choose from "
+            + ", ".join(repr(name) for name in SERVICES)
+            + ")"
+        )
+
+    selected = args.services or list(DEFAULT_SERVICES)
+    selected = sorted(selected, key=lambda item: START_ORDER[item])
+    mode_label = "dev" if args.dev else "prod"
+
+    load_project_dotenv()
+    if not args.skip_preflight:
+        validation = validate_environment(selected)
+        report = format_validation_result(validation)
+        if validation.warnings:
+            _log(report + "\n", YELLOW if validation.ok else RED)
+        if not validation.ok:
+            raise SystemExit(1)
 
     _log(f"\n{'=' * 50}", BOLD)
-    _log(f"  Eucal AI 后端服务启动器  [{mode_label}模式]", BOLD)
+    _log(f"  Eucal AI backend services [{mode_label}]", BOLD)
     _log(f"{'=' * 50}\n", BOLD)
 
-    # 逐个启动
     for key in selected:
-        svc = SERVICES[key]
-        _log(f"  启动 {svc['name']}  → 端口 {svc['port']}", svc["color"])
-        proc = _start_one(key, svc, dev=args.dev)
+        service = SERVICES[key]
+        port = service.get("port")
+        label = f"  Starting {service['name']}" if port is None else f"  Starting {service['name']} on port {port}"
+        _log(label, str(service["color"]))
+        proc = _start_one(service, dev=args.dev)
         _processes.append(proc)
 
-    # 健康检查
     if not args.no_check:
-        _log(f"\n  等待服务就绪...\n", YELLOW)
+        _log("\n  Waiting for services to become healthy...\n", YELLOW)
         time.sleep(2)
         for key in selected:
-            svc = SERVICES[key]
-            ok = _health_check(svc["port"])
-            if ok:
-                _log(f"  ✓ {svc['name']}  http://localhost:{svc['port']}/docs", svc["color"])
+            service = SERVICES[key]
+            if not service.get("healthcheck", True):
+                _log(f"  SKIP {service['name']} healthcheck", str(service["color"]))
+                continue
+            if _health_check(int(service["port"])):
+                _log(
+                    f"  OK  {service['name']}  http://localhost:{service['port']}/ready",
+                    str(service["color"]),
+                )
             else:
-                _log(f"  ✗ {svc['name']}  端口 {svc['port']} 未响应，请检查日志", RED)
+                _log(f"  FAIL  {service['name']} on port {service['port']}", RED)
 
-    _log(f"\n  按 Ctrl+C 停止所有服务\n", YELLOW)
+    _log("\n  Press Ctrl+C to stop all services\n", YELLOW)
 
-    # 阻塞监控
     try:
         while not _shutdown.is_set():
             time.sleep(1)
-            for i, proc in enumerate(list(_processes)):
-                if proc.poll() is not None:
-                    svc = SERVICES[selected[i]]
-                    _log(f"  ⚠ {svc['name']} 已退出（代码 {proc.returncode}）", RED)
-            if all(p.poll() is not None for p in _processes):
-                _log("\n  所有服务均已退出", RED)
+            for index, proc in enumerate(list(_processes)):
+                if proc.poll() is not None and index not in _reported_exits:
+                    _reported_exits.add(index)
+                    service = SERVICES[selected[index]]
+                    _log(f"  EXIT  {service['name']} code={proc.returncode}", RED)
+            if all(proc.poll() is not None for proc in _processes):
+                _log("\n  All services exited", RED)
                 break
     except KeyboardInterrupt:
         pass
     finally:
         _shutdown_all()
-        _log(f"\n  所有服务已停止\n", BOLD)
+        _log("\n  All services stopped\n", BOLD)
 
 
 if __name__ == "__main__":

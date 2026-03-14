@@ -1,9 +1,10 @@
 [project]
 name = "eucal-ai-backend"
 version = "0.1.0"
-description = "Eucal AI 官网后端 API - FastAPI 构建"
+description = "Eucal AI backend API built with FastAPI"
 requires-python = ">=3.10"
 dependencies = [
+    "alembic>=1.14.0",
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.5.0",
@@ -11,19 +12,20 @@ dependencies = [
     "python-multipart>=0.0.6",
     "email-validator>=2.1.0",
     "httpx>=0.26.0",
-    "slowapi>=0.1.9", # 速率限制
-    # 数据库和认证相关依赖
+    "slowapi>=0.1.9",
     "sqlalchemy[asyncio]>=2.0.0",
     "aiomysql>=0.2.0",
-    "cryptography>=42.0.0", # aiomysql 需要的依赖
+    "cryptography>=42.0.0",
     "python-jose[cryptography]>=3.3.1",
     "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=3.2.0,<4.0.0", # passlib 兼容版本
+    "bcrypt>=3.2.0,<4.0.0",
     "snowflake-id>=1.0.0",
     "python-dotenv>=1.0.0",
     "tzdata>=2025.3",
-    "litellm>=1.0.0", # LLM 调用库
-    "cachetools>=5.0.0", # 内存缓存
+    "litellm>=1.0.0",
+    "cachetools>=5.0.0",
+    "apscheduler>=3.10.0",
+    "arq>=0.26.3",
     "pytest>=9.0.2",
     "pytest-asyncio>=0.23.0",
 ]
@@ -40,13 +42,18 @@ dev = [
 
 [project.scripts]
 start = "scripts.start_services:main"
+bootstrap-super-admin = "admin_service.bootstrap_superadmin:main"
+bootstrap-databases = "scripts.bootstrap_service_databases:main"
+check-env = "scripts.check_service_environment:main"
+migrate = "scripts.migrate:main"
+phase2-cutover = "scripts.phase2_cutover:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["app", "testing", "common", "admin", "user"]
+packages = ["common", "admin_service", "user_service", "router_service", "testing_service", "content_service"]
 
 [tool.ruff]
 target-version = "py310"

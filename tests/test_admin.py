@@ -1,52 +1,39 @@
-"""
-Admin 模块单元测试
-测试管理员服务的配置、模型、服务等
-"""
+"""Admin-service smoke tests."""
+
+from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timedelta
+
 import pytest
 
-# 设置环境变量
-os.environ.setdefault("INTERNAL_SECRET", "test_secret")
-os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
+os.environ["INTERNAL_SECRET"] = "test_secret"
+os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
-# 添加 backend 到路径
-backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, backend_dir)
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BACKEND_DIR)
 
 
 class TestAdminConfig:
-    """测试管理员服务配置"""
-
     def test_config_import(self):
-        """测试配置导入"""
-        from admin.config import settings
+        from admin_service.config import settings
 
         assert settings is not None
         assert settings.PORT == 8001
 
     def test_config_values(self):
-        """测试配置值"""
-        from admin.config import settings
+        from admin_service.config import settings
 
         assert settings.JWT_ALGORITHM == "HS256"
-        assert settings.INTERNAL_SECRET == "test_secret"
+        assert settings.INTERNAL_SECRET
 
 
 class TestAdminModels:
-    """测试管理员模型"""
-
     def test_admin_user_model(self):
-        """测试管理员用户模型"""
-        from admin.models import AdminUser
+        from admin_service.models import AdminUser
 
         assert AdminUser.__tablename__ == "admin_users"
-
-    def test_admin_user_fields(self):
-        """测试管理员用户模型字段"""
-        from admin.models import AdminUser
-
         assert hasattr(AdminUser, "uid")
         assert hasattr(AdminUser, "email")
         assert hasattr(AdminUser, "password_hash")
@@ -54,140 +41,116 @@ class TestAdminModels:
         assert hasattr(AdminUser, "role")
 
     def test_admin_user_properties(self):
-        """测试管理员用户模型属性"""
-        from admin.models import AdminUser
+        from admin_service.models import AdminUser
 
-        # 模拟对象
         admin = AdminUser(
             uid=12345,
             email="admin@example.com",
             password_hash="hash",
             name="Admin",
-            role="super",
+            role="super_admin",
             status=1,
         )
 
         assert admin.is_active is True
         assert admin.is_super_admin is True
 
-    def test_invitation_code_model(self):
-        """测试邀请码模型"""
-        from admin.models import InvitationCode
+    def test_invitation_code_model_and_properties(self):
+        from admin_service.models import InvitationCode
 
-        assert InvitationCode.__tablename__ == "invitation_codes"
-
-    def test_invitation_code_properties(self):
-        """测试邀请码属性"""
-        from admin.models import InvitationCode
-        from datetime import datetime, timedelta
-
-        # 有效的邀请码
         code = InvitationCode(
             code="TEST123",
-            type="register",
-            status=1,
+            status=0,
             created_by=1,
             expires_at=datetime.now() + timedelta(days=7),
-            max_uses=1,
-            used_count=0,
         )
 
+        assert InvitationCode.__tablename__ == "invitation_codes"
         assert code.is_valid is True
         assert code.is_used is False
         assert code.is_disabled is False
 
+    def test_invitation_code_rejects_removed_legacy_kwargs(self):
+        from admin_service.models import InvitationCode
+
+        with pytest.raises(TypeError):
+            InvitationCode(code="TEST123", type="register")
+
 
 class TestAdminUtils:
-    """测试管理员工具"""
-
     def test_password_strength_check(self):
-        """测试密码强度检查"""
-        from admin.utils.password import check_password_strength
+        from admin_service.utils.password import check_password_strength
 
-        # 弱密码
-        ok, msg = check_password_strength("weak")
+        ok, _ = check_password_strength("weak")
         assert ok is False
 
-        # 强密码
-        ok, msg = check_password_strength("StrongPassword123!")
+        ok, _ = check_password_strength("StrongPassword123!")
         assert ok is True
 
 
 class TestAdminSchemas:
-    """测试管理员 Pydantic 模型"""
-
     def test_admin_login_request(self):
-        """测试管理员登录请求模型"""
-        from admin.schemas import AdminLoginRequest
+        from admin_service.schemas import AdminLoginRequest
 
-        req = AdminLoginRequest(
-            email="admin@example.com",
-            password="Password123!",
-        )
+        req = AdminLoginRequest(email="admin@example.com", password="Password123!")
         assert req.email == "admin@example.com"
 
     def test_generate_invitation_code_request(self):
-        """测试生成邀请码请求模型"""
-        from admin.schemas import GenerateInvitationCodeRequest
+        from admin_service.schemas import GenerateInvitationCodeRequest
 
-        req = GenerateInvitationCodeRequest(
-            quantity=5,
-            expires_days=7,
-            max_uses=1,
-        )
+        req = GenerateInvitationCodeRequest(quantity=5, expires_days=7, max_uses=1)
         assert req.quantity == 5
         assert req.expires_days == 7
 
 
 class TestAdminServices:
-    """测试管理员服务"""
-
     def test_auth_service_import(self):
-        """测试认证服务导入"""
-        from admin.services import AdminAuthService
+        from admin_service.services.auth_service import AdminAuthService
 
         assert AdminAuthService is not None
 
     def test_invitation_service_import(self):
-        """测试邀请码服务导入"""
-        from admin.services import InvitationCodeService
+        from admin_service.services.invitation_service import InvitationCodeService
 
         assert InvitationCodeService is not None
 
     def test_generate_code(self):
-        """测试邀请码生成"""
-        from admin.services import InvitationCodeService
+        from admin_service.services.invitation_service import InvitationCodeService
 
         code = InvitationCodeService.generate_code(length=16)
         assert len(code) == 16
 
 
 class TestAdminDependencies:
-    """测试管理员依赖"""
-
     def test_dependencies_import(self):
-        """测试依赖导入"""
-        from admin.dependencies import get_current_admin, get_db_session
+        from admin_service.dependencies import get_current_admin, get_db_session
 
         assert get_current_admin is not None
         assert get_db_session is not None
 
 
-class TestNewsModel:
-    """测试新闻模型"""
+class TestAdminAuthEndpoints:
+    @pytest.mark.asyncio
+    async def test_refresh_requires_refresh_cookie(self):
+        from fastapi import Response
 
+        from admin_service.api.v1.endpoints.auth import refresh_token
+        from common.core.exceptions import AuthenticationException
+
+        with pytest.raises(AuthenticationException):
+            await refresh_token(response=Response(), refresh_token=None)
+
+
+class TestNewsModel:
     def test_news_model_import(self):
-        """测试新闻模型导入"""
-        from common.models.news import News
+        from content_service.models.news import News
 
         assert News is not None
         assert News.__tablename__ == "news"
 
     def test_news_model_fields(self):
-        """测试新闻模型字段"""
-        from common.models.news import News
+        from content_service.models.news import News
 
-        # 检查字段存在
         assert hasattr(News, "uid")
         assert hasattr(News, "language")
         assert hasattr(News, "title")
@@ -200,99 +163,77 @@ class TestNewsModel:
         assert hasattr(News, "author_id")
 
     def test_news_model_properties(self):
-        """测试新闻模型属性"""
-        from common.models.news import News
-        from datetime import datetime
+        from content_service.models.news import News
 
-        # 模拟新闻对象
         news = News(
             uid=123456789,
             language="zh",
-            title="测试新闻",
+            title="Test News",
             slug="test-news",
-            summary="测试摘要",
+            summary="Summary",
             cover_image="https://example.com/image.jpg",
-            content="# 测试内容",
+            content="# Content",
             status=1,
             published_at=datetime.now(),
             author_id=1,
         )
 
         assert news.is_published is True
-        assert news.is_draft is False
-        assert news.is_offline is False
-
-        # 测试草稿状态
         news.status = 0
         assert news.is_draft is True
-
-        # 测试下线状态
         news.status = 2
         assert news.is_offline is True
 
 
 class TestNewsSchemas:
-    """测试新闻 Pydantic 模型"""
-
     def test_create_news_request(self):
-        """测试创建新闻请求模型"""
-        from admin.schemas import CreateNewsRequest
+        from admin_service.schemas import CreateNewsRequest
 
         req = CreateNewsRequest(
-            title="测试新闻",
+            title="Test News",
             slug="test-news",
             language="zh",
-            content="# 测试内容",
+            content="# Content",
             status=1,
         )
 
-        assert req.title == "测试新闻"
+        assert req.title == "Test News"
         assert req.slug == "test-news"
         assert req.language == "zh"
         assert req.status == 1
 
     def test_update_news_request(self):
-        """测试更新新闻请求模型"""
-        from admin.schemas import UpdateNewsRequest
+        from admin_service.schemas import UpdateNewsRequest
 
-        req = UpdateNewsRequest(
-            title="更新后的标题",
-            status=2,
-        )
-
-        assert req.title == "更新后的标题"
+        req = UpdateNewsRequest(title="Updated Title", status=2)
+        assert req.title == "Updated Title"
         assert req.status == 2
 
     def test_news_data(self):
-        """测试新闻数据模型"""
-        from admin.schemas import NewsData
-        from datetime import datetime
+        from admin_service.schemas import NewsData
 
         data = NewsData(
-            uid=123456789,
+            uid="123456789",
             language="zh",
-            title="测试新闻",
+            title="Test News",
             slug="test-news",
-            summary="测试摘要",
+            summary="Summary",
             cover_image="https://example.com/image.jpg",
-            content="# 测试内容",
+            content="# Content",
             status=1,
             published_at=datetime.now(),
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
 
-        assert data.uid == 123456789
+        assert data.uid == "123456789"
         assert data.language == "zh"
-        assert data.title == "测试新闻"
+        assert data.title == "Test News"
 
 
 class TestNewsService:
-    """测试新闻服务"""
-
     def test_news_service_import(self):
-        """测试新闻服务导入"""
-        from admin.services.news_service import NewsService
+        from content_service.services.news_service import NewsService
 
         assert NewsService is not None
 

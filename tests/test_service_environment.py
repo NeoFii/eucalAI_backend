@@ -1,0 +1,142 @@
+from pathlib import Path
+
+from scripts.check_service_environment import (
+    format_validation_result,
+    validate_environment,
+)
+
+
+def test_validate_environment_requires_common_secrets_and_service_database_urls():
+    result = validate_environment(
+        ["admin-service", "user-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
+        },
+    )
+
+    assert not result.ok
+    assert "Missing required database URL: USER_DATABASE_URL for user-service" in result.errors
+
+
+def test_validate_environment_rejects_duplicate_database_urls():
+    shared = "mysql+aiomysql://root:pw@localhost:3306/shared_db"
+    result = validate_environment(
+        ["admin-service", "router-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "ADMIN_DATABASE_URL": shared,
+            "ROUTER_DATABASE_URL": shared,
+        },
+    )
+
+    assert not result.ok
+    assert any("share the same database URL" in item for item in result.errors)
+
+
+def test_validate_environment_allows_shared_url_for_testing_service_and_worker():
+    shared = "mysql+aiomysql://root:pw@localhost:3306/testing_db"
+    result = validate_environment(
+        ["testing-service", "testing-worker"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "TESTING_DATABASE_URL": shared,
+            "BENCHMARK_QUEUE_REDIS_URL": "redis://127.0.0.1:6379/0",
+        },
+    )
+
+    assert result.ok
+    assert result.errors == []
+
+
+def test_validate_environment_warns_about_ignored_generic_database_url():
+    result = validate_environment(
+        ["testing-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "TESTING_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/testing_db",
+            "BENCHMARK_QUEUE_REDIS_URL": "redis://127.0.0.1:6379/0",
+            "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
+        },
+    )
+
+    assert result.ok
+    assert "DATABASE_URL is set but ignored; use service-specific *_DATABASE_URL values" in result.warnings
+    assert any("TESTING_SECRET_MASTER_KEY is empty" in item for item in result.warnings)
+
+
+def test_validate_environment_requires_redis_for_testing_worker():
+    result = validate_environment(
+        ["testing-worker"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "TESTING_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/testing_db",
+        },
+    )
+
+    assert not result.ok
+    assert "Missing BENCHMARK_QUEUE_REDIS_URL for testing-worker" in result.errors
+
+
+def test_validate_environment_validates_auth_cookie_settings():
+    result = validate_environment(
+        ["admin-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
+            "JWT_REFRESH_TOKEN_EXPIRE_DAYS": "0",
+            "COOKIE_SAMESITE": "invalid",
+        },
+    )
+
+    assert not result.ok
+    assert "JWT_REFRESH_TOKEN_EXPIRE_DAYS must be greater than 0" in result.errors
+    assert "COOKIE_SAMESITE must be one of: lax, strict, none" in result.errors
+
+
+def test_validate_environment_warns_when_router_master_keys_use_fallback():
+    result = validate_environment(
+        ["router-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "internal-secret",
+            "ROUTER_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/router_db",
+        },
+    )
+
+    assert result.ok
+    assert any("ROUTER_SECRET_MASTER_KEY is empty" in item for item in result.warnings)
+    assert any("PROVIDER_SECRET_MASTER_KEY is empty" in item for item in result.warnings)
+
+
+def test_format_validation_result_renders_errors_and_warnings():
+    result = format_validation_result(
+        validate_environment(
+            ["content-service"],
+            environ={
+                "JWT_SECRET_KEY": "short",
+                "INTERNAL_SECRET": "",
+                "CONTENT_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/content_db",
+                "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
+            },
+        )
+    )
+
+    assert "Environment validation failed:" in result
+    assert "JWT_SECRET_KEY must be at least 32 characters" in result
+    assert "DATABASE_URL is set but ignored" in result
+
+
+def test_check_env_script_validates_unknown_services_manually():
+    source = (
+        Path(r"F:\Eucal_AI\backend") / "scripts" / "check_service_environment.py"
+    ).read_text(encoding="utf-8")
+
+    assert "unknown services:" in source
+    assert "choices=" not in source

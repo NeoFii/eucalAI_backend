@@ -27,6 +27,13 @@ from common.utils.jwt import (
     get_token_jti,
 )
 
+# 加密工具
+from common.utils.crypto import (
+    encrypt_api_key,
+    decrypt_api_key,
+    mask_api_key,
+)
+
 __all__ = [
     # 时区
     "now",
@@ -45,4 +52,8 @@ __all__ = [
     "create_refresh_token",
     "decode_token",
     "get_token_jti",
+    # 加密
+    "encrypt_api_key",
+    "decrypt_api_key",
+    "mask_api_key",
 ]
