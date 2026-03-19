@@ -1023,6 +1023,39 @@ async def test_benchmark_engine_uses_openai_compatible_provider_for_custom_base(
 
 
 @pytest.mark.asyncio
+async def test_benchmark_engine_normalizes_full_chat_completions_url(monkeypatch):
+    from testing_service.benchmark.engine import BenchmarkEngine
+
+    captured_kwargs = {}
+
+    class FakeStream:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+    async def fake_acompletion(**kwargs):
+        captured_kwargs.update(kwargs)
+        return FakeStream()
+
+    monkeypatch.setattr("testing_service.benchmark.engine.litellm.register_model", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("testing_service.benchmark.engine.litellm.acompletion", fake_acompletion)
+    monkeypatch.setattr("testing_service.benchmark.engine.litellm.encode", lambda **_kwargs: [])
+
+    engine = BenchmarkEngine()
+    await engine.run_benchmark(
+        model="/maas/deepseek-ai/DeepSeek-V3.2",
+        api_key="sk",
+        api_base="https://maas-api.lanyun.net/v1/chat/completions",
+    )
+
+    assert captured_kwargs["custom_llm_provider"] == "openai"
+    assert captured_kwargs["base_url"] == "https://maas-api.lanyun.net/v1"
+    assert captured_kwargs["api_base"] == "https://maas-api.lanyun.net/v1"
+
+
+@pytest.mark.asyncio
 async def test_benchmark_engine_returns_stable_error_payload(monkeypatch):
     from testing_service.benchmark.engine import BenchmarkEngine
 

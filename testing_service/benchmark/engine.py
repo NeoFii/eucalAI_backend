@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 
 import litellm
 
+from common.utils.openai_compat import normalize_openai_compatible_base_url
+
 DEFAULT_BENCHMARK_PROMPT = "Please introduce yourself in one sentence."
 DEFAULT_BENCHMARK_MAX_TOKENS = 96
 
@@ -70,8 +72,9 @@ class BenchmarkEngine:
             if api_key:
                 kwargs["api_key"] = api_key
             if api_base:
-                kwargs["api_base"] = api_base
-                kwargs["base_url"] = api_base
+                normalized_api_base = normalize_openai_compatible_base_url(api_base)
+                kwargs["api_base"] = normalized_api_base
+                kwargs["base_url"] = normalized_api_base
                 kwargs["custom_llm_provider"] = "openai"
 
             response = await litellm.acompletion(**kwargs)

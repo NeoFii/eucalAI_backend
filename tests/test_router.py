@@ -110,6 +110,33 @@ class TestRouterServices:
         )
         assert difficulty >= 2
 
+    @pytest.mark.asyncio
+    async def test_provider_client_normalizes_full_chat_completions_url(self, monkeypatch):
+        from router_service.services.provider_client_service import ProviderClientService
+
+        captured = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+        monkeypatch.setattr("router_service.services.provider_client_service.litellm.acompletion", fake_acompletion)
+
+        result = await ProviderClientService.chat_completion(
+            model="/maas/deepseek-ai/DeepSeek-V3.2",
+            messages=[{"role": "user", "content": "hello"}],
+            api_key="secret",
+            api_base="https://maas-api.lanyun.net/v1/chat/completions",
+            stream=False,
+            extra_payload={},
+            timeout=30,
+        )
+
+        assert result == {"ok": True}
+        assert captured["api_base"] == "https://maas-api.lanyun.net/v1"
+        assert captured["base_url"] == "https://maas-api.lanyun.net/v1"
+        assert captured["custom_llm_provider"] == "openai"
+
 
 class TestRouterSchemas:
     """Router schema tests."""

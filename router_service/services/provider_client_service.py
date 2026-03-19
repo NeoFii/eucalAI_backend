@@ -6,6 +6,8 @@ from typing import Any
 
 import litellm
 
+from common.utils.openai_compat import normalize_openai_compatible_base_url
+
 
 class RouterUpstreamError(RuntimeError):
     """Raised when upstream routing fails."""
@@ -26,11 +28,12 @@ class ProviderClientService:
         timeout: int,
     ) -> Any:
         payload: dict[str, Any] = dict(extra_payload)
+        normalized_api_base = normalize_openai_compatible_base_url(api_base)
         payload["model"] = model
         payload["messages"] = messages
         payload["api_key"] = api_key
-        payload["api_base"] = api_base
-        payload["base_url"] = api_base
+        payload["api_base"] = normalized_api_base
+        payload["base_url"] = normalized_api_base
         payload["custom_llm_provider"] = "openai"
         payload["stream"] = stream
         payload.setdefault("timeout", timeout)
