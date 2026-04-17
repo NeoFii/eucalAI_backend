@@ -66,7 +66,7 @@ def _build_admin_internal_app(fake_admin):
 
 def _build_testing_internal_router_app(first_row=None):
     from testing_service.api.v1.endpoints import internal_router
-    from testing_service.api.dependencies import get_db_session
+    from testing_service.dependencies import get_db_session
 
     class FakeSession:
         async def execute(self, _statement):
@@ -762,6 +762,10 @@ async def test_request_internal_json_opens_circuit_after_threshold(monkeypatch):
         )
 
 
+@pytest.mark.skip(
+    reason="router_service.services.identity_client was part of the legacy router; "
+    "new ML router does not call identity. Re-enable if reintroduced."
+)
 @pytest.mark.asyncio
 async def test_router_identity_client_maps_none_and_timeout(monkeypatch):
     from router_service.services.identity_client import IdentityClientService
@@ -807,6 +811,10 @@ async def test_testing_admin_identity_client_maps_payload(monkeypatch):
     assert identity.role == "admin"
 
 
+@pytest.mark.skip(
+    reason="router_service.services.testing_catalog_client was part of the legacy "
+    "router; new ML router does not pull the testing catalog."
+)
 @pytest.mark.asyncio
 async def test_testing_catalog_client_maps_internal_failure(monkeypatch):
     from common.core.exceptions import ServiceUnavailableException
@@ -910,8 +918,9 @@ async def test_testing_admin_identity_client_maps_unexpected_4xx_to_service_unav
 
 
 def test_compose_and_dockerfile_include_router_and_testing_worker():
-    compose = Path(r"F:\Eucal_AI\backend\deploy\docker-compose.yml").read_text(encoding="utf-8")
-    dockerfile = Path(r"F:\Eucal_AI\backend\deploy\Dockerfile").read_text(encoding="utf-8")
+    repo_root = Path(__file__).resolve().parent.parent
+    compose = (repo_root / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile = (repo_root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
 
     # Post-consolidation: admin/user/content/testing live under backend-app.
     assert "backend-app:" in compose
@@ -919,16 +928,18 @@ def test_compose_and_dockerfile_include_router_and_testing_worker():
     assert "testing-worker:" in compose
     assert "redis:" in compose
     assert "BENCHMARK_QUEUE_REDIS_URL" in compose
-    assert "COPY --chown=appuser:appuser router_service/ /app/router_service/" in dockerfile
-    assert "COPY --chown=appuser:appuser content_service/ /app/content_service/" in dockerfile
-    assert "COPY --chown=appuser:appuser scripts/ /app/scripts/" in dockerfile
+    # src/ layout: services are COPY'd from src/ into /app in the image.
+    assert "src/router_service" in dockerfile
+    assert "src/content_service" in dockerfile
+    assert "scripts" in dockerfile
     assert "EXPOSE 8000 8001 8002 8003 8004 8012" in dockerfile
 
 
 def test_user_and_admin_services_do_not_auto_init_schema_by_default():
-    common_config = Path(r"F:\Eucal_AI\backend\common\config.py").read_text(encoding="utf-8")
-    user_main = Path(r"F:\Eucal_AI\backend\user_service\main.py").read_text(encoding="utf-8")
-    admin_main = Path(r"F:\Eucal_AI\backend\admin_service\main.py").read_text(encoding="utf-8")
+    repo_root = Path(__file__).resolve().parent.parent
+    common_config = (repo_root / "src" / "common" / "config.py").read_text(encoding="utf-8")
+    user_main = (repo_root / "src" / "user_service" / "main.py").read_text(encoding="utf-8")
+    admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
 
     assert "AUTO_INIT_DB: bool = False" in common_config
     assert "if settings.AUTO_INIT_DB:" in user_main

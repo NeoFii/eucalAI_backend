@@ -7,7 +7,7 @@ Testing 服务模型报价管理端点
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from testing_service.api.dependencies import AdminPrincipal, get_current_admin, get_db_session
+from testing_service.dependencies import AdminPrincipal, get_current_admin, get_db_session
 from testing_service.schemas import ApiResponse
 from testing_service.provider_config import OfferingService
 

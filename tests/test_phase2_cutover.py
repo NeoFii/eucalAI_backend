@@ -1,10 +1,18 @@
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.skip(
+    "phase2 cutover manifest was pinned to the legacy router layout; deprecated "
+    "together with router key/billing until reintroduced.",
+    allow_module_level=True,
+)
+
 from scripts.migrate import SERVICE_CONFIGS
 
 
-ROOT = Path(r"F:\Eucal_AI\backend")
+ROOT = Path(__file__).resolve().parent.parent
 MANIFEST_PATH = ROOT / "migrations" / "cutover_manifest.json"
 
 

@@ -30,18 +30,20 @@ RUN useradd --create-home --shell /bin/bash appuser && \
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
-COPY --chown=appuser:appuser common/ /app/common/
-COPY --chown=appuser:appuser user_service/ /app/user_service/
-COPY --chown=appuser:appuser admin_service/ /app/admin_service/
-COPY --chown=appuser:appuser testing_service/ /app/testing_service/
-COPY --chown=appuser:appuser router_service/ /app/router_service/
-COPY --chown=appuser:appuser content_service/ /app/content_service/
+COPY --chown=appuser:appuser src/common/ /app/src/common/
+COPY --chown=appuser:appuser src/user_service/ /app/src/user_service/
+COPY --chown=appuser:appuser src/admin_service/ /app/src/admin_service/
+COPY --chown=appuser:appuser src/testing_service/ /app/src/testing_service/
+COPY --chown=appuser:appuser src/router_service/ /app/src/router_service/
+COPY --chown=appuser:appuser src/content_service/ /app/src/content_service/
+COPY --chown=appuser:appuser src/backend_app/ /app/src/backend_app/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
+COPY --chown=appuser:appuser deploy/router/ /app/deploy/router/
 COPY --chown=appuser:appuser pyproject.toml README.md /app/
 COPY --chown=appuser:appuser .env.example /app/.env.example
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH=/app \
+    PYTHONPATH=/app/src \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
@@ -49,4 +51,4 @@ USER appuser
 
 EXPOSE 8000 8001 8002 8003 8004 8012
 
-CMD ["/app/.venv/bin/uvicorn", "user_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["/app/.venv/bin/uvicorn", "backend_app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]

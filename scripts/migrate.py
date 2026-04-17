@@ -33,12 +33,6 @@ SERVICE_CONFIGS = {
         script_location=ROOT / "migrations" / "user_service",
         database_env="USER_DATABASE_URL",
     ),
-    "router-service": ServiceMigrationConfig(
-        service="router-service",
-        package="router_service",
-        script_location=ROOT / "migrations" / "router_service",
-        database_env="ROUTER_DATABASE_URL",
-    ),
     "content-service": ServiceMigrationConfig(
         service="content-service",
         package="content_service",

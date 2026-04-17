@@ -10,7 +10,7 @@
 最短结论：
 
 1. 先安装依赖并准备 `.env`
-2. 手动创建 5 个 MySQL 数据库
+2. 手动创建 4 个 MySQL 数据库（router 已改为无 DB 的 ML 推理服务）
 3. 运行 `uv run check-env`
 4. 运行数据库迁移（创建数据表）
 5. 初始化超级管理员
@@ -18,22 +18,25 @@
 
 ## 架构概览
 
-当前后端是单仓库、多服务架构：
+当前后端是单仓库、多服务架构，全部包位于 `src/` 下：
 
-| 服务 | 目录 | 默认端口 | 作用 |
+| 服务 | 模块 | 默认端口 | 作用 |
 | --- | --- | --- | --- |
-| `user-service` | `user_service/` | `8000` | 用户注册、登录、密码、新闻代理 |
-| `admin-service` | `admin_service/` | `8001` | 管理员登录、超级管理员、邀请码、审计 |
-| `testing-service` | `testing_service/` | `8002` | 模型目录、供应商、报价、Benchmark |
-| `router-service` | `router_service/` | `8003` | Router Key、用量、账单、OpenAI 兼容入口 |
-| `content-service` | `content_service/` | `8004` | 新闻公开读取和新闻管理 |
+| `backend-app` | `src/backend_app/` | `8001` | admin + user + content + testing 合并控制面 |
+| `user-service` | `src/user_service/` | `8000` | 用户注册、登录、密码、新闻代理（独立进程可选） |
+| `admin-service` | `src/admin_service/` | `8001` | 管理员登录、超级管理员、邀请码、审计（独立进程可选） |
+| `testing-service` | `src/testing_service/` | `8002` | 模型目录、供应商、报价、Benchmark（独立进程可选） |
+| `router-service` | `src/router_service/` | `8003` | ML 推理路由（无数据库） |
+| `content-service` | `src/content_service/` | `8004` | 新闻公开读取和新闻管理（独立进程可选） |
 | `testing-worker` | `testing_service.worker` | 无 HTTP 端口 | 执行 Benchmark 队列任务 |
 | `testing-scheduler` | `testing_service.main:app` | `8012` | 定时探测调度入口 |
 
 说明：
 
-- `common/` 只提供公共基础设施能力，例如 JWT、配置、日志、数据库运行时、内部服务签名
+- `src/common/` 只提供公共基础设施能力，例如 JWT、配置、日志、数据库运行时、内部服务签名
 - 服务之间通过内部 HTTP API 通信，不应跨服务直接导入业务模块
+- **router-service** 现为独立的 ML 推理服务，仅负责路由决策，不再承载 Router Key、用量统计、计费与 OpenAI 兼容代理。旧 router key/billing 链路已从代码与测试中暂时下线。
+- 安装 router 依赖需要 `uv sync --extra router`（包含 torch/transformers/numpy 等 ML 包）。
 
 ## 正式部署顺序
 
@@ -137,7 +140,6 @@ Copy-Item .env.example .env
 | `ADMIN_DATABASE_URL` | 是 | `admin-service` | 管理员域数据库连接串 |
 | `USER_DATABASE_URL` | 是 | `user-service` | 用户域数据库连接串 |
 | `CONTENT_DATABASE_URL` | 是 | `content-service` | 内容域数据库连接串 |
-| `ROUTER_DATABASE_URL` | 是 | `router-service` | Router 域数据库连接串 |
 | `TESTING_DATABASE_URL` | 是 | `testing-service`、`testing-worker`、`testing-scheduler` | 模型与 Benchmark 域数据库连接串 |
 | `DATABASE_POOL_SIZE` | 建议填 | 全局 | 数据库连接池基础连接数 |
 | `DATABASE_MAX_OVERFLOW` | 建议填 | 全局 | 连接池允许的额外溢出连接数 |
@@ -239,7 +241,6 @@ Copy-Item .env.example .env
 - `eucal_ai_admin`
 - `eucal_ai_user`
 - `eucal_ai_content`
-- `eucal_ai_router`
 - `eucal_ai_testing`
 
 ### 创建数据库示例
@@ -248,7 +249,6 @@ Copy-Item .env.example .env
 CREATE DATABASE eucal_ai_admin CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE eucal_ai_user CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE eucal_ai_content CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE eucal_ai_router CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE eucal_ai_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
@@ -258,7 +258,6 @@ CREATE DATABASE eucal_ai_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_c
 GRANT ALL PRIVILEGES ON eucal_ai_admin.* TO 'eucal'@'%';
 GRANT ALL PRIVILEGES ON eucal_ai_user.* TO 'eucal'@'%';
 GRANT ALL PRIVILEGES ON eucal_ai_content.* TO 'eucal'@'%';
-GRANT ALL PRIVILEGES ON eucal_ai_router.* TO 'eucal'@'%';
 GRANT ALL PRIVILEGES ON eucal_ai_testing.* TO 'eucal'@'%';
 FLUSH PRIVILEGES;
 ```
@@ -294,7 +293,6 @@ uv run migrate --service admin-service upgrade head
 uv run migrate --service user-service upgrade head
 uv run migrate --service content-service upgrade head
 uv run migrate --service testing-service upgrade head
-uv run migrate --service router-service upgrade head
 ```
 
 ### 批量方式

@@ -8,6 +8,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+pytest.skip(
+    "Covers legacy router_service (keys/billing/openai-compat) replaced by the "
+    "ML router; re-enable once key/billing features are reintroduced.",
+    allow_module_level=True,
+)
+
 os.environ["INTERNAL_SECRET"] = "test_secret"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 

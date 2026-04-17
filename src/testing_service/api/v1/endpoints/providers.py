@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from testing_service.api.dependencies import (
+from testing_service.dependencies import (
     AdminPrincipal,
     get_current_admin,
     get_db_session,

@@ -12,13 +12,12 @@ import pytest
 os.environ["INTERNAL_SECRET"] = "test_secret"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
-ROOT = Path(r"F:\Eucal_AI\backend")
+ROOT = Path(__file__).resolve().parent.parent
 SERVICE_MAIN_FILES = (
-    ROOT / "admin_service" / "main.py",
-    ROOT / "user_service" / "main.py",
-    ROOT / "router_service" / "main.py",
-    ROOT / "content_service" / "main.py",
-    ROOT / "testing_service" / "main.py",
+    ROOT / "src" / "admin_service" / "main.py",
+    ROOT / "src" / "user_service" / "main.py",
+    ROOT / "src" / "content_service" / "main.py",
+    ROOT / "src" / "testing_service" / "main.py",
 )
 
 

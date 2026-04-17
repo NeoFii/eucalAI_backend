@@ -7,7 +7,7 @@ Testing 服务研发商端点
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from testing_service.api.dependencies import AdminPrincipal, get_current_admin, get_db_session
+from testing_service.dependencies import AdminPrincipal, get_current_admin, get_db_session
 from testing_service.schemas import (
     ApiResponse,
     ListResponse,

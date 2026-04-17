@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.internal import build_internal_auth_dependency
-from testing_service.api.dependencies import get_db_session
+from testing_service.dependencies import get_db_session
 from testing_service.config import get_settings
 from testing_service.models import Model, ModelProviderOffering, Provider
 

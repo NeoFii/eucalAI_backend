@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 
-from router_service.deps import get_runtime_store, require_api_key
+from router_service.dependencies import get_runtime_store, require_api_key
 
 router = APIRouter()
 

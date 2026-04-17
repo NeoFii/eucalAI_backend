@@ -7,8 +7,8 @@
 #   - testing-scheduler :8012 (apscheduler; activate via `--profile scheduler`)
 #   - redis (shared by testing-worker + testing-scheduler)
 #
-# MySQL lives outside compose (managed separately); all five database URLs
-# (ADMIN/USER/CONTENT/ROUTER/TESTING) point at it.
+# MySQL lives outside compose (managed separately); the four service database
+# URLs (ADMIN/USER/CONTENT/TESTING) point at it. Router has no DB.
 
 services:
   backend-app:
@@ -74,21 +74,11 @@ services:
       - ../.env
     restart: unless-stopped
     environment:
-      ROUTER_DATABASE_URL: "${ROUTER_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_router}"
-      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
-      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
-      DATABASE_ECHO: "false"
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
-      INTERNAL_SECRET: ${INTERNAL_SECRET}
-      USER_SERVICE_URL: "http://backend-app:8001"
-      TESTING_SERVICE_URL: "http://backend-app:8001"
-      ROUTER_SECRET_MASTER_KEY: ${ROUTER_SECRET_MASTER_KEY:-}
-      PROVIDER_SECRET_MASTER_KEY: ${PROVIDER_SECRET_MASTER_KEY:-}
-      SMART_ROUTER_ENABLED: ${SMART_ROUTER_ENABLED:-false}
-      SMART_ROUTER_ALIAS: ${SMART_ROUTER_ALIAS:-smart-router}
-      SMART_ROUTER_DIFFICULTY_MODEL_MAP: ${SMART_ROUTER_DIFFICULTY_MODEL_MAP:-}
-      SMART_ROUTER_FALLBACK_MODEL: ${SMART_ROUTER_FALLBACK_MODEL:-}
+      # Router is a pure ML inference service — no database, no HMAC to other
+      # services. Config files ship under /app/deploy/router/.
+      ROUTER_RUNTIME_CONFIG: "/app/deploy/router/runtime_config.json"
+      ROUTER_MODEL_PATHS: "/app/deploy/router/model_paths.json"
+      ROUTER_LOG_DIR: "/app/logs"
       DEBUG: ${DEBUG:-false}
     command: ["/app/.venv/bin/uvicorn", "router_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "2"]
     ports:
@@ -101,9 +91,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    depends_on:
-      backend-app:
-        condition: service_healthy
     networks:
       - eucal_network
 

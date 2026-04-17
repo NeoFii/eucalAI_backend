@@ -1,20 +1,20 @@
 import re
 from pathlib import Path
 
+import pytest
+
 import admin_service.db as admin_db
 import content_service.db as content_db
-import router_service.db as router_db
 import testing_service.db as testing_db
 import user_service.db as user_db
 
 import admin_service.models  # noqa: F401
 import content_service.models  # noqa: F401
-import router_service.models  # noqa: F401
 import testing_service.models  # noqa: F401
 import user_service.models  # noqa: F401
 
 
-ROOT = Path(r"F:\Eucal_AI\backend")
+ROOT = Path(__file__).resolve().parent.parent
 CREATE_TABLE_PATTERN = re.compile(
     r"CREATE TABLE IF NOT EXISTS `(?P<name>[^`]+)` \((?P<body>.*?)\) ENGINE=",
     re.S,
@@ -42,12 +42,6 @@ OWNED_SCHEMAS = {
         "tables": ["users", "user_sessions", "user_active_sessions", "email_verification_codes"],
         "views": [],
         "base": user_db.Base,
-    },
-    "router": {
-        "schema": ROOT / "scripts" / "sql" / "router_schema.sql",
-        "tables": ["router_api_keys", "router_usage_events", "router_billing_ledger"],
-        "views": [],
-        "base": router_db.Base,
     },
     "testing": {
         "schema": ROOT / "scripts" / "sql" / "testing_schema.sql",

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from testing_service.api.dependencies import get_current_admin, get_db_session
+from testing_service.dependencies import get_current_admin, get_db_session
 from testing_service.api.v1.endpoints import benchmark
 
 

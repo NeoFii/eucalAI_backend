@@ -130,7 +130,7 @@ class TestTestingApi:
         assert "/api/v1/benchmark/probe/trigger" in route_paths
 
     def test_models_list_accepts_trailing_slash(self, monkeypatch):
-        from testing_service.api.dependencies import get_db_session
+        from testing_service.dependencies import get_db_session
         from testing_service.api.v1.endpoints import models
 
         async def _fake_db():
@@ -157,7 +157,7 @@ class TestTestingApi:
         assert trailing.json()["data"]["items"] == []
 
     def test_benchmark_summary_is_public(self, monkeypatch):
-        from testing_service.api.dependencies import get_db_session
+        from testing_service.dependencies import get_db_session
         from testing_service.api.v1.endpoints import benchmark
 
         async def _fake_db():
@@ -180,7 +180,7 @@ class TestTestingApi:
         assert response.json()["data"]["total"] == 0
 
     def test_benchmark_trends_is_public(self, monkeypatch):
-        from testing_service.api.dependencies import get_db_session
+        from testing_service.dependencies import get_db_session
         from testing_service.api.v1.endpoints import benchmark
 
         async def _fake_db():

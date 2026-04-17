@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.dependencies import get_db_session, require_super_admin
-from admin_service.management_schemas import (
+from admin_service.schemas import (
     AdminListItem,
     AdminListResponse,
     AdminListResponseData,

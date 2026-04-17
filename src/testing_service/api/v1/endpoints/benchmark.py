@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.timezone import now
-from testing_service.api.dependencies import AdminPrincipal, get_current_admin, get_db_session
+from testing_service.dependencies import AdminPrincipal, get_current_admin, get_db_session
 from testing_service.benchmark.jobs import (
     BenchmarkQueueUnavailableError,
     enqueue_full_benchmark_job,

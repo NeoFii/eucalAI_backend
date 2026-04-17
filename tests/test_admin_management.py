@@ -191,7 +191,7 @@ def test_admin_snapshot_excludes_password_hash():
 @pytest.mark.asyncio
 async def test_create_admin_user_endpoint_returns_created_admin(monkeypatch):
     from admin_service.api.v1.endpoints.admin_users import create_admin_user
-    from admin_service.management_schemas import CreateAdminRequest
+    from admin_service.schemas import CreateAdminRequest
     from admin_service.models import AdminUser
 
     now = datetime.now()

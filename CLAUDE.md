@@ -4,19 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Eucal AI backend — a mono-repo of Python microservices built with FastAPI, async SQLAlchemy (aiomysql), and Alembic migrations. Each service owns its own database schema on MySQL 8.x. Services communicate via HMAC-signed internal HTTP calls (`common/internal.py`).
+Eucal AI backend — a mono-repo of Python microservices built with FastAPI, async SQLAlchemy (aiomysql), and Alembic migrations. Source lives under `src/` (src layout). Most services own their own database schema on MySQL 8.x; `router-service` is a pure ML inference service and has no DB. Services communicate via HMAC-signed internal HTTP calls (`common/internal.py`); router does not participate in HMAC.
 
 ## Services
 
+All packages live under `src/`. Typical deployment uses `backend-app` (merged control plane) + `router-service` (scalable hot path) + `testing-scheduler` + `testing-worker`.
+
 | Service | Module | Port | Purpose |
 |---------|--------|------|---------|
-| user-service | `user_service` | 8000 | Registration, login, password, news proxy |
-| admin-service | `admin_service` | 8001 | Admin auth, super-admin, invite codes, audit |
-| testing-service | `testing_service` | 8002 | Model catalog, providers, quotes, benchmark |
-| router-service | `router_service` | 8003 | Router keys, usage, billing, OpenAI-compat proxy |
-| content-service | `content_service` | 8004 | News CRUD |
+| backend-app | `backend_app.main:app` | 8001 | Merged admin + user + content + testing control plane |
+| user-service | `user_service` | 8000 | Registration, login, password, news proxy (standalone mode) |
+| admin-service | `admin_service` | 8001 | Admin auth, super-admin, invite codes, audit (standalone mode) |
+| testing-service | `testing_service` | 8002 | Model catalog, providers, quotes, benchmark (standalone mode) |
+| router-service | `router_service` | 8003 | ML inference routing (numpy/torch/transformers). No DB. |
+| content-service | `content_service` | 8004 | News CRUD (standalone mode) |
 | testing-scheduler | `testing_service.main:app` | 8012 | Scheduled probe dispatcher |
 | testing-worker | `testing_service.worker` | — | Benchmark queue consumer (arq + Redis) |
+
+Router runtime assets (`runtime_config.json`, `model_paths.json`) live under `deploy/router/`. Install router ML deps with `uv sync --extra router`.
 
 ## Common Commands
 
@@ -81,16 +86,15 @@ uv run mypy .
 - `observability.py` — Structured logging, request-ID propagation
 
 ### Database
-- Each service has its own MySQL database (5 total: `eucal_ai_{admin,user,content,router,testing}`)
+- Each DB-backed service has its own MySQL database (4 total: `eucal_ai_{admin,user,content,testing}`). Router has no DB.
 - Async via `aiomysql` + `sqlalchemy[asyncio]`
-- Migrations in `migrations/<service_name>/` — one Alembic env per service
+- Migrations in `migrations/<service_name>/` — one Alembic env per DB service
 - IDs are snowflake-based (`SnowflakeIdMixin`)
 
 ### Inter-service calls
 Signed with `INTERNAL_SECRET` using headers `X-Internal-Service`, `X-Internal-Timestamp`, `X-Internal-Signature`. Verification via `common.internal.verify_internal_signature`. Key dependency graph:
 - admin <-> user (bidirectional)
 - user -> content
-- router -> user, router -> testing
 - testing -> admin
 
 ### Config

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from content_service.api.dependencies import AdminPrincipal, get_current_admin, get_db_session
+from content_service.dependencies import AdminPrincipal, get_current_admin, get_db_session
 from content_service.schemas import (
     BaseResponse,
     CreateNewsRequest,

@@ -39,6 +39,13 @@ dev = [
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
 ]
+router = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scikit-learn>=1.4",
+    "torch>=2.1",
+    "transformers>=4.40",
+]
 
 [project.scripts]
 start = "scripts.start_services:main"
