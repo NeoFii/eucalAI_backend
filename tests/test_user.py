@@ -25,8 +25,10 @@ class TestUserConfig:
         from user_service.config import settings
 
         assert settings.PORT == 8000
+        # Post-consolidation: admin/content/testing live inside backend-app on :8001.
+        # router-service keeps its dedicated port for scaling.
         assert settings.ADMIN_SERVICE_URL == "http://localhost:8001"
-        assert settings.CONTENT_SERVICE_URL == "http://localhost:8004"
+        assert settings.CONTENT_SERVICE_URL == "http://localhost:8001"
         assert settings.ROUTER_SERVICE_URL == "http://localhost:8003"
 
 

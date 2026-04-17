@@ -69,7 +69,14 @@ class Model(Base, TimestampMixin):
     slug = Column(String(100), nullable=False, unique=True, comment="Model slug")
     name = Column(String(200), nullable=False, comment="Display name")
     description = Column(Text, comment="Description")
-    capability_tags = Column(JSON, nullable=False, comment="Capability tags")
+    capability_tags = Column(
+        JSON,
+        nullable=False,
+        comment=(
+            "Capability tags: list[str]. Stored as JSON on MySQL. When migrating "
+            "to PostgreSQL, upgrade to JSONB to enable GIN indexing on tag membership queries."
+        ),
+    )
     context_window = Column(Integer, comment="Context window")
     max_output_tokens = Column(Integer, comment="Max output tokens")
     is_reasoning_model = Column(Boolean, nullable=False, default=False, comment="Reasoning model flag")

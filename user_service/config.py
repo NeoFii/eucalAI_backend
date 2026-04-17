@@ -22,7 +22,7 @@ class Settings(BaseServiceSettings):
     LOG_FILE_PREFIX: str = "user"
 
     ADMIN_SERVICE_URL: str = "http://localhost:8001"
-    CONTENT_SERVICE_URL: str = "http://localhost:8004"
+    CONTENT_SERVICE_URL: str = "http://localhost:8001"
     ROUTER_SERVICE_URL: str = "http://localhost:8003"
 
     EMAIL_CODE_EXPIRE_MINUTES: int = 5

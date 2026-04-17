@@ -25,8 +25,8 @@ class Settings(BaseServiceSettings):
     )
     SNOWFLAKE_WORKER_ID: int = 4
     LOG_FILE_PREFIX: str = "router"
-    USER_SERVICE_URL: str = "http://localhost:8000"
-    TESTING_SERVICE_URL: str = "http://localhost:8002"
+    USER_SERVICE_URL: str = "http://localhost:8001"
+    TESTING_SERVICE_URL: str = "http://localhost:8001"
 
     ROUTER_KEY_PREFIX: str = "sk-eucal-"
     ROUTER_SECRET_MASTER_KEY: str = ""

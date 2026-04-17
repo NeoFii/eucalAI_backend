@@ -119,6 +119,7 @@ def build_alembic_config(service: ServiceMigrationConfig, url: str | None):
     config.set_main_option("prepend_sys_path", str(ROOT))
     config.set_main_option("service_name", service.service)
     config.set_main_option("service_package", service.package)
+    config.set_main_option("database_env", service.database_env)
     if url:
         config.set_main_option("sqlalchemy.url", url)
     return config

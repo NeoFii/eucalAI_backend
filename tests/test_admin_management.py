@@ -235,7 +235,7 @@ async def test_create_admin_user_endpoint_returns_created_admin(monkeypatch):
         db=object(),
     )
 
-    assert response.data.uid == 1002
+    assert response.data.uid == "1002"
     assert response.data.role == "admin"
 
 
@@ -280,7 +280,7 @@ async def test_list_admin_users_endpoint_returns_paginated_items(monkeypatch):
     )
 
     assert response.data.total == 1
-    assert response.data.items[0].uid == 1002
+    assert response.data.items[0].uid == "1002"
 
 
 @pytest.mark.asyncio

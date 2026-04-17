@@ -22,6 +22,16 @@ from scripts.runtime_probe import probe_http_ready
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 SERVICES = {
+    "backend-app": {
+        "name": "backend-app",
+        "app": "backend_app.main:app",
+        "port": 8001,
+        "color": "\033[94m",
+        "env": {
+            "PROBE_SCHEDULER_ENABLED": "false",
+            "PORT": "8001",
+        },
+    },
     "admin-service": {
         "name": "admin-service",
         "app": "admin_service.main:app",
@@ -77,10 +87,7 @@ SERVICES = {
     },
 }
 DEFAULT_SERVICES = [
-    "admin-service",
-    "user-service",
-    "content-service",
-    "testing-service",
+    "backend-app",
     "router-service",
     "testing-worker",
     "testing-scheduler",
@@ -89,6 +96,7 @@ START_ORDER = {
     service_name: index
     for index, service_name in enumerate(
         [
+            "backend-app",
             "admin-service",
             "user-service",
             "content-service",

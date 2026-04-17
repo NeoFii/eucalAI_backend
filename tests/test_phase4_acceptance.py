@@ -56,7 +56,7 @@ async def test_invitation_code_generation_to_user_registration_flow(monkeypatch)
 
     generation = await generate_invitation_codes(
         request=GenerateInvitationCodeRequest(quantity=1, expires_days=7, max_uses=1),
-        current_admin=SimpleNamespace(uid=9001),
+        current_admin=SimpleNamespace(id=9001, uid=9001),
         db=object(),
     )
     code = generation.data.codes[0].code
@@ -162,7 +162,7 @@ async def test_failed_registration_releases_consumed_invitation_code(monkeypatch
     )
     generated = await generate_invitation_codes(
         request=GenerateInvitationCodeRequest(quantity=1, expires_days=7, max_uses=1),
-        current_admin=SimpleNamespace(uid=9001),
+        current_admin=SimpleNamespace(id=9001, uid=9001),
         db=object(),
     )
     code = generated.data.codes[0].code

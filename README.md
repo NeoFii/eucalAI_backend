@@ -590,3 +590,13 @@ uv run bootstrap-super-admin --check-only --skip-init-db
 - 不要把 `testing-worker` 和 `testing-scheduler` 暴露到公网
 - `/ready` 用于健康检查，`/health` 用于进程存活
 - 初始超级管理员密码不要长期以明文保存在 `.env`
+
+## Phase 4 Status
+
+运行时观测与契约（详见 `docs/phase4-operations.md` 和 `docs/service-runtime-contracts.md`）：
+
+- 每个请求带 `X-Request-ID` 贯穿（`common/observability.REQUEST_ID_HEADER`），响应回写、跨服务透传、日志串联
+- 服务间调用是 signed internal HMAC（`common/internal.py`），带断路器与重试
+- 数据库快照在 `scripts/sql/` 下（`admin_schema.sql`、`user_schema.sql` 等），由 `mysqldump` 重新生成；**Alembic 是 schema 真理**，见 `migrations/README.md`
+- phase2 切换工具：`docs/phase2-cutover.md`
+

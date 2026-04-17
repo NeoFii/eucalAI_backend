@@ -60,16 +60,59 @@ def test_bootstrap_database_script_exists_and_declares_all_services():
 
 
 def test_migration_envs_require_service_specific_database_urls():
-    for service_dir, env_name in (
-        ("admin_service", "ADMIN_DATABASE_URL"),
-        ("user_service", "USER_DATABASE_URL"),
-        ("router_service", "ROUTER_DATABASE_URL"),
-        ("content_service", "CONTENT_DATABASE_URL"),
-        ("testing_service", "TESTING_DATABASE_URL"),
+    """Per-service env.py is a thin proxy; canonical behavior lives in _env_shared.py
+    and database_env wiring lives in scripts/migrate.py::SERVICE_CONFIGS."""
+
+    shared_env = (ROOT / "migrations" / "_env_shared.py").read_text(encoding="utf-8")
+    assert "run_env" in shared_env
+    assert 'database_env' in shared_env
+    assert 'os.getenv(database_env' in shared_env
+    assert 'os.getenv("DATABASE_URL"' not in shared_env
+
+    migrate_source = (ROOT / "scripts" / "migrate.py").read_text(encoding="utf-8")
+    for env_name in (
+        "ADMIN_DATABASE_URL",
+        "USER_DATABASE_URL",
+        "ROUTER_DATABASE_URL",
+        "CONTENT_DATABASE_URL",
+        "TESTING_DATABASE_URL",
     ):
-        source = (ROOT / "migrations" / service_dir / "env.py").read_text(encoding="utf-8")
-        assert env_name in source
-        assert 'os.getenv("DATABASE_URL"' not in source
+        assert env_name in migrate_source, env_name
+
+    for service_dir in SERVICE_DIRS:
+        env_source = (ROOT / "migrations" / service_dir / "env.py").read_text(encoding="utf-8")
+        assert "from migrations._env_shared import run_env" in env_source, service_dir
+        assert "run_env()" in env_source, service_dir
+        assert 'os.getenv("DATABASE_URL"' not in env_source
+
+
+def test_shared_env_module_is_single_source_of_truth():
+    """Ensure _env_shared.py carries the full Alembic online/offline logic so
+    that per-service env.py files stay minimal proxies."""
+
+    shared = (ROOT / "migrations" / "_env_shared.py").read_text(encoding="utf-8")
+    for marker in (
+        "context.is_offline_mode",
+        "async_engine_from_config",
+        "target_metadata",
+        "service_package",
+        "compare_type=True",
+    ):
+        assert marker in shared, marker
+
+
+def test_each_service_has_independent_revision_chain():
+    """Every service owns its own linear revision history under versions/."""
+
+    for service_dir in SERVICE_DIRS:
+        versions_dir = ROOT / "migrations" / service_dir / "versions"
+        revisions = [p for p in versions_dir.glob("*.py") if p.name != "__init__.py"]
+        assert revisions, service_dir
+        for path in revisions:
+            text = path.read_text(encoding="utf-8")
+            # each revision declares its own revision identifier, belongs to one chain
+            assert "revision" in text, path.name
+            assert "down_revision" in text, path.name
 
 
 def test_readme_mentions_service_local_migration_workflow():

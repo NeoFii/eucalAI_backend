@@ -25,8 +25,16 @@ SERVICE_DATABASE_ENV = {
     "testing-scheduler": "TESTING_DATABASE_URL",
     "testing-worker": "TESTING_DATABASE_URL",
 }
-AUTH_COOKIE_SERVICES = {"admin-service", "user-service"}
-TESTING_RUNTIME_SERVICES = {"testing-service", "testing-worker", "testing-scheduler"}
+# backend-app is a single process that hosts admin/user/content/testing domains,
+# so it needs all four database URLs rather than a single one.
+BACKEND_APP_DATABASE_ENVS = (
+    "ADMIN_DATABASE_URL",
+    "USER_DATABASE_URL",
+    "CONTENT_DATABASE_URL",
+    "TESTING_DATABASE_URL",
+)
+AUTH_COOKIE_SERVICES = {"admin-service", "user-service", "backend-app"}
+TESTING_RUNTIME_SERVICES = {"testing-service", "testing-worker", "testing-scheduler", "backend-app"}
 TESTING_QUEUE_SERVICES = {"testing-worker", "testing-scheduler"}
 VALID_COOKIE_SAMESITE = {"lax", "strict", "none"}
 PLACEHOLDER_VALUES = {
@@ -105,6 +113,16 @@ def validate_environment(
 
     database_urls: dict[str, tuple[str, str]] = {}
     for service in selected_services:
+        if service == "backend-app":
+            for db_env in BACKEND_APP_DATABASE_ENVS:
+                value = _get_env(env, db_env)
+                if not value:
+                    result.errors.append(
+                        f"Missing required database URL: {db_env} for backend-app"
+                    )
+                    continue
+                database_urls[f"backend-app:{db_env}"] = (db_env, value)
+            continue
         db_env = SERVICE_DATABASE_ENV[service]
         value = _get_env(env, db_env)
         if not value:
@@ -221,13 +239,19 @@ def main() -> None:
     if not args.no_dotenv:
         load_project_dotenv()
 
-    unknown = sorted(service for service in args.services if service not in SERVICE_DATABASE_ENV)
+    unknown = sorted(
+        service for service in args.services
+        if service not in SERVICE_DATABASE_ENV and service != "backend-app"
+    )
     if unknown:
         parser.error(
             "unknown services: " + ", ".join(unknown)
         )
 
-    selected_services = args.services or list(SERVICE_DATABASE_ENV.keys())
+    if args.services:
+        selected_services = args.services
+    else:
+        selected_services = list(SERVICE_DATABASE_ENV.keys())
     result = validate_environment(selected_services)
     print(format_validation_result(result))
     if not result.ok:

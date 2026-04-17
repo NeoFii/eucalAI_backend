@@ -913,8 +913,9 @@ def test_compose_and_dockerfile_include_router_and_testing_worker():
     compose = Path(r"F:\Eucal_AI\backend\deploy\docker-compose.yml").read_text(encoding="utf-8")
     dockerfile = Path(r"F:\Eucal_AI\backend\deploy\Dockerfile").read_text(encoding="utf-8")
 
+    # Post-consolidation: admin/user/content/testing live under backend-app.
+    assert "backend-app:" in compose
     assert "router-service:" in compose
-    assert "content-service:" in compose
     assert "testing-worker:" in compose
     assert "redis:" in compose
     assert "BENCHMARK_QUEUE_REDIS_URL" in compose

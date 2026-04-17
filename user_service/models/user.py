@@ -16,7 +16,17 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
     __tablename__ = "users"
 
     uid = Column(BigInteger, unique=True, nullable=False, index=True, comment="Public user UID")
-    email = Column(String(255), unique=True, nullable=False, index=True, comment="Login email")
+    email = Column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True,
+        comment=(
+            "Login email. Convention: store lowercase + trimmed at write time. "
+            "MySQL default collation is case-insensitive so lookups work either way, "
+            "but this convention keeps portability to PostgreSQL (case-sensitive by default) painless."
+        ),
+    )
     password_hash = Column(String(255), nullable=False, comment="Password hash")
     status = Column(SmallInteger, default=1, nullable=False, comment="0=disabled 1=active 2=pending")
     email_verified_at = Column(DateTime, nullable=True, comment="Email verified at")

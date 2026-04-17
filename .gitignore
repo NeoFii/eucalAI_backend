@@ -68,4 +68,7 @@ Thumbs.db
 # OMC Memory
 .oms
 
+# Claude Code local state
+.claude/
+
 docs
