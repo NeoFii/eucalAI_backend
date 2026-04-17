@@ -116,7 +116,10 @@ def build_alembic_config(service: ServiceMigrationConfig, url: str | None):
     _, Config = load_alembic()
     config = Config()
     config.set_main_option("script_location", str(service.script_location))
-    config.set_main_option("prepend_sys_path", str(ROOT))
+    config.set_main_option(
+        "prepend_sys_path",
+        os.pathsep.join([str(ROOT), str(ROOT / "src")]),
+    )
     config.set_main_option("service_name", service.service)
     config.set_main_option("service_package", service.package)
     config.set_main_option("database_env", service.database_env)
