@@ -4,8 +4,7 @@
     "router-service",
     "testing-service",
     "admin-service",
-    "user-service",
-    "content-service"
+    "user-service"
   ],
   "services": [
     {
@@ -106,8 +105,7 @@
       ],
       "owned_views": [],
       "internal_dependencies": [
-        "user-service",
-        "content-service"
+        "user-service"
       ],
       "external_reference_columns": {
         "invitation_codes": [
@@ -120,8 +118,7 @@
       ],
       "post_cutover_checks": [
         "admin login and audit log writes succeed",
-        "invitation code consume and release internal endpoints succeed",
-        "admin news management still proxies content-service correctly"
+        "invitation code consume and release internal endpoints succeed"
       ]
     },
     {
@@ -140,7 +137,6 @@
       "owned_views": [],
       "internal_dependencies": [
         "admin-service",
-        "content-service",
         "router-service"
       ],
       "external_reference_columns": {},
@@ -151,39 +147,7 @@
       ],
       "post_cutover_checks": [
         "register/login/refresh/logout flows succeed",
-        "internal user identity endpoints return the minimal contract",
-        "public news reads still proxy content-service correctly"
-      ]
-    },
-    {
-      "service": "content-service",
-      "package": "content_service",
-      "order": 5,
-      "database_env": "CONTENT_DATABASE_URL",
-      "migration_namespace": "migrations/content_service",
-      "schema_snapshot": "scripts/sql/content_schema.sql",
-      "owned_tables": [
-        "news"
-      ],
-      "owned_views": [],
-      "internal_dependencies": [
-        "admin-service",
-        "user-service"
-      ],
-      "external_reference_columns": {
-        "news": [
-          "author_id",
-          "deleted_by_admin_id"
-        ]
-      },
-      "preconditions": [
-        "CONTENT_DATABASE_URL points to a content-owned schema or database",
-        "admin-service and user-service clients are ready to consume content-service APIs"
-      ],
-      "post_cutover_checks": [
-        "public news listing and detail endpoints succeed",
-        "admin-side create/update/publish/delete flows still operate through content-service",
-        "news rows no longer rely on admin-service SQL foreign keys"
+        "internal user identity endpoints return the minimal contract"
       ]
     }
   ]

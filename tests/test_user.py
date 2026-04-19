@@ -25,10 +25,9 @@ class TestUserConfig:
         from user_service.config import settings
 
         assert settings.PORT == 8000
-        # Post-consolidation: admin/content/testing live inside backend-app on :8001.
+        # Post-consolidation: admin/testing live inside backend-app on :8001.
         # router-service keeps its dedicated port for scaling.
         assert settings.ADMIN_SERVICE_URL == "http://localhost:8001"
-        assert settings.CONTENT_SERVICE_URL == "http://localhost:8001"
         assert settings.ROUTER_SERVICE_URL == "http://localhost:8003"
 
 
@@ -150,14 +149,6 @@ class TestUserAPI:
         assert get_current_user is not None
         assert get_db_session is not None
         assert get_optional_user is not None
-
-
-class TestNewsPublicAPI:
-    def test_news_router_import(self):
-        from user_service.api.v1.endpoints.news import router
-
-        assert router is not None
-        assert router.tags == ["news"]
 
 
 if __name__ == "__main__":

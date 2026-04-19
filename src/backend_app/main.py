@@ -1,17 +1,15 @@
-"""Backend-app entrypoint: aggregates admin / user / content / testing into one FastAPI process.
+"""Backend-app entrypoint: aggregates admin / user / testing into one FastAPI process.
 
 Design notes:
 
 - Each sub-service module keeps its own config + db + models + api, unchanged.
-- We import the four api_routers and merge them, except we rebuild the user
-  router to exclude the ``news`` proxy (content-service exposes the canonical
-  ``/api/v1/news``; the proxy would collide).
-- Lifespan sequentially initializes four database engines and runs the admin
+- We import the three api_routers and merge them.
+- Lifespan sequentially initializes three database engines and runs the admin
   super-admin bootstrap. The testing-service apscheduler is intentionally NOT
   started here; ``testing-scheduler`` (a separate process) owns it.
-- HMAC inter-service calls (admin<->user, user<->content, etc.) still go over
+- HMAC inter-service calls (admin<->user, etc.) still go over
   ``http://localhost:<PORT>`` to themselves. They remain wire-compatible with
-  ``common/internal.py`` so rollback (deploying the four separate services
+  ``common/internal.py`` so rollback (deploying the three separate services
   again) needs no code changes.
 """
 
@@ -54,11 +52,6 @@ from user_service.api.v1.endpoints import internal as user_internal_endpoint
 from user_service.config import settings as user_settings
 from user_service.models import SERVICE_MODELS as USER_MODELS
 
-from content_service import db as content_db
-from content_service.api import api_router as content_api_router
-from content_service.config import settings as content_settings
-from content_service.models import SERVICE_MODELS as CONTENT_MODELS
-
 from testing_service import db as testing_db
 from testing_service.api import api_router as testing_api_router
 from testing_service.config import get_settings as get_testing_settings
@@ -72,12 +65,8 @@ logger = logging.getLogger(settings.SERVICE_NAME)
 testing_settings = get_testing_settings()
 
 
-def _build_user_api_router_without_news() -> APIRouter:
-    """Compose user-service routes, deliberately omitting the news proxy.
-
-    content-service owns ``/api/v1/news`` directly; including user-service's
-    proxy would cause a path collision in the merged app.
-    """
+def _build_user_api_router() -> APIRouter:
+    """Compose user-service routes."""
     router = APIRouter(prefix="/api/v1")
     router.include_router(user_auth_endpoint.router)
     router.include_router(user_internal_endpoint.router)
@@ -112,7 +101,7 @@ def _build_admin_internal_api_router() -> APIRouter:
     return router
 
 
-user_api_router_no_news = _build_user_api_router_without_news()
+user_api_router = _build_user_api_router()
 admin_public_router = _build_admin_public_api_router()
 admin_internal_router = _build_admin_internal_api_router()
 
@@ -144,14 +133,6 @@ async def lifespan(app: FastAPI):
     )
     user_db.init_session_factory()
 
-    content_db.create_engine(
-        database_url=content_settings.DATABASE_URL,
-        pool_size=content_settings.DATABASE_POOL_SIZE,
-        max_overflow=content_settings.DATABASE_MAX_OVERFLOW,
-        echo=content_settings.DATABASE_ECHO,
-    )
-    content_db.init_session_factory()
-
     testing_db.create_engine(
         database_url=testing_settings.DATABASE_URL,
         pool_size=testing_settings.DATABASE_POOL_SIZE,
@@ -164,8 +145,6 @@ async def lifespan(app: FastAPI):
         await admin_db.init_db(ADMIN_MODELS)
     if user_settings.AUTO_INIT_DB:
         await user_db.init_db(USER_MODELS)
-    if content_settings.AUTO_INIT_DB:
-        await content_db.init_db(CONTENT_MODELS)
     if testing_settings.auto_init_db:
         await testing_db.init_db(TESTING_MODELS)
 
@@ -195,14 +174,13 @@ async def lifespan(app: FastAPI):
         "service_started",
         service=settings.SERVICE_NAME,
         port=settings.PORT,
-        domains=["admin", "user", "content", "testing"],
+        domains=["admin", "user", "testing"],
     )
     try:
         yield
     finally:
         log_event(logger, logging.INFO, "service_stopping", service=settings.SERVICE_NAME)
         await testing_db.close_db()
-        await content_db.close_db()
         await user_db.close_db()
         await admin_db.close_db()
 
@@ -229,26 +207,24 @@ install_observability(app, service_name=settings.SERVICE_NAME)
 register_exception_handlers(app)
 
 # Order: admin (public under /api/v1/admin + internal at /api/v1/internal) ->
-# content -> testing -> user(no news). user is last so any residual collision
-# with user's /api/v1/auth/* is surfaced by the route-uniqueness test instead
-# of silently shadowed.
+# testing -> user. user is last so any residual collision with user's
+# /api/v1/auth/* is surfaced by the route-uniqueness test instead of silently
+# shadowed.
 app.include_router(admin_public_router)
 app.include_router(admin_internal_router)
-app.include_router(content_api_router)
 app.include_router(testing_api_router)
-app.include_router(user_api_router_no_news)
+app.include_router(user_api_router)
 
 
 async def _check_all_databases() -> dict[str, Any]:
-    """Run readiness probes for all four engines concurrently."""
+    """Run readiness probes for all three engines concurrently."""
 
     probes: list[Callable[[], Awaitable[dict[str, Any]]]] = [
         lambda: check_database_ready(admin_db.get_engine),
         lambda: check_database_ready(user_db.get_engine),
-        lambda: check_database_ready(content_db.get_engine),
         lambda: check_database_ready(testing_db.get_engine),
     ]
-    names = ["admin", "user", "content", "testing"]
+    names = ["admin", "user", "testing"]
 
     results = await asyncio.gather(
         *(probe() for probe in probes),
@@ -280,7 +256,7 @@ async def readiness_check():
 @app.get("/", tags=["root"])
 async def root():
     return {
-        "message": "Eucal AI Backend (admin + user + content + testing)",
+        "message": "Eucal AI Backend (admin + user + testing)",
         "version": settings.VERSION,
         "docs": "/docs" if settings.DEBUG else None,
     }

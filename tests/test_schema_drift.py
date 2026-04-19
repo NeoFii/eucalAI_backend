@@ -4,12 +4,10 @@ from pathlib import Path
 import pytest
 
 import admin_service.db as admin_db
-import content_service.db as content_db
 import testing_service.db as testing_db
 import user_service.db as user_db
 
 import admin_service.models  # noqa: F401
-import content_service.models  # noqa: F401
 import testing_service.models  # noqa: F401
 import user_service.models  # noqa: F401
 
@@ -30,12 +28,6 @@ OWNED_SCHEMAS = {
         "tables": ["admin_users", "admin_audit_logs", "invitation_codes"],
         "views": [],
         "base": admin_db.Base,
-    },
-    "content": {
-        "schema": ROOT / "scripts" / "sql" / "content_schema.sql",
-        "tables": ["news"],
-        "views": [],
-        "base": content_db.Base,
     },
     "user": {
         "schema": ROOT / "scripts" / "sql" / "user_schema.sql",

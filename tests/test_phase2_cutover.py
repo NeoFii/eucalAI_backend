@@ -28,7 +28,6 @@ def test_cutover_manifest_declares_all_services_in_expected_order():
         "testing-service",
         "admin-service",
         "user-service",
-        "content-service",
     ]
 
     services = {entry["service"] for entry in manifest["services"]}
@@ -72,4 +71,3 @@ def test_phase2_cutover_script_and_docs_are_registered():
     assert "docs/phase2-cutover.md" in readme
     assert "uv run phase2-cutover" in doc
     assert "router-service" in doc
-    assert "content-service" in doc

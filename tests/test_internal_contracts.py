@@ -149,7 +149,7 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
         "/api/v1/internal/users/1001",
         headers=build_internal_headers(
             secret="test_secret",
-            caller_service="content-service",
+            caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/users/1001",
         ),
@@ -185,7 +185,7 @@ def test_admin_internal_endpoint_requires_signed_internal_request():
         "/api/v1/internal/admins/9001",
         headers=build_internal_headers(
             secret="test_secret",
-            caller_service="content-service",
+            caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
         ),
@@ -220,11 +220,11 @@ def test_signed_internal_request_rejects_expired_timestamp():
     response = client.get(
         "/api/v1/internal/admins/9001",
         headers={
-            "X-Internal-Service": "content-service",
+            "X-Internal-Service": "testing-service",
             "X-Internal-Timestamp": timestamp,
             "X-Internal-Signature": _build_internal_signature(
                 secret="test_secret",
-                caller_service="content-service",
+                caller_service="testing-service",
                 method="GET",
                 request_target="/api/v1/internal/admins/9001",
                 timestamp=timestamp,
@@ -325,7 +325,7 @@ def test_internal_request_signature_covers_query_string():
         "/api/v1/internal/admins/9001?verbose=true",
         headers=build_internal_headers(
             secret="test_secret",
-            caller_service="content-service",
+            caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
             query_params={"verbose": "true"},
@@ -337,7 +337,7 @@ def test_internal_request_signature_covers_query_string():
         "/api/v1/internal/admins/9001?verbose=false",
         headers=build_internal_headers(
             secret="test_secret",
-            caller_service="content-service",
+            caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
             query_params={"verbose": "true"},
@@ -403,7 +403,7 @@ def test_testing_internal_router_rejects_untrusted_caller():
         "/api/v1/internal/router/models",
         headers=build_internal_headers(
             secret="test_secret",
-            caller_service="content-service",
+            caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/router/models",
         ),
@@ -922,7 +922,7 @@ def test_compose_and_dockerfile_include_router_and_testing_worker():
     compose = (repo_root / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
     dockerfile = (repo_root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
 
-    # Post-consolidation: admin/user/content/testing live under backend-app.
+    # Post-consolidation: admin/user/testing live under backend-app.
     assert "backend-app:" in compose
     assert "router-service:" in compose
     assert "testing-worker:" in compose
@@ -930,7 +930,6 @@ def test_compose_and_dockerfile_include_router_and_testing_worker():
     assert "BENCHMARK_QUEUE_REDIS_URL" in compose
     # src/ layout: services are COPY'd from src/ into /app in the image.
     assert "src/router_service" in dockerfile
-    assert "src/content_service" in dockerfile
     assert "scripts" in dockerfile
     assert "EXPOSE 8000 8001 8002 8003 8004 8012" in dockerfile
 

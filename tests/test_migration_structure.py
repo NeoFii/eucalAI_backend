@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVICE_DIRS = (
     "admin_service",
     "user_service",
-    "content_service",
     "testing_service",
 )
 
@@ -26,7 +25,6 @@ def test_migration_cli_declares_all_services():
     for service in (
         "admin-service",
         "user-service",
-        "content-service",
         "testing-service",
     ):
         assert service in source
@@ -71,7 +69,6 @@ def test_migration_envs_require_service_specific_database_urls():
     for env_name in (
         "ADMIN_DATABASE_URL",
         "USER_DATABASE_URL",
-        "CONTENT_DATABASE_URL",
         "TESTING_DATABASE_URL",
     ):
         assert env_name in migrate_source, env_name
@@ -126,7 +123,6 @@ def test_deploy_and_env_examples_use_service_database_urls_only():
     for key in (
         "ADMIN_DATABASE_URL",
         "USER_DATABASE_URL",
-        "CONTENT_DATABASE_URL",
         "TESTING_DATABASE_URL",
     ):
         assert key in compose

@@ -118,11 +118,11 @@ def test_validate_environment_warns_when_router_master_keys_use_fallback():
 def test_format_validation_result_renders_errors_and_warnings():
     result = format_validation_result(
         validate_environment(
-            ["content-service"],
+            ["admin-service"],
             environ={
                 "JWT_SECRET_KEY": "short",
                 "INTERNAL_SECRET": "",
-                "CONTENT_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/content_db",
+                "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
                 "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
             },
         )

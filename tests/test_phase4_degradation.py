@@ -46,34 +46,6 @@ async def test_router_dependency_returns_503_when_identity_service_is_unavailabl
 
 
 @pytest.mark.asyncio
-async def test_content_admin_dependency_surfaces_admin_identity_outage(monkeypatch):
-    from content_service.dependencies import get_current_admin
-
-    monkeypatch.setattr(
-        "content_service.dependencies.decode_token",
-        lambda **_kwargs: {"uid": 42, "type": "access"},
-    )
-
-    async def fake_fetch_admin(_uid):
-        raise ServiceUnavailableException("Admin identity service unavailable")
-
-    monkeypatch.setattr(
-        "content_service.dependencies.AdminIdentityClientService.fetch_admin_by_uid",
-        fake_fetch_admin,
-    )
-
-    with pytest.raises(ServiceUnavailableException) as exc_info:
-        await get_current_admin(
-            request=None,
-            credentials=HTTPAuthorizationCredentials(scheme="Bearer", credentials="token"),
-            access_token=None,
-            db=object(),
-        )
-
-    assert exc_info.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_testing_admin_dependency_surfaces_admin_identity_outage(monkeypatch):
     from testing_service.dependencies import get_current_admin
 

@@ -8,13 +8,10 @@
 -- authoritative workflow.
 --
 -- Dependency order:
---   admin  -> content -> user -> router -> testing
--- The order matches migrations/cutover_manifest.json::execution_order with
--- content moved ahead of user because user-service references admin-side
--- invitation codes during registration.
+--   admin -> user -> router -> testing
+-- The order matches migrations/cutover_manifest.json::execution_order.
 
 SOURCE scripts/sql/admin_schema.sql;
-SOURCE scripts/sql/content_schema.sql;
 SOURCE scripts/sql/user_schema.sql;
 SOURCE scripts/sql/router_schema.sql;
 SOURCE scripts/sql/testing_schema.sql;

@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVICE_MAIN_FILES = (
     ROOT / "src" / "admin_service" / "main.py",
     ROOT / "src" / "user_service" / "main.py",
-    ROOT / "src" / "content_service" / "main.py",
     ROOT / "src" / "testing_service" / "main.py",
 )
 

@@ -44,12 +44,6 @@ SERVICES = {
         "port": 8000,
         "color": "\033[92m",
     },
-    "content-service": {
-        "name": "content-service",
-        "app": "content_service.main:app",
-        "port": 8004,
-        "color": "\033[97m",
-    },
     "testing-service": {
         "name": "testing-service",
         "app": "testing_service.main:app",
@@ -99,7 +93,6 @@ START_ORDER = {
             "backend-app",
             "admin-service",
             "user-service",
-            "content-service",
             "testing-service",
             "router-service",
             "testing-worker",

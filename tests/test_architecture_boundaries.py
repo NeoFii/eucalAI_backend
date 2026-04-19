@@ -11,7 +11,7 @@ pytest.skip(
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVICE_NAMES = ("admin_service", "user_service", "testing_service", "content_service")
+SERVICE_NAMES = ("admin_service", "user_service", "testing_service")
 
 
 def _service_source_files(service_name: str) -> list[Path]:

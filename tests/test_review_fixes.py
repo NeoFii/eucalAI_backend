@@ -250,85 +250,6 @@ async def test_get_benchmark_trends_keeps_multiple_points_in_same_day(monkeypatc
     assert response["data"]["providers"][0]["data_points"][1]["date"] == "2026-03-11T15:30:00"
 
 
-@pytest.mark.asyncio
-@pytest.mark.skip(reason="Phase 3 removed admin-service news proxy endpoints")
-async def test_admin_news_create_serializes_uid_as_string(monkeypatch):
-    from content_service.api.v1.endpoints.admin_news import create_news
-    from content_service.schemas import CreateNewsRequest
-
-    async def fake_create(**kwargs):
-        assert kwargs["author_id"] == 1
-        return {
-            "code": 200,
-            "message": "鍒涘缓鎴愬姛",
-            "data": {
-                "uid": "123456789",
-                "title": kwargs["title"],
-                "slug": kwargs["slug"],
-                "summary": kwargs.get("summary"),
-                "cover_image": kwargs.get("cover_image"),
-                "content": kwargs["content"],
-                "status": kwargs.get("status", 0),
-                "published_at": kwargs.get("published_at"),
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-            },
-        }
-
-    monkeypatch.setattr(
-        "admin_service.api.v1.endpoints.news.ContentNewsClientService.create_news",
-        fake_create_news,
-    )
-
-    response = await create_news(
-        request=CreateNewsRequest(title="title", slug="slug", content="content"),
-        current_admin=SimpleNamespace(id=1),
-        db=object(),
-    )
-
-    assert response.data.uid == "123456789"
-
-
-@pytest.mark.asyncio
-@pytest.mark.skip(reason="Phase 3 removed admin-service news proxy endpoints")
-async def test_admin_news_update_serializes_uid_as_string(monkeypatch):
-    from content_service.api.v1.endpoints.admin_news import update_news
-    from content_service.schemas import UpdateNewsRequest
-
-    async def fake_update_news(*, uid, payload):
-        assert uid == 123456789
-        return {
-            "code": 200,
-            "message": "鏇存柊鎴愬姛",
-            "data": {
-                "uid": "123456789",
-                "title": payload.get("title", "title"),
-                "slug": payload.get("slug", "slug"),
-                "summary": payload.get("summary"),
-                "cover_image": payload.get("cover_image"),
-                "content": payload.get("content", "content"),
-                "status": payload.get("status", 0),
-                "published_at": payload.get("published_at"),
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-            },
-        }
-
-    monkeypatch.setattr(
-        "admin_service.api.v1.endpoints.news.ContentNewsClientService.update_news",
-        fake_update_news,
-    )
-
-    response = await update_news(
-        uid="123456789",
-        request=UpdateNewsRequest(title="new title"),
-        current_admin=SimpleNamespace(id=1),
-        db=object(),
-    )
-
-    assert response.data.uid == "123456789"
-
-
 def test_testing_settings_support_prefixed_scheduler_env(monkeypatch):
     monkeypatch.setenv("TESTING_PROBE_SCHEDULER_ENABLED", "false")
     monkeypatch.setenv("TESTING_PROBE_ENABLED", "true")
@@ -1846,23 +1767,6 @@ def test_testing_api_does_not_import_admin_models_for_principal_types():
         source = open(path, encoding="utf-8").read()
         assert "from admin_service.models import AdminUser" not in source
         assert "from admin_service.services.auth_service_v2 import AdminAuthService" not in source
-
-
-def test_news_domain_is_not_hosted_under_admin_services():
-    assert not Path(
-        r"F:\Eucal_AI\backend\admin_service\api\v1\endpoints\news.py"
-    ).exists()
-    content_admin_news_endpoint = Path(
-        r"F:\Eucal_AI\backend\content_service\api\v1\endpoints\admin_news.py"
-    ).read_text(encoding="utf-8")
-    user_news_endpoint = Path(
-        r"F:\Eucal_AI\backend\user_service\api\v1\endpoints\news.py"
-    ).read_text(encoding="utf-8")
-
-    assert 'prefix="/admin/news"' in content_admin_news_endpoint
-    assert "get_current_admin" in content_admin_news_endpoint
-    assert "from user_service.services.content_client import ContentPublicClientService" in user_news_endpoint
-    assert Path(r"F:\Eucal_AI\backend\content_service\services\news_service.py").exists()
 
 
 def test_invitation_domain_is_hosted_under_admin_services_for_admin_endpoints():

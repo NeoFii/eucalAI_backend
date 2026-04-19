@@ -20,17 +20,15 @@ SERVICE_DATABASE_ENV = {
     "admin-service": "ADMIN_DATABASE_URL",
     "user-service": "USER_DATABASE_URL",
     "router-service": "ROUTER_DATABASE_URL",
-    "content-service": "CONTENT_DATABASE_URL",
     "testing-service": "TESTING_DATABASE_URL",
     "testing-scheduler": "TESTING_DATABASE_URL",
     "testing-worker": "TESTING_DATABASE_URL",
 }
-# backend-app is a single process that hosts admin/user/content/testing domains,
-# so it needs all four database URLs rather than a single one.
+# backend-app is a single process that hosts admin/user/testing domains,
+# so it needs all three database URLs rather than a single one.
 BACKEND_APP_DATABASE_ENVS = (
     "ADMIN_DATABASE_URL",
     "USER_DATABASE_URL",
-    "CONTENT_DATABASE_URL",
     "TESTING_DATABASE_URL",
 )
 AUTH_COOKIE_SERVICES = {"admin-service", "user-service", "backend-app"}

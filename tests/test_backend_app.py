@@ -41,19 +41,8 @@ def test_route_uniqueness():
     )
 
 
-def test_news_proxy_from_user_service_is_excluded():
-    """user-service exposes a /api/v1/news proxy that would collide with
-    content-service's canonical /api/v1/news; backend-app must skip it."""
-
-    from backend_app.main import user_api_router_no_news
-
-    user_paths = {route.path for route in user_api_router_no_news.routes if isinstance(route, APIRoute)}
-    assert "/api/v1/news" not in user_paths
-    assert "/api/v1/news/{slug}" not in user_paths
-
-
 def test_internal_endpoints_remain_reachable_under_backend_app():
-    """All four domains' /internal/* sub-paths should be registered for
+    """All three domains' /internal/* sub-paths should be registered for
     inter-service HMAC calls (router -> backend-app)."""
 
     pairs = _build_app_routes_snapshot()
@@ -70,9 +59,6 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     assert any(p.startswith("/api/v1/internal/users") for p in paths_by_prefix)
     # testing internal contracts (consumed by router-service)
     assert any(p.startswith("/api/v1/internal/router") for p in paths_by_prefix)
-    # content-service currently has no internal HMAC endpoints (internal.py is a
-    # legacy placeholder). Only public /api/v1/news is exposed.
-    assert ("GET", "/api/v1/news") in pairs
 
 
 def test_backend_app_declares_health_and_ready_endpoints():
