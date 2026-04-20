@@ -1,4 +1,4 @@
-"""Internal admin-service client used by the user domain."""
+"""Gateways for user-service external contracts."""
 
 from __future__ import annotations
 
@@ -11,22 +11,24 @@ from common.core.exceptions import (
     InvitationCodeUsedException,
     ServiceUnavailableException,
 )
+from common.gateway.base import BaseGateway
 from common.internal import InternalServiceResponseError, post_internal_json
 from user_service.config import settings
 
 ADMIN_TIMEOUT_SECONDS = 3.0
 
 
-class AdminInvitationClientService:
-    """Client for the invitation-code internal contract exposed by admin_service."""
+class AdminInvitationGateway(BaseGateway):
+    """Gateway for admin-service invitation code operations."""
 
-    @staticmethod
-    async def consume_invitation_code(code: str, used_by_uid: int) -> None:
-        """Consume an invitation code via the admin internal API."""
+    def __init__(self) -> None:
+        super().__init__(service_name="admin-service")
+
+    async def consume_invitation_code(self, code: str, used_by_uid: int) -> None:
         try:
             await post_internal_json(
                 base_url=settings.ADMIN_SERVICE_URL,
-                target_service="admin-service",
+                target_service=self.service_name,
                 path="/api/v1/internal/invitation-codes/consume",
                 secret=settings.INTERNAL_SECRET,
                 caller_service=settings.SERVICE_NAME,
@@ -40,19 +42,29 @@ class AdminInvitationClientService:
                 ),
             )
         except InternalServiceResponseError as exc:
-            raise AdminInvitationClientService._map_invitation_response_error(exc) from exc
+            raise self._map_invitation_status(
+                status_code=exc.status_code or 503,
+                detail=exc.detail or "Invitation service request failed",
+            ) from exc
         except httpx.HTTPStatusError as exc:
-            raise AdminInvitationClientService._map_invitation_http_error(exc) from exc
+            detail = "Invitation service request failed"
+            try:
+                payload = exc.response.json()
+                detail = payload.get("message") or payload.get("detail") or detail
+            except ValueError:
+                pass
+            raise self._map_invitation_status(
+                status_code=exc.response.status_code,
+                detail=detail,
+            ) from exc
         except httpx.HTTPError as exc:
             raise ServiceUnavailableException("Admin invitation service unavailable") from exc
 
-    @staticmethod
-    async def release_invitation_code(code: str, used_by_uid: int) -> bool:
-        """Release a previously consumed invitation code after a local failure."""
+    async def release_invitation_code(self, code: str, used_by_uid: int) -> bool:
         try:
             payload = await post_internal_json(
                 base_url=settings.ADMIN_SERVICE_URL,
-                target_service="admin-service",
+                target_service=self.service_name,
                 path="/api/v1/internal/invitation-codes/release",
                 secret=settings.INTERNAL_SECRET,
                 caller_service=settings.SERVICE_NAME,
@@ -68,27 +80,6 @@ class AdminInvitationClientService:
         except httpx.HTTPError as exc:
             raise ServiceUnavailableException("Admin invitation service unavailable") from exc
         return bool(payload["released"])
-
-    @staticmethod
-    def _map_invitation_http_error(exc: httpx.HTTPStatusError):
-        response = exc.response
-        detail = "Invitation service request failed"
-        try:
-            payload = response.json()
-            detail = payload.get("message") or payload.get("detail") or detail
-        except ValueError:
-            pass
-        return AdminInvitationClientService._map_invitation_status(
-            status_code=response.status_code,
-            detail=detail,
-        )
-
-    @staticmethod
-    def _map_invitation_response_error(exc: InternalServiceResponseError):
-        return AdminInvitationClientService._map_invitation_status(
-            status_code=exc.status_code or 503,
-            detail=exc.detail or "Invitation service request failed",
-        )
 
     @staticmethod
     def _map_invitation_status(*, status_code: int, detail: str):

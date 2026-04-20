@@ -95,6 +95,16 @@ def test_shared_env_module_is_single_source_of_truth():
         assert marker in shared, marker
 
 
+def test_shared_async_migration_env_commits_version_table_updates():
+    """MySQL DDL autocommits, but Alembic's version-table UPDATE still needs
+    the SQLAlchemy async connection transaction committed explicitly."""
+
+    shared = (ROOT / "migrations" / "_env_shared.py").read_text(encoding="utf-8")
+
+    assert "await connection.run_sync(do_run_migrations)" in shared
+    assert "await connection.commit()" in shared
+
+
 def test_each_service_has_independent_revision_chain():
     """Every service owns its own linear revision history under versions/."""
 

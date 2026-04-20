@@ -1,6 +1,16 @@
 """Platform-level DB primitives for service-local runtimes."""
 
-from common.db.base import SnowflakeIdMixin, TimestampMixin
+from common.db.base import SnowflakeIdMixin, SoftDeleteMixin, TimestampMixin
+from common.db.query import ListParams, PaginatedResult
+from common.db.repository import BaseRepository
 from common.db.runtime import ServiceDatabaseRuntime
 
-__all__ = ["ServiceDatabaseRuntime", "SnowflakeIdMixin", "TimestampMixin"]
+__all__ = [
+    "BaseRepository",
+    "ListParams",
+    "PaginatedResult",
+    "ServiceDatabaseRuntime",
+    "SnowflakeIdMixin",
+    "SoftDeleteMixin",
+    "TimestampMixin",
+]

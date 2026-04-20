@@ -135,7 +135,7 @@ def test_format_validation_result_renders_errors_and_warnings():
 
 def test_check_env_script_validates_unknown_services_manually():
     source = (
-        Path(r"F:\Eucal_AI\backend") / "scripts" / "check_service_environment.py"
+        Path(__file__).resolve().parent.parent / "scripts" / "check_service_environment.py"
     ).read_text(encoding="utf-8")
 
     assert "unknown services:" in source
