@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Generic, Literal, Optional, TypeVar
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    computed_field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from common.utils.timezone import format_iso
+from user_service.utils.api_key_policy import normalize_allow_ips, normalize_allowed_models
+from user_service.utils.email import normalize_email
 from user_service.utils.password import check_password_strength
+
+T = TypeVar("T")
 
 
 class DateTimeModel(BaseModel):
@@ -37,6 +50,185 @@ class AuthErrorResponse(AuthBaseResponse):
     message: str = Field(default="error", description="Message")
 
 
+class ApiResponse(BaseModel, Generic[T]):
+    code: int = Field(default=200)
+    message: str = Field(default="success")
+    data: Optional[T] = None
+
+
+class ListResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    page: int
+    page_size: int
+
+
+class BalanceResponseData(BaseModel):
+    balance: int
+    frozen_amount: int
+    used_amount: int
+    total_requests: int
+    total_tokens: int
+
+    @computed_field
+    @property
+    def available_balance(self) -> int:
+        return self.balance - self.frozen_amount
+
+
+class BalanceTransactionItem(DateTimeModel):
+    id: int
+    type: int
+    amount: int
+    balance_before: int
+    balance_after: int
+    ref_type: Optional[str] = None
+    ref_id: Optional[str] = None
+    remark: Optional[str] = None
+    operator_id: Optional[int] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TopupOrderItem(DateTimeModel):
+    id: int
+    order_no: str
+    amount: int
+    status: int
+    payment_channel: str
+    payment_no: Optional[str] = None
+    paid_at: Optional[datetime] = None
+    remark: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminTopupOrderItem(TopupOrderItem):
+    user_id: int
+    operator_id: Optional[int] = None
+
+
+class UsageStatItem(DateTimeModel):
+    id: int
+    api_key_id: Optional[int] = None
+    model_name: str
+    stat_hour: datetime
+    request_count: int
+    success_count: int
+    error_count: int
+    prompt_tokens: int
+    completion_tokens: int
+    cached_tokens: int
+    total_tokens: int
+    total_cost: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminUsageStatItem(UsageStatItem):
+    user_id: int
+
+
+class ApiCallLogItem(DateTimeModel):
+    id: int
+    request_id: str
+    api_key_id: Optional[int] = None
+    model_name: str
+    prompt_tokens: int
+    completion_tokens: int
+    cached_tokens: int
+    total_tokens: int
+    cost: int
+    status: int
+    duration_ms: Optional[int] = None
+    is_stream: bool
+    error_code: Optional[str] = None
+    error_msg: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminApiCallLogItem(ApiCallLogItem):
+    user_id: int
+    ip: Optional[str] = None
+    cost_detail: Optional[dict[str, Any]] = None
+
+
+class ApiKeyItem(DateTimeModel):
+    id: int
+    key_prefix: str
+    name: str
+    status: int
+    quota_mode: int
+    quota_limit: int
+    quota_used: int
+    allowed_models: Optional[str] = None
+    allow_ips: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApiKeyCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    quota_mode: int = Field(default=1, ge=1, le=2)
+    quota_limit: int = Field(default=0, ge=0)
+    allowed_models: Optional[str] = None
+    allow_ips: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+    @field_validator("allowed_models")
+    @classmethod
+    def normalize_allowed_models_field(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_allowed_models(value)
+
+    @field_validator("allow_ips")
+    @classmethod
+    def normalize_allow_ips_field(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_allow_ips(value)
+
+
+class ApiKeyCreateData(BaseModel):
+    key: str
+    item: ApiKeyItem
+
+
+class ApiKeyUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    quota_limit: Optional[int] = Field(default=None, gt=0)
+    reset_quota_used: bool = False
+    allowed_models: Optional[str] = None
+    allow_ips: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+    @field_validator("allowed_models")
+    @classmethod
+    def normalize_allowed_models_field(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_allowed_models(value)
+
+    @field_validator("allow_ips")
+    @classmethod
+    def normalize_allow_ips_field(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_allow_ips(value)
+
+
+class AdminTopupRequest(BaseModel):
+    amount: int = Field(..., gt=0)
+    remark: str = Field(default="")
+
+
+class AdminAdjustBalanceRequest(BaseModel):
+    amount: int = Field(..., description="正数增加余额，负数扣减余额")
+    remark: str = Field(..., min_length=1, max_length=255)
+
+
 class RegisterRequest(BaseModel):
     """User registration request."""
 
@@ -47,14 +239,10 @@ class RegisterRequest(BaseModel):
     verification_code: str = Field(..., min_length=6, max_length=6, description="Email verification code")
     lang: str = Field(default="zh", description="Language code")
 
-    @field_validator("password")
+    @field_validator("email", mode="before")
     @classmethod
-    def validate_password_strength(cls, value: str, info) -> str:
-        lang = info.data.get("lang", "zh")
-        ok, message = check_password_strength(value, lang=lang)
-        if not ok:
-            raise ValueError(message)
-        return value
+    def normalize_email_field(cls, value: str) -> str:
+        return normalize_email(value)
 
     @field_validator("verification_code")
     @classmethod
@@ -69,6 +257,13 @@ class RegisterRequest(BaseModel):
         if "password" in info.data and value != info.data["password"]:
             raise ValueError("Passwords do not match")
         return value
+
+    @model_validator(mode="after")
+    def validate_password_strength(self):
+        ok, message = check_password_strength(self.password, lang=self.lang)
+        if not ok:
+            raise ValueError(message)
+        return self
 
 
 class RegisterResponseData(DateTimeModel):
@@ -92,6 +287,11 @@ class LoginRequest(BaseModel):
 
     email: EmailStr = Field(..., description="Login email")
     password: str = Field(..., description="Password")
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, value: str) -> str:
+        return normalize_email(value)
 
 
 class UserData(DateTimeModel):
@@ -143,14 +343,12 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128, description="New password")
     lang: str = Field(default="zh", description="Language code")
 
-    @field_validator("new_password")
-    @classmethod
-    def validate_new_password(cls, value: str, info) -> str:
-        lang = info.data.get("lang", "zh")
-        ok, message = check_password_strength(value, lang=lang)
+    @model_validator(mode="after")
+    def validate_new_password(self):
+        ok, message = check_password_strength(self.new_password, lang=self.lang)
         if not ok:
             raise ValueError(message)
-        return value
+        return self
 
 
 class ChangePasswordResponse(AuthBaseResponse):
@@ -179,7 +377,15 @@ class SendEmailCodeRequest(BaseModel):
     """Send email code request."""
 
     email: EmailStr = Field(..., description="Email")
-    purpose: str = Field(default="register", description="register/reset_password/login")
+    purpose: Literal["register", "reset_password", "login", "verify"] = Field(
+        default="register",
+        description="register/reset_password/login/verify",
+    )
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, value: str) -> str:
+        return normalize_email(value)
 
 
 class VerifyEmailRequest(BaseModel):
@@ -188,12 +394,22 @@ class VerifyEmailRequest(BaseModel):
     email: EmailStr = Field(..., description="Email")
     code: str = Field(..., min_length=6, max_length=6, description="6-digit code")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class LoginWithCodeRequest(BaseModel):
     """Login with email code request."""
 
     email: EmailStr = Field(..., description="Login email")
     code: str = Field(..., min_length=6, max_length=6, description="6-digit code")
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email_field(cls, value: str) -> str:
+        return normalize_email(value)
 
 
 class ResetPasswordRequest(BaseModel):
@@ -204,100 +420,14 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128, description="New password")
     lang: str = Field(default="zh", description="Language code")
 
-    @field_validator("new_password")
+    @field_validator("email", mode="before")
     @classmethod
-    def validate_reset_password(cls, value: str, info) -> str:
-        lang = info.data.get("lang", "zh")
-        ok, message = check_password_strength(value, lang=lang)
+    def normalize_email_field(cls, value: str) -> str:
+        return normalize_email(value)
+
+    @model_validator(mode="after")
+    def validate_reset_password(self):
+        ok, message = check_password_strength(self.new_password, lang=self.lang)
         if not ok:
             raise ValueError(message)
-        return value
-
-
-class RouterApiKeyItem(DateTimeModel):
-    """Router API key item."""
-
-    id: int = Field(..., description="Primary key id")
-    name: str = Field(..., description="Display name")
-    token_preview: str = Field(..., description="Masked key preview")
-    is_active: bool = Field(..., description="Whether the key is active")
-    is_deleted: bool = Field(default=False, description="Whether the key is deleted")
-    billing_mode: str = Field(..., description="Billing mode")
-    balance: Optional[float] = Field(default=None, description="Prepaid balance")
-    daily_quota_tokens: Optional[int] = Field(default=None, description="Daily token quota")
-    monthly_quota_tokens: Optional[int] = Field(default=None, description="Monthly token quota")
-    daily_quota_cost: Optional[float] = Field(default=None, description="Daily cost quota")
-    monthly_quota_cost: Optional[float] = Field(default=None, description="Monthly cost quota")
-    rate_limit_rpm: Optional[int] = Field(default=None, description="RPM limit")
-    last_used_at: Optional[datetime] = Field(default=None, description="Last used at")
-    created_at: datetime = Field(..., description="Created at")
-    updated_at: datetime = Field(..., description="Updated at")
-
-
-class RouterApiKeyCreateRequest(BaseModel):
-    """Create router API key request."""
-
-    name: str = Field(..., min_length=1, max_length=100, description="Key name")
-
-
-class RouterApiKeyUpdateRequest(BaseModel):
-    """Update router API key request."""
-
-    name: Optional[str] = Field(default=None, min_length=1, max_length=100, description="Key name")
-    is_active: Optional[bool] = Field(default=None, description="Whether active")
-
-
-class RouterApiKeyListResponseData(BaseModel):
-    """Router API key list payload."""
-
-    items: list[RouterApiKeyItem] = Field(default_factory=list, description="Owned API keys")
-
-
-class RouterApiKeyListResponse(AuthBaseResponse):
-    """Router API key list response."""
-
-    data: Optional[RouterApiKeyListResponseData] = None
-
-
-class RouterApiKeyCreateResponseData(BaseModel):
-    """Router API key create payload."""
-
-    item: RouterApiKeyItem = Field(..., description="Created API key metadata")
-    api_key: str = Field(..., description="Raw API key returned once")
-
-
-class RouterApiKeyCreateResponse(AuthBaseResponse):
-    """Router API key create response."""
-
-    data: Optional[RouterApiKeyCreateResponseData] = None
-
-
-class RouterApiKeyUpdateResponse(AuthBaseResponse):
-    """Router API key update response."""
-
-    data: Optional[RouterApiKeyItem] = None
-
-
-class RouterApiKeyRevealResponseData(BaseModel):
-    """Router API key reveal payload."""
-
-    item: RouterApiKeyItem = Field(..., description="API key metadata")
-    api_key: str = Field(..., description="Raw API key")
-
-
-class RouterApiKeyRevealResponse(AuthBaseResponse):
-    """Router API key reveal response."""
-
-    data: Optional[RouterApiKeyRevealResponseData] = None
-
-
-class RouterApiKeyDeleteResponseData(BaseModel):
-    """Router API key delete payload."""
-
-    deleted: bool = Field(..., description="Whether the key is deactivated")
-
-
-class RouterApiKeyDeleteResponse(AuthBaseResponse):
-    """Router API key delete response."""
-
-    data: Optional[RouterApiKeyDeleteResponseData] = None
+        return self

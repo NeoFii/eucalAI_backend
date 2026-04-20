@@ -55,6 +55,9 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     assert any(p.startswith("/api/v1/admin/auth") for p in paths_by_prefix)
     # user public routes (public /api/v1/auth/* belongs to user)
     assert ("POST", "/api/v1/auth/login") in pairs
+    assert ("GET", "/api/v1/billing/balance") in pairs
+    assert ("GET", "/api/v1/keys") in pairs
+    assert ("POST", "/api/v1/admin/users/{uid}/topup") in pairs
     # user internal contracts
     assert any(p.startswith("/api/v1/internal/users") for p in paths_by_prefix)
     # testing internal contracts (consumed by router-service)

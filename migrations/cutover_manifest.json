@@ -1,55 +1,15 @@
 {
   "version": 1,
   "execution_order": [
-    "router-service",
     "testing-service",
     "admin-service",
     "user-service"
   ],
   "services": [
     {
-      "service": "router-service",
-      "package": "router_service",
-      "order": 1,
-      "database_env": "ROUTER_DATABASE_URL",
-      "migration_namespace": "migrations/router_service",
-      "schema_snapshot": "scripts/sql/router_schema.sql",
-      "owned_tables": [
-        "router_api_keys",
-        "router_usage_events",
-        "router_billing_ledger"
-      ],
-      "owned_views": [],
-      "internal_dependencies": [
-        "user-service",
-        "testing-service"
-      ],
-      "external_reference_columns": {
-        "router_api_keys": [
-          "owner_user_id"
-        ],
-        "router_usage_events": [
-          "owner_user_id"
-        ],
-        "router_billing_ledger": [
-          "owner_user_id"
-        ]
-      },
-      "preconditions": [
-        "ROUTER_DATABASE_URL points to a router-owned schema or database",
-        "user-service internal identity endpoint is reachable",
-        "testing-service internal catalog endpoint is reachable"
-      ],
-      "post_cutover_checks": [
-        "router key CRUD endpoints succeed",
-        "OpenAI-compatible proxy can resolve models through testing-service",
-        "billing ledger writes succeed without shared-database foreign keys"
-      ]
-    },
-    {
       "service": "testing-service",
       "package": "testing_service",
-      "order": 2,
+      "order": 1,
       "database_env": "TESTING_DATABASE_URL",
       "migration_namespace": "migrations/testing_service",
       "schema_snapshot": "scripts/sql/testing_schema.sql",
@@ -94,7 +54,7 @@
     {
       "service": "admin-service",
       "package": "admin_service",
-      "order": 3,
+      "order": 2,
       "database_env": "ADMIN_DATABASE_URL",
       "migration_namespace": "migrations/admin_service",
       "schema_snapshot": "scripts/sql/admin_schema.sql",
@@ -124,30 +84,46 @@
     {
       "service": "user-service",
       "package": "user_service",
-      "order": 4,
+      "order": 3,
       "database_env": "USER_DATABASE_URL",
       "migration_namespace": "migrations/user_service",
       "schema_snapshot": "scripts/sql/user_schema.sql",
       "owned_tables": [
         "users",
         "user_sessions",
-        "user_active_sessions",
-        "email_verification_codes"
+        "email_verification_codes",
+        "user_api_keys",
+        "balance_transactions",
+        "topup_orders",
+        "api_call_logs",
+        "usage_stats",
+        "invitation_release_outbox"
       ],
       "owned_views": [],
       "internal_dependencies": [
-        "admin-service",
-        "router-service"
+        "admin-service"
       ],
-      "external_reference_columns": {},
+      "external_reference_columns": {
+        "api_call_logs": [
+          "api_key_id"
+        ],
+        "balance_transactions": [
+          "operator_id"
+        ],
+        "topup_orders": [
+          "operator_id"
+        ]
+      },
       "preconditions": [
         "USER_DATABASE_URL points to a user-owned schema or database",
-        "admin-service invitation internal endpoints are reachable",
-        "router-service key API remains reachable for compatibility proxy endpoints"
+        "admin-service invitation internal endpoints are reachable"
       ],
       "post_cutover_checks": [
         "register/login/refresh/logout flows succeed",
-        "internal user identity endpoints return the minimal contract"
+        "internal user identity endpoints return the minimal contract",
+        "balance freeze/settle/refund ledger writes are atomic and idempotent",
+        "api-key hash lookup returns quota state for router-service",
+        "arq usage-stats aggregator produces per-hour buckets"
       ]
     }
   ]

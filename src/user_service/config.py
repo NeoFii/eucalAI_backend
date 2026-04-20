@@ -22,9 +22,21 @@ class Settings(BaseServiceSettings):
     LOG_FILE_PREFIX: str = "user"
 
     ADMIN_SERVICE_URL: str = "http://localhost:8001"
-    ROUTER_SERVICE_URL: str = "http://localhost:8003"
 
     EMAIL_CODE_EXPIRE_MINUTES: int = 5
+    MIN_TOPUP_AMOUNT: int = 100
+    MAX_TOPUP_AMOUNT: int = 1_000_000
+    MAX_API_KEYS_PER_USER: int = 20
+    LOGIN_MAX_FAILURES: int = 5
+    LOGIN_LOCK_DURATION_HOURS: int = 1
+    MAX_CODE_ERRORS: int = 5
+    CODE_ERROR_LOCK_HOURS: int = 24
+    CODE_DAILY_SEND_LIMIT: int = 3
+    USER_QUEUE_REDIS_URL: str = "redis://127.0.0.1:6379/1"
+    USER_WORKER_CONCURRENCY: int = 5
+    USER_JOB_TIMEOUT_SECONDS: int = 300
+    VERIFICATION_CODE_RETENTION_DAYS: int = 7
+    INVITATION_RELEASE_MAX_RETRIES: int = 5
 
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

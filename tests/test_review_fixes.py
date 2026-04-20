@@ -1656,7 +1656,6 @@ def test_user_api_registers_internal_router():
 
     route_paths = {route.path for route in api_router.routes}
     assert "/api/v1/internal/users/{uid}" in route_paths
-    assert "/api/v1/internal/users/by-id/{user_id}" in route_paths
     assert "/api/v1/internal/stats/users" in route_paths
 
 

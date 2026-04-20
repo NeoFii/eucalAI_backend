@@ -164,6 +164,186 @@ class TestDatabase:
         assert TimestampMixin is not None
 
 
+class TestDatabaseRefactorPrimitives:
+    def test_database_refactor_platform_imports(self):
+        from common.db.base import SoftDeleteMixin
+        from common.db.query import ListParams, PaginatedResult
+        from common.db.repository import BaseRepository
+        from common.gateway.base import BaseGateway
+
+        assert SoftDeleteMixin is not None
+        assert BaseRepository is not None
+        assert ListParams is not None
+        assert PaginatedResult is not None
+        assert BaseGateway is not None
+
+    def test_soft_delete_mixin_exposes_deleted_at_column(self):
+        from common.db.base import SoftDeleteMixin
+
+        assert hasattr(SoftDeleteMixin, "deleted_at")
+        assert SoftDeleteMixin.deleted_at.nullable is True
+
+    def test_list_params_default_values(self):
+        from common.db.query import ListParams
+
+        params = ListParams()
+
+        assert params.page == 1
+        assert params.page_size > 0
+        assert params.order_dir == "desc"
+
+    def test_paginated_result_preserves_payload(self):
+        from common.db.query import PaginatedResult
+
+        payload = PaginatedResult(items=[1, 2], total=2, page=1, page_size=20)
+
+        assert payload.items == [1, 2]
+        assert payload.total == 2
+        assert payload.page == 1
+        assert payload.page_size == 20
+
+    def test_base_gateway_can_store_service_name(self):
+        from common.gateway.base import BaseGateway
+
+        gateway = BaseGateway(service_name="admin-service")
+
+        assert gateway.service_name == "admin-service"
+
+
+class TestDatabaseRefactorPrimitives:
+    def test_database_refactor_platform_imports(self):
+        from common.db.base import SoftDeleteMixin
+        from common.db.query import ListParams, PaginatedResult
+        from common.db.repository import BaseRepository
+        from common.gateway.base import BaseGateway
+
+        assert SoftDeleteMixin is not None
+        assert BaseRepository is not None
+        assert ListParams is not None
+        assert PaginatedResult is not None
+        assert BaseGateway is not None
+
+    def test_soft_delete_mixin_exposes_deleted_at_column(self):
+        from common.db.base import SoftDeleteMixin
+
+        assert hasattr(SoftDeleteMixin, "deleted_at")
+        assert SoftDeleteMixin.deleted_at.nullable is True
+
+    def test_list_params_default_values(self):
+        from common.db.query import ListParams
+
+        params = ListParams()
+
+        assert params.page == 1
+        assert params.page_size > 0
+        assert params.order_dir == "desc"
+
+    def test_paginated_result_preserves_payload(self):
+        from common.db.query import PaginatedResult
+
+        payload = PaginatedResult(items=[1, 2], total=2, page=1, page_size=20)
+
+        assert payload.items == [1, 2]
+        assert payload.total == 2
+        assert payload.page == 1
+        assert payload.page_size == 20
+
+    def test_base_gateway_can_store_service_name(self):
+        from common.gateway.base import BaseGateway
+
+        gateway = BaseGateway(service_name="admin-service")
+
+        assert gateway.service_name == "admin-service"
+
+    def test_database_refactor_platform_imports(self):
+        from common.db.base import SoftDeleteMixin
+        from common.db.query import ListParams, PaginatedResult
+        from common.db.repository import BaseRepository
+        from common.gateway.base import BaseGateway
+
+        assert SoftDeleteMixin is not None
+        assert BaseRepository is not None
+        assert ListParams is not None
+        assert PaginatedResult is not None
+        assert BaseGateway is not None
+
+    def test_soft_delete_mixin_exposes_deleted_at_column(self):
+        from common.db.base import SoftDeleteMixin
+
+        assert hasattr(SoftDeleteMixin, "deleted_at")
+        assert SoftDeleteMixin.deleted_at.nullable is True
+
+    def test_list_params_default_values(self):
+        from common.db.query import ListParams
+
+        params = ListParams()
+
+        assert params.page == 1
+        assert params.page_size > 0
+        assert params.order_dir == "desc"
+
+    def test_paginated_result_preserves_payload(self):
+        from common.db.query import PaginatedResult
+
+        payload = PaginatedResult(items=[1, 2], total=2, page=1, page_size=20)
+
+        assert payload.items == [1, 2]
+        assert payload.total == 2
+        assert payload.page == 1
+        assert payload.page_size == 20
+
+    def test_base_gateway_can_store_service_name(self):
+        from common.gateway.base import BaseGateway
+
+        gateway = BaseGateway(service_name="admin-service")
+
+        assert gateway.service_name == "admin-service"
+
+    def test_database_refactor_platform_imports(self):
+        from common.db.base import SoftDeleteMixin
+        from common.db.query import ListParams, PaginatedResult
+        from common.db.repository import BaseRepository
+        from common.gateway.base import BaseGateway
+
+        assert SoftDeleteMixin is not None
+        assert BaseRepository is not None
+        assert ListParams is not None
+        assert PaginatedResult is not None
+        assert BaseGateway is not None
+
+    def test_soft_delete_mixin_exposes_deleted_at_column(self):
+        from common.db.base import SoftDeleteMixin
+
+        assert hasattr(SoftDeleteMixin, "deleted_at")
+        assert SoftDeleteMixin.deleted_at.nullable is True
+
+    def test_list_params_default_values(self):
+        from common.db.query import ListParams
+
+        params = ListParams()
+
+        assert params.page == 1
+        assert params.page_size > 0
+        assert params.order_dir == "desc"
+
+    def test_paginated_result_preserves_payload(self):
+        from common.db.query import PaginatedResult
+
+        payload = PaginatedResult(items=[1, 2], total=2, page=1, page_size=20)
+
+        assert payload.items == [1, 2]
+        assert payload.total == 2
+        assert payload.page == 1
+        assert payload.page_size == 20
+
+    def test_base_gateway_can_store_service_name(self):
+        from common.gateway.base import BaseGateway
+
+        gateway = BaseGateway(service_name="admin-service")
+
+        assert gateway.service_name == "admin-service"
+
+
 class TestObservabilityAndHealth:
     def test_phase4_platform_imports(self):
         from common.health import build_readiness_response, check_database_ready

@@ -22,7 +22,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import inspect, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 
@@ -53,6 +53,18 @@ def _load_metadata(service_package: str):
     return db_module.Base.metadata
 
 
+def _ensure_version_table_capacity(connection) -> None:
+    """Allow descriptive revision IDs longer than Alembic's default VARCHAR(32)."""
+    inspector = inspect(connection)
+    if "alembic_version" not in inspector.get_table_names():
+        return
+    if connection.dialect.name not in {"mysql", "mariadb"}:
+        return
+    connection.execute(
+        text("ALTER TABLE `alembic_version` MODIFY `version_num` VARCHAR(255) NOT NULL")
+    )
+
+
 def run_env() -> None:
     """Entry point invoked by each service-local env.py proxy."""
 
@@ -67,6 +79,7 @@ def run_env() -> None:
     url = _resolve_url(database_env)
 
     def do_run_migrations(connection) -> None:
+        _ensure_version_table_capacity(connection)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -86,6 +99,7 @@ def run_env() -> None:
         )
         async with connectable.connect() as connection:
             await connection.run_sync(do_run_migrations)
+            await connection.commit()
         await connectable.dispose()
 
     if context.is_offline_mode():

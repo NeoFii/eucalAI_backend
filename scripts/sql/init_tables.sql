@@ -8,10 +8,10 @@
 -- authoritative workflow.
 --
 -- Dependency order:
---   admin -> user -> router -> testing
--- The order matches migrations/cutover_manifest.json::execution_order.
+--   admin -> user -> testing
+-- router-service is intentionally omitted — it has no database in the
+-- current design; all routing metadata lives in user-service tables.
 
 SOURCE scripts/sql/admin_schema.sql;
 SOURCE scripts/sql/user_schema.sql;
-SOURCE scripts/sql/router_schema.sql;
 SOURCE scripts/sql/testing_schema.sql;

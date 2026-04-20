@@ -15,7 +15,6 @@ os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 ROOT = Path(__file__).resolve().parent.parent
 SERVICE_MAIN_FILES = (
     ROOT / "src" / "admin_service" / "main.py",
-    ROOT / "src" / "user_service" / "main.py",
     ROOT / "src" / "testing_service" / "main.py",
 )
 

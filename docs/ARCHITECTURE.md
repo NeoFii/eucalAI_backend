@@ -9,7 +9,7 @@
 
 Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout 统一代码布局：
 
-- **backend-app**（:8001）—— 单个 FastAPI 进程承载 admin + user + content + testing 四个管理面域。所有 CRUD、鉴权、目录管理都在这里。
+- **backend-app**（:8001）—— 单个 FastAPI 进程承载 admin + user + testing 三个管理面域。所有 CRUD、鉴权、目录管理都在这里。
 - **router-service**（:8003）—— 独立进程，**纯 ML 推理路由**（Hybrid Integrated Difficulty Router）。无数据库、无 HMAC、无 API Key/计费。水平扩容友好。
 - **testing-scheduler**（:8012）+ **testing-worker**（arq）—— 独立后台进程，跑 apscheduler 和基准测试队列消费者。
 
@@ -26,9 +26,8 @@ Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout
           │  /api/v1/admin/auth/*   │  │  /v1/chat/*         │
           │  /api/v1/admin-users/*  │  │  /v1/completions/*  │
           │  /api/v1/invitation-*   │  │  /v1/models         │
-          │  /api/v1/news/*         │  │  /v1/router/config  │
-          │  /api/v1/models/*       │  │  /ready             │
-          │  /api/v1/providers/*    │  │                     │
+          │  /api/v1/models/*       │  │  /v1/router/config  │
+          │  /api/v1/providers/*    │  │  /ready             │
           │  /api/v1/benchmark/*    │  │  ML 推理，无 DB      │
           │  /api/v1/internal/*     │  │  无 HMAC callout    │
           │                         │  │                     │
@@ -42,7 +41,7 @@ Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout
 
 - **Control Plane / Data Plane 拆分**：非热路径全部合一（backend-app），热路径独立（router-service）
 - **src/ layout**：所有 Python 包位于 `src/` 下（`src/common`、`src/admin_service`、…、`src/backend_app`），pyproject hatchling 统一打包
-- **Database-per-service**：4 个 MySQL 库独立（admin/user/content/testing），backend-app 内部持 4 个 engine；router 无 DB
+- **Database-per-service**：3 个 MySQL 库独立（admin/user/testing），backend-app 内部持 3 个 engine；router 无 DB
 - **异步优先**：FastAPI + SQLAlchemy 2 async + aiomysql + httpx
 - **Snowflake ID**：全局唯一 ID（`common/utils/snowflake.py`，`SnowflakeIdMixin`）
 - **签名调用**：跨进程 HTTP 调用走 HMAC（`common/internal.py`）；backend-app 内部调用仍走 localhost HMAC（loopback 成本 <5ms），为回滚保留兼容。router 不参与 HMAC
@@ -54,7 +53,7 @@ Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout
 
 | 进程 | 模块 | 端口 | 数据库 | 依赖 | 扩容 |
 |---|---|---|---|---|---|
-| **backend-app** | `backend_app.main:app` | 8001 | admin/user/content/testing 4 库 | 标准依赖 | 单实例（可做多实例无状态） |
+| **backend-app** | `backend_app.main:app` | 8001 | admin/user/testing 3 库 | 标准依赖 | 单实例（可做多实例无状态） |
 | **router-service** | `router_service.main:app` | 8003 | — | `uv sync --extra router`（含 torch） | 水平扩容 |
 | **testing-scheduler** | `testing_service.main:app` | 8012 | `eucal_ai_testing` | 标准依赖 | 单实例 |
 | **testing-worker** | `testing_service.worker.WorkerSettings`（arq） | — | `eucal_ai_testing` | 标准依赖 | 按队列深度扩容 |
@@ -68,19 +67,17 @@ Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout
 | 域 | 包 | ORM 模型 | FastAPI 端点 |
 |---|---|---|---|
 | admin | `src/admin_service` | `admin_users`, `invitation_codes`, `admin_audit_logs` | `/api/v1/admin/auth/*`, `/api/v1/admin-users/*`, `/api/v1/admin-audit-logs/*`, `/api/v1/invitation-codes/*`, `/api/v1/dashboard/*` |
-| user | `src/user_service` | `users`, `user_sessions`, `user_active_sessions`, `email_verification_codes` | `/api/v1/auth/*` |
-| content | `src/content_service` | `news` | `/api/v1/news/*`, `/api/v1/admin/news/*` |
+| user | `src/user_service` | `users`, `user_sessions`, `email_verification_codes`, `user_api_keys`, `balance_transactions`, `topup_orders`, `api_call_logs`, `usage_stats`, `invitation_release_outbox` | `/api/v1/auth/*`, `/api/v1/internal/users/*` |
 | testing | `src/testing_service` | `models`, `providers`, `model_provider_offerings`, `benchmark_jobs`, 等 | `/api/v1/models/*`, `/api/v1/providers/*`, `/api/v1/vendors/*`, `/api/v1/benchmark/*`, `/api/v1/model-providers/*` |
 | internal | 各子域的 `internal.py` | — | `/api/v1/internal/admins/*`, `/api/v1/internal/invitation-codes/*`, `/api/v1/internal/users/*` |
 
 ### 2.2 路径冲突处理
 
-两处路径冲突已在 backend-app 层解决：
+一处路径冲突已在 backend-app 层解决：
 
 | 冲突 | 解决 |
 |---|---|
 | `/api/v1/auth/*` admin vs user | admin 公共路由挂到 `/api/v1/admin/*`；user 保持 `/api/v1/auth/*` 面向终端用户 |
-| `/api/v1/news` user 代理 vs content | backend-app 不注册 user 的 news 代理路由；content 直接服务 |
 
 admin 的**内部 HMAC 端点**（`/api/v1/internal/admins/*`、`/api/v1/internal/invitation-codes/*`）保持原路径不变，避免打断 HMAC 客户端。
 
@@ -107,12 +104,11 @@ admin 的**内部 HMAC 端点**（`/api/v1/internal/admins/*`、`/api/v1/interna
 
 ### 3.2 backend-app 内部 loopback 调用（仍走 HMAC over localhost）
 
-| Caller ↓ / Callee → | admin | user | content | testing |
-|---|---|---|---|---|
-| admin | — | `fetch_total_users` | — | — |
-| user | `consume_invitation_code`、`release_invitation_code` | — | `list_news`、`get_news` | — |
-| content | `fetch_admin_by_uid` | — | — | — |
-| testing | `fetch_admin_by_uid` | — | — | — |
+| Caller ↓ / Callee → | admin | user | testing |
+|---|---|---|---|
+| admin | — | `fetch_total_users` | — |
+| user | `consume_invitation_code`、`release_invitation_code` | — | — |
+| testing | `fetch_admin_by_uid` | — | — |
 
 **为什么保留 HMAC**：一行代码没改，可以随时分拆回 4 个独立服务（回滚 <5 分钟）。上线稳定后若想优化，可改为进程内直呼（省 <5ms 延迟）。
 
@@ -140,7 +136,7 @@ backend-app 在 lifespan 里**单次**调用 `configure_snowflake`、`install_ob
 
 ## 5. 数据库与 Alembic
 
-**4 个独立 MySQL 库**：`eucal_ai_{admin, user, content, testing}`。router 无 DB。不跨库外键；跨域引用（如 audit log 里的 actor user_id）靠应用层。
+**3 个独立 MySQL 库**：`eucal_ai_{admin, user, testing}`。router 无 DB。不跨库外键；跨域引用（如 audit log 里的 actor user_id）靠应用层。
 
 **统一 Alembic 环境**：
 
@@ -155,7 +151,6 @@ migrations/
 │   ├── script.py.mako
 │   └── versions/
 ├── user_service/           ... (结构同 admin)
-├── content_service/
 └── testing_service/
 ```
 
@@ -165,7 +160,7 @@ migrations/
 ```bash
 uv run migrate --service <name> upgrade head
 uv run migrate --service <name> revision -m "..." --autogenerate
-uv run bootstrap-databases                  # 4 库一把 upgrade
+uv run bootstrap-databases                  # 3 库一把 upgrade
 ```
 
 `scripts/sql/*.sql` 是 `phase2-cutover` 工具引用的 schema 快照，**不是真理**。详见 `migrations/README.md`。
@@ -180,9 +175,9 @@ uv run bootstrap-databases                  # 4 库一把 upgrade
 |---|---|
 | `uv run start` | 默认启动 backend-app + router-service + testing-worker + testing-scheduler |
 | `uv run start admin-service user-service` | 单域启动（调试） |
-| `uv run check-env` | 环境变量完整性校验（含 backend-app 的 4 个 DB URL） |
+| `uv run check-env` | 环境变量完整性校验（含 backend-app 的 3 个 DB URL） |
 | `uv run migrate --service <x> upgrade head` | 单服务 Alembic 操作 |
-| `uv run bootstrap-databases` | 4 个服务 upgrade head |
+| `uv run bootstrap-databases` | 3 个服务 upgrade head |
 | `uv run bootstrap-super-admin` | 初始化超级管理员 |
 | `uv run phase2-cutover` | 历史 phase2 切换工具（旧 router 下线后主要为归档参考） |
 | `python scripts/runtime_probe.py http-ready --port <n>` | 容器 healthcheck（由 compose 直接调用） |
@@ -201,7 +196,7 @@ uv run bootstrap-databases                  # 4 库一把 upgrade
 | **testing-worker** | 自构建 | — | backend-app, redis |
 | **testing-scheduler** | 自构建（profile=scheduler） | 8012 | backend-app, redis |
 
-**运行时依赖**：MySQL 8.x（4 个库）、Redis 7.x（arq 队列）。
+**运行时依赖**：MySQL 8.x（3 个库）、Redis 7.x（arq 队列）。
 
 **镜像布局**：`Dockerfile` `COPY src/* /app/src/`，`PYTHONPATH=/app/src` 让 `import admin_service` 等仍为裸名。router 运行时资产 `deploy/router/{runtime_config,model_paths}.json` 也 COPY 进镜像，容器里路径 `/app/deploy/router/`。
 
@@ -271,9 +266,9 @@ uv run bootstrap-databases                  # 4 库一把 upgrade
 | 添加一个新的端点 | 在对应 `src/<service>/api/v1/endpoints/` 新建模块；更新 `src/<service>/api/v1/router.py`；backend-app 自动挂载（因为 include 的是 `api_router`） |
 | 添加一个跨进程调用 | 在 caller `src/<service>/services/<target>_client.py` 新增；在 target 的 `internal.py` 暴露端点；更新 caller `config.py` 的 URL 变量（多数情况指向 `backend-app:8001`） |
 | 改数据库 schema | `uv run migrate --service <name> revision -m "..." --autogenerate`，审查生成的 revision |
-| 理解 backend-app 路由组织 | `src/backend_app/main.py` 里 `_build_admin_public_api_router` / `_build_admin_internal_api_router` / `_build_user_api_router_without_news` |
+| 理解 backend-app 路由组织 | `src/backend_app/main.py` 里 `_build_admin_public_api_router` / `_build_admin_internal_api_router` / `_build_user_api_router` |
 | 改 router 路由权重 | `deploy/router/runtime_config.json`，或通过 `/v1/router/config` 查看当前配置 |
 | 装 router ML 依赖 | `uv sync --extra router` |
-| 回滚合并 | `scripts/start_services.py::DEFAULT_SERVICES` 改回原 4 服务列表（admin/user/content/testing 单独起），`docker-compose.yml` 改回每服务一个容器 |
+| 回滚合并 | `scripts/start_services.py::DEFAULT_SERVICES` 改回原 3 服务列表（admin/user/testing 单独起），`docker-compose.yml` 改回每服务一个容器 |
 | 回滚到重构前 | `git reset --hard backup/pre-restructure`（tag 保留在 commit `3057e18`） |
 | 查看哪些路径是 backend-app 的 | `uv run pytest tests/test_backend_app.py -v` 会打印所有注册路径并校验唯一 |
