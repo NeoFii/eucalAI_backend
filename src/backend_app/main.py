@@ -47,8 +47,11 @@ from admin_service.models import SERVICE_MODELS as ADMIN_MODELS
 from admin_service.services.bootstrap_service import AdminBootstrapService
 
 from user_service import db as user_db
+from user_service.api.v1.endpoints import admin_billing as user_admin_billing_endpoint
 from user_service.api.v1.endpoints import auth as user_auth_endpoint
+from user_service.api.v1.endpoints import billing as user_billing_endpoint
 from user_service.api.v1.endpoints import internal as user_internal_endpoint
+from user_service.api.v1.endpoints import keys as user_keys_endpoint
 from user_service.config import settings as user_settings
 from user_service.models import SERVICE_MODELS as USER_MODELS
 
@@ -69,6 +72,9 @@ def _build_user_api_router() -> APIRouter:
     """Compose user-service routes."""
     router = APIRouter(prefix="/api/v1")
     router.include_router(user_auth_endpoint.router)
+    router.include_router(user_billing_endpoint.router)
+    router.include_router(user_keys_endpoint.router)
+    router.include_router(user_admin_billing_endpoint.router)
     router.include_router(user_internal_endpoint.router)
     return router
 

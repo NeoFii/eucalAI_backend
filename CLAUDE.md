@@ -12,12 +12,11 @@ All packages live under `src/`. Typical deployment uses `backend-app` (merged co
 
 | Service | Module | Port | Purpose |
 |---------|--------|------|---------|
-| backend-app | `backend_app.main:app` | 8001 | Merged admin + user + content + testing control plane |
-| user-service | `user_service` | 8000 | Registration, login, password, news proxy (standalone mode) |
+| backend-app | `backend_app.main:app` | 8001 | Merged admin + user + testing control plane |
+| user-service | `user_service` | 8000 | Registration, login, password |
 | admin-service | `admin_service` | 8001 | Admin auth, super-admin, invite codes, audit (standalone mode) |
 | testing-service | `testing_service` | 8002 | Model catalog, providers, quotes, benchmark (standalone mode) |
 | router-service | `router_service` | 8003 | ML inference routing (numpy/torch/transformers). No DB. |
-| content-service | `content_service` | 8004 | News CRUD (standalone mode) |
 | testing-scheduler | `testing_service.main:app` | 8012 | Scheduled probe dispatcher |
 | testing-worker | `testing_service.worker` | — | Benchmark queue consumer (arq + Redis) |
 
@@ -86,7 +85,7 @@ uv run mypy .
 - `observability.py` — Structured logging, request-ID propagation
 
 ### Database
-- Each DB-backed service has its own MySQL database (4 total: `eucal_ai_{admin,user,content,testing}`). Router has no DB.
+- Each DB-backed service has its own MySQL database (3 total: `eucal_ai_{admin,user,testing}`). Router has no DB.
 - Async via `aiomysql` + `sqlalchemy[asyncio]`
 - Migrations in `migrations/<service_name>/` — one Alembic env per DB service
 - IDs are snowflake-based (`SnowflakeIdMixin`)
@@ -94,7 +93,6 @@ uv run mypy .
 ### Inter-service calls
 Signed with `INTERNAL_SECRET` using headers `X-Internal-Service`, `X-Internal-Timestamp`, `X-Internal-Signature`. Verification via `common.internal.verify_internal_signature`. Key dependency graph:
 - admin <-> user (bidirectional)
-- user -> content
 - testing -> admin
 
 ### Config

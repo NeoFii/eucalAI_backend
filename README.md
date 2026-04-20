@@ -10,7 +10,7 @@
 最短结论：
 
 1. 先安装依赖并准备 `.env`
-2. 手动创建 4 个 MySQL 数据库（router 已改为无 DB 的 ML 推理服务）
+2. 手动创建 3 个 MySQL 数据库（router 已改为无 DB 的 ML 推理服务）
 3. 运行 `uv run check-env`
 4. 运行数据库迁移（创建数据表）
 5. 初始化超级管理员
@@ -22,12 +22,11 @@
 
 | 服务 | 模块 | 默认端口 | 作用 |
 | --- | --- | --- | --- |
-| `backend-app` | `src/backend_app/` | `8001` | admin + user + content + testing 合并控制面 |
-| `user-service` | `src/user_service/` | `8000` | 用户注册、登录、密码、新闻代理（独立进程可选） |
+| `backend-app` | `src/backend_app/` | `8001` | admin + user + testing 合并控制面 |
+| `user-service` | `src/user_service/` | `8000` | 用户注册、登录、密码（独立进程可选） |
 | `admin-service` | `src/admin_service/` | `8001` | 管理员登录、超级管理员、邀请码、审计（独立进程可选） |
 | `testing-service` | `src/testing_service/` | `8002` | 模型目录、供应商、报价、Benchmark（独立进程可选） |
 | `router-service` | `src/router_service/` | `8003` | ML 推理路由（无数据库） |
-| `content-service` | `src/content_service/` | `8004` | 新闻公开读取和新闻管理（独立进程可选） |
 | `testing-worker` | `testing_service.worker` | 无 HTTP 端口 | 执行 Benchmark 队列任务 |
 | `testing-scheduler` | `testing_service.main:app` | `8012` | 定时探测调度入口 |
 
@@ -139,7 +138,6 @@ Copy-Item .env.example .env
 | --- | --- | --- | --- |
 | `ADMIN_DATABASE_URL` | 是 | `admin-service` | 管理员域数据库连接串 |
 | `USER_DATABASE_URL` | 是 | `user-service` | 用户域数据库连接串 |
-| `CONTENT_DATABASE_URL` | 是 | `content-service` | 内容域数据库连接串 |
 | `TESTING_DATABASE_URL` | 是 | `testing-service`、`testing-worker`、`testing-scheduler` | 模型与 Benchmark 域数据库连接串 |
 | `DATABASE_POOL_SIZE` | 建议填 | 全局 | 数据库连接池基础连接数 |
 | `DATABASE_MAX_OVERFLOW` | 建议填 | 全局 | 连接池允许的额外溢出连接数 |
@@ -152,9 +150,8 @@ Copy-Item .env.example .env
 
 | 变量 | 是否必填 | 作用范围 | 含义 |
 | --- | --- | --- | --- |
-| `ADMIN_SERVICE_URL` | 建议填 | 被 `user-service`、`testing-service`、`content-service` 等使用 | `admin-service` 的访问地址 |
+| `ADMIN_SERVICE_URL` | 建议填 | 被 `user-service`、`testing-service` 使用 | `admin-service` 的访问地址 |
 | `USER_SERVICE_URL` | 建议填 | 被 `admin-service`、`router-service` 使用 | `user-service` 的访问地址 |
-| `CONTENT_SERVICE_URL` | 建议填 | 被 `user-service`、`admin-service` 使用 | `content-service` 的访问地址 |
 | `ROUTER_SERVICE_URL` | 建议填 | 用户链路或其他调用链使用 | `router-service` 的访问地址 |
 | `TESTING_SERVICE_URL` | 建议填 | `router-service` 使用 | `testing-service` 的访问地址 |
 
@@ -240,7 +237,6 @@ Copy-Item .env.example .env
 
 - `eucal_ai_admin`
 - `eucal_ai_user`
-- `eucal_ai_content`
 - `eucal_ai_testing`
 
 ### 创建数据库示例
@@ -248,7 +244,6 @@ Copy-Item .env.example .env
 ```sql
 CREATE DATABASE eucal_ai_admin CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE eucal_ai_user CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE eucal_ai_content CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE eucal_ai_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
@@ -257,7 +252,6 @@ CREATE DATABASE eucal_ai_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_c
 ```sql
 GRANT ALL PRIVILEGES ON eucal_ai_admin.* TO 'eucal'@'%';
 GRANT ALL PRIVILEGES ON eucal_ai_user.* TO 'eucal'@'%';
-GRANT ALL PRIVILEGES ON eucal_ai_content.* TO 'eucal'@'%';
 GRANT ALL PRIVILEGES ON eucal_ai_testing.* TO 'eucal'@'%';
 FLUSH PRIVILEGES;
 ```
@@ -291,7 +285,6 @@ uv run check-env
 ```bash
 uv run migrate --service admin-service upgrade head
 uv run migrate --service user-service upgrade head
-uv run migrate --service content-service upgrade head
 uv run migrate --service testing-service upgrade head
 ```
 
@@ -423,7 +416,6 @@ uv run start
 
 - `admin-service`
 - `user-service`
-- `content-service`
 - `testing-service`
 - `router-service`
 - `testing-worker`
@@ -438,7 +430,7 @@ uv run start --dev
 只启动部分服务：
 
 ```bash
-uv run start admin-service user-service content-service
+uv run start admin-service user-service
 ```
 
 只单独启动定时探测调度器：
@@ -478,7 +470,6 @@ curl http://localhost:8000/ready
 curl http://localhost:8001/ready
 curl http://localhost:8002/ready
 curl http://localhost:8003/ready
-curl http://localhost:8004/ready
 curl http://localhost:8012/ready
 ```
 
@@ -505,7 +496,6 @@ uv run python scripts/runtime_probe.py worker-ready --database-url-env TESTING_D
 - [http://localhost:8001/docs](http://localhost:8001/docs)
 - [http://localhost:8002/docs](http://localhost:8002/docs)
 - [http://localhost:8003/docs](http://localhost:8003/docs)
-- [http://localhost:8004/docs](http://localhost:8004/docs)
 - [http://localhost:8012/docs](http://localhost:8012/docs)
 
 ## 服务间调用约定
@@ -521,7 +511,6 @@ uv run python scripts/runtime_probe.py worker-ready --database-url-env TESTING_D
 
 - `admin-service -> user-service`：用户统计、用户身份查询
 - `user-service -> admin-service`：邀请码消费与释放
-- `user-service -> content-service`：新闻公开读取
 - `router-service -> user-service`：Router Key 所属用户校验
 - `router-service -> testing-service`：模型目录与路由候选查询
 - `testing-service -> admin-service`：管理员身份校验
