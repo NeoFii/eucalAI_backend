@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from admin_service.dependencies import require_super_admin
 from admin_service.models import AdminUser
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db import ListParams
 from common.utils.timezone import now
 from user_service.dependencies import get_db_session
 from user_service.schemas import (
     AdminAdjustBalanceRequest,
     AdminApiCallLogItem,
+    AdminBalanceTransactionItem,
     AdminTopupRequest,
     AdminTopupOrderItem,
     AdminUsageStatItem,
     ApiResponse,
     AuthBaseResponse,
-    BalanceTransactionItem,
     ListResponse,
 )
 from user_service.services.balance_service import BalanceService
@@ -27,6 +28,29 @@ from user_service.services.topup_order_service import TopupOrderService
 from user_service.services.usage_stat_service import UsageStatService
 
 router = APIRouter(prefix="/admin", tags=["admin-billing"])
+
+
+def _build_list_params(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    time_field: str | None = None,
+    order_by: str | None = None,
+    default_days: int = 30,
+) -> ListParams:
+    params = ListParams(
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+        time_field=time_field,
+        start=start,
+        end=end,
+    )
+    if time_field is not None:
+        params.validate_time_range(default_end=now(), default_days=default_days)
+    return params
 
 
 @router.post("/users/{uid}/topup", response_model=ApiResponse[AdminTopupOrderItem], summary="Manual top-up")
@@ -82,10 +106,9 @@ async def list_all_topup_orders(
     _current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    items, total = await TopupOrderService.get_all_orders(
+    result = await TopupOrderService.get_all_orders(
         db,
-        page=page,
-        page_size=page_size,
+        params=_build_list_params(page=page, page_size=page_size, order_by="created_at"),
         user_id=user_id,
         status=status,
     )
@@ -93,17 +116,17 @@ async def list_all_topup_orders(
         "code": 200,
         "message": "success",
         "data": {
-            "items": [AdminTopupOrderItem.model_validate(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "items": [AdminTopupOrderItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
         },
     }
 
 
 @router.get(
     "/users/{uid}/transactions",
-    response_model=ApiResponse[ListResponse[BalanceTransactionItem]],
+    response_model=ApiResponse[ListResponse[AdminBalanceTransactionItem]],
     summary="List user balance transactions",
 )
 async def list_user_transactions(
@@ -114,20 +137,19 @@ async def list_user_transactions(
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     user = await BalanceService.get_user_by_uid(db, uid)
-    items, total = await BalanceService.list_transactions(
+    result = await BalanceService.list_transactions(
         db,
         user_id=int(user.id),
-        page=page,
-        page_size=page_size,
+        params=_build_list_params(page=page, page_size=page_size, order_by="created_at"),
     )
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "items": [BalanceTransactionItem.model_validate(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "items": [AdminBalanceTransactionItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
         },
     }
 
@@ -147,23 +169,27 @@ async def list_admin_usage_logs(
     _current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    items, total = await UsageStatService.list_usage_logs(
+    result = await UsageStatService.list_usage_logs(
         db,
+        params=_build_list_params(
+            page=page,
+            page_size=page_size,
+            start=start,
+            end=end,
+            time_field="created_at",
+            order_by="created_at",
+        ),
         user_id=user_id,
         model_name=model_name,
-        start=start,
-        end=end,
-        page=page,
-        page_size=page_size,
     )
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "items": [AdminApiCallLogItem.model_validate(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "items": [AdminApiCallLogItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
         },
     }
 
@@ -177,12 +203,11 @@ async def list_admin_usage_stats(
     _current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    effective_end = end or now()
-    effective_start = start or (effective_end - timedelta(days=30))
+    params = _build_list_params(start=start, end=end, time_field="stat_hour")
     items = await UsageStatService.get_all_stats(
         db,
-        start=effective_start,
-        end=effective_end,
+        start=params.start,
+        end=params.end,
         user_id=user_id,
         model_name=model_name,
     )

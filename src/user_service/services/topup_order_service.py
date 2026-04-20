@@ -7,6 +7,7 @@ import string
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db import ListParams, PaginatedResult
 from common.core.exceptions import ValidationException
 from common.utils.timezone import now
 from user_service.models import TopupOrder
@@ -55,26 +56,22 @@ class TopupOrderService:
     async def get_user_orders(
         db: AsyncSession,
         user_id: int,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> tuple[list[TopupOrder], int]:
+        params: ListParams,
+    ) -> PaginatedResult[TopupOrder]:
         return await TopupOrderRepository(db).list_for_user(
             user_id=user_id,
-            page=page,
-            page_size=page_size,
+            params=params,
         )
 
     @staticmethod
     async def get_all_orders(
         db: AsyncSession,
-        page: int = 1,
-        page_size: int = 20,
+        params: ListParams,
         user_id: int | None = None,
         status: int | None = None,
-    ) -> tuple[list[TopupOrder], int]:
+    ) -> PaginatedResult[TopupOrder]:
         return await TopupOrderRepository(db).list_all(
-            page=page,
-            page_size=page_size,
+            params=params,
             user_id=user_id,
             status=status,
         )

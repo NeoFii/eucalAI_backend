@@ -6,7 +6,7 @@ from datetime import datetime
 
 from sqlalchemy import func, select
 
-from common.db import BaseRepository
+from common.db import BaseRepository, ListParams, PaginatedResult
 from user_service.models import ApiCallLog, UsageStat
 
 
@@ -59,14 +59,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
     async def list_usage_logs(
         self,
         *,
+        params: ListParams,
         user_id: int | None,
-        start: datetime | None,
-        end: datetime | None,
         api_key_id: int | None,
         model_name: str | None,
-        page: int,
-        page_size: int,
-    ) -> tuple[list[ApiCallLog], int]:
+    ) -> PaginatedResult[ApiCallLog]:
         query = select(ApiCallLog)
         if user_id is not None:
             query = query.where(ApiCallLog.user_id == user_id)
@@ -74,11 +71,49 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             query = query.where(ApiCallLog.api_key_id == api_key_id)
         if model_name is not None:
             query = query.where(ApiCallLog.model_name == model_name)
-        if start is not None:
-            query = query.where(ApiCallLog.created_at >= start)
-        if end is not None:
-            query = query.where(ApiCallLog.created_at < end)
-        query = query.order_by(ApiCallLog.created_at.desc())
+        if params.time_field is not None:
+            start, end = params.validate_time_range()
+            time_column = getattr(ApiCallLog, params.time_field)
+            query = query.where(time_column >= start, time_column < end)
+        order_by = params.order_by or "created_at"
+        order_column = getattr(ApiCallLog, order_by)
+        query = query.order_by(order_column.asc() if params.order_dir == "asc" else order_column.desc())
         total = int((await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0)
-        items = list((await self.session.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
+        items = list(
+            (
+                await self.session.execute(
+                    query.offset((params.page - 1) * params.page_size).limit(params.page_size)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return PaginatedResult(items=items, total=total, page=params.page, page_size=params.page_size)
+
+    async def list_logs_for_hour(self, stat_hour: datetime, next_hour: datetime) -> list[ApiCallLog]:
+        query = select(ApiCallLog).where(
+            ApiCallLog.created_at >= stat_hour,
+            ApiCallLog.created_at < next_hour,
+        )
+        return list((await self.session.execute(query)).scalars().all())
+
+    async def get_bucket(
+        self,
+        *,
+        user_id: int,
+        api_key_id: int | None,
+        model_name: str,
+        stat_hour: datetime,
+    ) -> UsageStat | None:
+        return (
+            await self.session.execute(
+                select(UsageStat).where(
+                    UsageStat.user_id == user_id,
+                    UsageStat.model_name == model_name,
+                    UsageStat.stat_hour == stat_hour,
+                    UsageStat.api_key_id.is_(None)
+                    if api_key_id is None
+                    else UsageStat.api_key_id == api_key_id,
+                )
+            )
+        ).scalar_one_or_none()

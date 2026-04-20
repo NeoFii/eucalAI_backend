@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db import ListParams, PaginatedResult
 from user_service.models import ApiCallLog, UsageStat
 from user_service.repositories import UsageStatRepository
 
@@ -18,18 +18,8 @@ class UsageStatService:
     @staticmethod
     async def aggregate_hour(db: AsyncSession, stat_hour: datetime) -> None:
         next_hour = stat_hour + timedelta(hours=1)
-        logs = list(
-            (
-                await db.execute(
-                    select(ApiCallLog).where(
-                        ApiCallLog.created_at >= stat_hour,
-                        ApiCallLog.created_at < next_hour,
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+        repo = UsageStatRepository(db)
+        logs = await repo.list_logs_for_hour(stat_hour, next_hour)
 
         buckets: dict[tuple[int, int | None, str], dict[str, int]] = defaultdict(
             lambda: {
@@ -52,21 +42,15 @@ class UsageStatService:
             UsageStatService._accumulate_bucket(
                 buckets[(int(log.user_id), None, log.model_name)],
                 log,
-            )
+        )
 
         for (user_id, api_key_id, model_name), metrics in buckets.items():
-            existing = (
-                await db.execute(
-                    select(UsageStat).where(
-                        UsageStat.user_id == user_id,
-                        UsageStat.model_name == model_name,
-                        UsageStat.stat_hour == stat_hour,
-                        UsageStat.api_key_id.is_(None)
-                        if api_key_id is None
-                        else UsageStat.api_key_id == api_key_id,
-                    )
-                )
-            ).scalar_one_or_none()
+            existing = await repo.get_bucket(
+                user_id=user_id,
+                api_key_id=api_key_id,
+                model_name=model_name,
+                stat_hour=stat_hour,
+            )
             if existing is None:
                 existing = UsageStat(
                     user_id=user_id,
@@ -75,7 +59,7 @@ class UsageStatService:
                     model_name=model_name,
                     stat_hour=stat_hour,
                 )
-                db.add(existing)
+                repo.add(existing)
             for field, value in metrics.items():
                 setattr(existing, field, value)
 
@@ -117,22 +101,16 @@ class UsageStatService:
     async def list_usage_logs(
         db: AsyncSession,
         *,
+        params: ListParams,
         user_id: int | None = None,
-        start: datetime | None = None,
-        end: datetime | None = None,
         api_key_id: int | None = None,
         model_name: str | None = None,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> tuple[list[ApiCallLog], int]:
+    ) -> PaginatedResult[ApiCallLog]:
         return await UsageStatRepository(db).list_usage_logs(
+            params=params,
             user_id=user_id,
-            start=start,
-            end=end,
             api_key_id=api_key_id,
             model_name=model_name,
-            page=page,
-            page_size=page_size,
         )
 
     @staticmethod

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from common.db import BaseRepository
+from common.db import BaseRepository, ListParams, PaginatedResult
 from user_service.models import BalanceTransaction
 
 
@@ -27,25 +27,28 @@ class BalanceTxRepository(BaseRepository[BalanceTransaction]):
         ).scalar_one_or_none()
         return isinstance(existing, BalanceTransaction)
 
-    async def list_for_user(self, *, user_id: int, page: int, page_size: int) -> tuple[list[BalanceTransaction], int]:
-        query = select(BalanceTransaction).where(BalanceTransaction.user_id == user_id).order_by(
-            BalanceTransaction.created_at.desc()
+    async def list_for_user(
+        self,
+        *,
+        user_id: int,
+        params: ListParams,
+    ) -> PaginatedResult[BalanceTransaction]:
+        if params.order_by is None:
+            params.order_by = "created_at"
+        return await self.get_list(
+            params,
+            extra_filters=(BalanceTransaction.user_id == user_id,),
         )
-        total = int((await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0)
-        items = list((await self.session.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
 
     async def list_all(
         self,
         *,
         user_id: int | None,
-        page: int,
-        page_size: int,
-    ) -> tuple[list[BalanceTransaction], int]:
-        query = select(BalanceTransaction)
+        params: ListParams,
+    ) -> PaginatedResult[BalanceTransaction]:
+        if params.order_by is None:
+            params.order_by = "created_at"
+        filters = ()
         if user_id is not None:
-            query = query.where(BalanceTransaction.user_id == user_id)
-        query = query.order_by(BalanceTransaction.created_at.desc())
-        total = int((await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0)
-        items = list((await self.session.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
+            filters = (BalanceTransaction.user_id == user_id,)
+        return await self.get_list(params, extra_filters=filters)

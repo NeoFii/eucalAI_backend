@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.core.exceptions import ValidationException
+from common.db import ListParams
 from common.utils.timezone import now
 from user_service.dependencies import get_db_session
 from user_service.models import User
@@ -31,20 +31,28 @@ DEFAULT_BILLING_LOOKBACK_DAYS = 30
 MAX_BILLING_RANGE_DAYS = 90
 
 
-def _resolve_time_window(
-    start: datetime | None,
-    end: datetime | None,
+def _build_list_params(
     *,
+    page: int = 1,
+    page_size: int = 20,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    time_field: str | None = None,
     default_days: int = DEFAULT_BILLING_LOOKBACK_DAYS,
-    max_days: int = MAX_BILLING_RANGE_DAYS,
-) -> tuple[datetime, datetime]:
-    effective_end = end or now()
-    effective_start = start or (effective_end - timedelta(days=default_days))
-    if effective_start >= effective_end:
-        raise ValidationException(detail="开始时间必须早于结束时间")
-    if effective_end - effective_start > timedelta(days=max_days):
-        raise ValidationException(detail=f"时间范围不能超过 {max_days} 天")
-    return effective_start, effective_end
+    order_by: str | None = None,
+) -> ListParams:
+    params = ListParams(
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+        time_field=time_field,
+        start=start,
+        end=end,
+        max_span_days=MAX_BILLING_RANGE_DAYS,
+    )
+    if time_field is not None:
+        params.validate_time_range(default_end=now(), default_days=default_days)
+    return params
 
 
 @router.get("/balance", response_model=ApiResponse[BalanceResponseData], summary="Get current balance")
@@ -77,20 +85,19 @@ async def list_transactions(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    items, total = await BalanceService.list_transactions(
+    result = await BalanceService.list_transactions(
         db,
         user_id=int(current_user.id),
-        page=page,
-        page_size=page_size,
+        params=ListParams(page=page, page_size=page_size, order_by="created_at"),
     )
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "items": [BalanceTransactionItem.model_validate(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "items": [BalanceTransactionItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
         },
     }
 
@@ -106,20 +113,19 @@ async def list_topup_orders(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    items, total = await TopupOrderService.get_user_orders(
+    result = await TopupOrderService.get_user_orders(
         db,
         user_id=int(current_user.id),
-        page=page,
-        page_size=page_size,
+        params=ListParams(page=page, page_size=page_size, order_by="created_at"),
     )
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "items": [TopupOrderItem.model_validate(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "items": [TopupOrderItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
         },
     }
 
@@ -133,12 +139,12 @@ async def list_usage_stats(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    effective_start, effective_end = _resolve_time_window(start, end)
+    params = _build_list_params(start=start, end=end, time_field="stat_hour")
     items = await UsageStatService.get_user_stats(
         db,
         user_id=int(current_user.id),
-        start=effective_start,
-        end=effective_end,
+        start=params.start,
+        end=params.end,
         model_name=model_name,
         api_key_id=api_key_id,
     )
@@ -164,24 +170,28 @@ async def list_usage_logs(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    effective_start, effective_end = _resolve_time_window(start, end)
-    items, total = await UsageStatService.list_usage_logs(
-        db,
-        user_id=int(current_user.id),
-        start=effective_start,
-        end=effective_end,
-        model_name=model_name,
-        api_key_id=api_key_id,
+    params = _build_list_params(
         page=page,
         page_size=page_size,
+        start=start,
+        end=end,
+        time_field="created_at",
+        order_by="created_at",
+    )
+    result = await UsageStatService.list_usage_logs(
+        db,
+        params=params,
+        user_id=int(current_user.id),
+        model_name=model_name,
+        api_key_id=api_key_id,
     )
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "items": [ApiCallLogItem.model_validate(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "items": [ApiCallLogItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
         },
     }
