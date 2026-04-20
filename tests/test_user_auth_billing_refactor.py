@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
+
+os.environ["INTERNAL_SECRET"] = "test_secret"
+os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
 
 @pytest.mark.asyncio
@@ -69,14 +74,37 @@ def test_gateway_module_exports_admin_invitation_gateway():
 
 def test_auth_and_billing_schema_modules_export_current_types():
     from user_service.schemas.auth import RegisterRequest
-    from user_service.schemas.billing import ApiCallLogItem, BalanceResponseData, TopupOrderItem, UsageStatItem
-    from user_service.schemas.billing_admin import AdminApiCallLogItem, AdminTopupOrderItem, AdminUsageStatItem
+    from user_service.schemas.billing import (
+        ApiCallLogItem,
+        BalanceResponseData,
+        BalanceTransactionItem,
+        TopupOrderItem,
+        UsageStatItem,
+    )
+    from user_service.schemas.billing_admin import (
+        AdminApiCallLogItem,
+        AdminBalanceTransactionItem,
+        AdminTopupOrderItem,
+        AdminUsageStatItem,
+    )
 
     assert RegisterRequest is not None
     assert BalanceResponseData is not None
+    assert BalanceTransactionItem is not None
     assert TopupOrderItem is not None
     assert UsageStatItem is not None
     assert ApiCallLogItem is not None
+    assert AdminBalanceTransactionItem is not None
     assert AdminTopupOrderItem is not None
     assert AdminUsageStatItem is not None
     assert AdminApiCallLogItem is not None
+    assert RegisterRequest.__module__ == "user_service.schemas.auth"
+    assert BalanceResponseData.__module__ == "user_service.schemas.billing"
+    assert BalanceTransactionItem.__module__ == "user_service.schemas.billing"
+    assert TopupOrderItem.__module__ == "user_service.schemas.billing"
+    assert UsageStatItem.__module__ == "user_service.schemas.billing"
+    assert ApiCallLogItem.__module__ == "user_service.schemas.billing"
+    assert AdminBalanceTransactionItem.__module__ == "user_service.schemas.billing_admin"
+    assert AdminTopupOrderItem.__module__ == "user_service.schemas.billing_admin"
+    assert AdminUsageStatItem.__module__ == "user_service.schemas.billing_admin"
+    assert AdminApiCallLogItem.__module__ == "user_service.schemas.billing_admin"

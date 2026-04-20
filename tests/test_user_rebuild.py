@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import os
 from types import SimpleNamespace
 
 import pytest
+
+os.environ["INTERNAL_SECRET"] = "test_secret"
+os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
 
 class ScalarResult:
@@ -146,20 +150,27 @@ def test_balance_response_exposes_available_and_frozen_amounts():
 
     assert payload.available_balance == 760
     assert payload.frozen_amount == 120
+    assert BalanceResponseData.__module__ == "user_service.schemas.billing"
 
 
 def test_user_billing_response_schemas_do_not_expose_internal_ids():
-    from user_service.schemas import ApiCallLogItem, TopupOrderItem, UsageStatItem
+    from user_service.schemas import ApiCallLogItem, BalanceTransactionItem, TopupOrderItem, UsageStatItem
 
+    tx_fields = set(BalanceTransactionItem.model_fields)
     order_fields = set(TopupOrderItem.model_fields)
     stat_fields = set(UsageStatItem.model_fields)
     log_fields = set(ApiCallLogItem.model_fields)
 
+    assert "operator_id" not in tx_fields
     assert "user_id" not in order_fields
     assert "operator_id" not in order_fields
     assert "user_id" not in stat_fields
     assert "user_id" not in log_fields
     assert "ip" not in log_fields
+    assert BalanceTransactionItem.__module__ == "user_service.schemas.billing"
+    assert TopupOrderItem.__module__ == "user_service.schemas.billing"
+    assert UsageStatItem.__module__ == "user_service.schemas.billing"
+    assert ApiCallLogItem.__module__ == "user_service.schemas.billing"
 
 
 def test_api_key_request_normalizes_policy_fields():
@@ -593,6 +604,7 @@ async def test_usage_stat_service_aggregate_hour_creates_key_and_account_buckets
 async def test_billing_usage_logs_default_to_recent_window(monkeypatch):
     from datetime import datetime
 
+    from common.db.query import PaginatedResult
     from user_service.api.v1.endpoints import billing
 
     fixed_now = datetime(2026, 4, 20, 12, 0, 0)
@@ -600,7 +612,7 @@ async def test_billing_usage_logs_default_to_recent_window(monkeypatch):
 
     async def fake_list_usage_logs(_db, **kwargs):
         captured.update(kwargs)
-        return [], 0
+        return PaginatedResult(items=[], total=0, page=kwargs["params"].page, page_size=kwargs["params"].page_size)
 
     monkeypatch.setattr(billing, "now", lambda: fixed_now)
     monkeypatch.setattr(
@@ -617,8 +629,45 @@ async def test_billing_usage_logs_default_to_recent_window(monkeypatch):
 
     assert response["data"]["total"] == 0
     assert captured["user_id"] == 7
-    assert captured["start"] == fixed_now - timedelta(days=30)
-    assert captured["end"] == fixed_now
+    assert captured["params"].start == fixed_now - timedelta(days=30)
+    assert captured["params"].end == fixed_now
+    assert captured["params"].time_field == "created_at"
+
+
+@pytest.mark.asyncio
+async def test_balance_tx_repository_list_for_user_uses_paginated_result():
+    from common.db.query import ListParams, PaginatedResult
+    from user_service.repositories.balance_tx_repository import BalanceTxRepository
+
+    class CountResult:
+        def scalar(self):
+            return 2
+
+    class ItemsResult:
+        def scalars(self):
+            return SimpleNamespace(all=lambda: ["tx-1"])
+
+    class FakeSession:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                return CountResult()
+            return ItemsResult()
+
+    repo = BalanceTxRepository(FakeSession())
+    result = await repo.list_for_user(
+        user_id=7,
+        params=ListParams(page=2, page_size=5, order_by="created_at"),
+    )
+
+    assert isinstance(result, PaginatedResult)
+    assert result.items == ["tx-1"]
+    assert result.total == 2
+    assert result.page == 2
+    assert result.page_size == 5
 
 
 @pytest.mark.asyncio

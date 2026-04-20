@@ -1,6 +1,8 @@
 """Basic user-service smoke tests."""
 
 from datetime import datetime
+import importlib
+import inspect
 import os
 import sys
 from types import SimpleNamespace
@@ -208,6 +210,16 @@ class TestUserServices:
         from user_service.services import email_service
 
         assert email_service is not None
+
+    def test_email_service_uses_repository_boundary(self):
+        email_service_module = importlib.import_module("user_service.services.email_service")
+
+        source = inspect.getsource(email_service_module.EmailService)
+
+        assert "db.execute(" not in source
+        assert "select(" not in source
+        assert "db.delete(" not in source
+        assert "db.add(" not in source
 
     @pytest.mark.asyncio
     async def test_register_persists_invitation_release_outbox_when_release_fails(
@@ -562,6 +574,15 @@ class TestUserServices:
         assert db.commit_calls == 1
         assert db.revoked_at_commit is True
         assert all(session.revoked_at is not None for session in sessions)
+
+    def test_usage_stat_service_uses_repository_boundary(self):
+        import user_service.services.usage_stat_service as usage_stat_service_module
+
+        source = inspect.getsource(usage_stat_service_module.UsageStatService)
+
+        assert "db.execute(" not in source
+        assert "select(" not in source
+        assert "db.add(" not in source
 
     @pytest.mark.asyncio
     async def test_login_commits_once_for_session_rotation(self, monkeypatch):

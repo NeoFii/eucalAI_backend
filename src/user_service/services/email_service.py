@@ -10,7 +10,6 @@ from datetime import timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import CodeExpiredException, CodeNotFoundException, InvalidCodeException
@@ -18,6 +17,7 @@ from common.utils.password import hash_password, verify_password
 from common.utils.timezone import now
 from user_service.config import settings
 from user_service.models.email_verification_code import EmailVerificationCode
+from user_service.repositories.email_code_repository import EmailCodeRepository
 from user_service.utils.email import normalize_email
 
 logger = logging.getLogger(__name__)
@@ -84,26 +84,13 @@ class EmailService:
         purpose: str = "register",
     ) -> tuple[bool, str]:
         email = normalize_email(email)
+        repo = EmailCodeRepository(db)
         today_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
-        count_stmt = select(func.count()).select_from(EmailVerificationCode).where(
-            EmailVerificationCode.email == email,
-            EmailVerificationCode.purpose == purpose,
-            EmailVerificationCode.created_at >= today_start,
-        )
-        count = (await db.execute(count_stmt)).scalar() or 0
+        count = await repo.count_created_since(email, purpose, today_start)
         if count >= 3:
             return False, "Daily verification code limit reached"
 
-        latest_stmt = (
-            select(EmailVerificationCode)
-            .where(
-                EmailVerificationCode.email == email,
-                EmailVerificationCode.purpose == purpose,
-            )
-            .order_by(EmailVerificationCode.created_at.desc())
-            .limit(1)
-        )
-        latest = (await db.execute(latest_stmt)).scalar_one_or_none()
+        latest = await repo.latest_for_email(email, purpose)
         if latest and latest.locked_until and now() < latest.locked_until:
             return False, "Verification code input is temporarily locked"
 
@@ -114,14 +101,9 @@ class EmailService:
         if not result[0]:
             return result
 
-        old_stmt = select(EmailVerificationCode).where(
-            EmailVerificationCode.email == email,
-            EmailVerificationCode.purpose == purpose,
-            EmailVerificationCode.used_at.is_(None),
-        )
-        old_codes = (await db.execute(old_stmt)).scalars().all()
+        old_codes = await repo.list_unused_for_email(email, purpose)
         for old_code in old_codes:
-            await db.delete(old_code)
+            await repo.delete(old_code)
 
         verification = EmailVerificationCode(
             email=email,
@@ -129,7 +111,7 @@ class EmailService:
             purpose=purpose,
             expires_at=expires_at,
         )
-        db.add(verification)
+        repo.add(verification)
         await db.flush()
 
         try:
@@ -160,17 +142,7 @@ class EmailService:
         purpose: str = "register",
     ) -> EmailVerificationCode:
         email = normalize_email(email)
-        stmt = (
-            select(EmailVerificationCode)
-            .where(
-                EmailVerificationCode.email == email,
-                EmailVerificationCode.purpose == purpose,
-                EmailVerificationCode.used_at.is_(None),
-            )
-            .order_by(EmailVerificationCode.created_at.desc())
-            .limit(1)
-        )
-        record = (await db.execute(stmt)).scalar_one_or_none()
+        record = await EmailCodeRepository(db).latest_unused_for_email(email, purpose)
         if not record:
             raise CodeNotFoundException()
 

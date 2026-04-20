@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db import ListParams, PaginatedResult
 from common.core.exceptions import UserNotFoundException, ValidationException
 from user_service.models import BalanceTransaction, TopupOrder, User, UserApiKey
 from user_service.repositories import (
@@ -238,13 +238,11 @@ class BalanceService:
         db: AsyncSession,
         *,
         user_id: int,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> tuple[list[BalanceTransaction], int]:
+        params: ListParams,
+    ) -> PaginatedResult[BalanceTransaction]:
         return await BalanceTxRepository(db).list_for_user(
             user_id=user_id,
-            page=page,
-            page_size=page_size,
+            params=params,
         )
 
     @staticmethod
@@ -252,13 +250,11 @@ class BalanceService:
         db: AsyncSession,
         *,
         user_id: int | None = None,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> tuple[list[BalanceTransaction], int]:
+        params: ListParams,
+    ) -> PaginatedResult[BalanceTransaction]:
         return await BalanceTxRepository(db).list_all(
             user_id=user_id,
-            page=page,
-            page_size=page_size,
+            params=params,
         )
 
     @staticmethod

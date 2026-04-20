@@ -2,6 +2,7 @@
 
 import os
 import sys
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -192,6 +193,28 @@ class TestDatabaseRefactorPrimitives:
         assert params.page_size > 0
         assert params.order_dir == "desc"
 
+    def test_list_params_validate_time_range_defaults_and_rejects_large_windows(self):
+        from common.core.exceptions import ValidationException
+        from common.db.query import ListParams
+
+        default_end = datetime(2026, 4, 20, 12, 0, 0)
+        params = ListParams(time_field="created_at")
+
+        start, end = params.validate_time_range(default_end=default_end)
+
+        assert start == default_end - timedelta(days=30)
+        assert end == default_end
+
+        too_wide = ListParams(
+            time_field="created_at",
+            start=datetime(2026, 1, 1, 0, 0, 0),
+            end=datetime(2026, 1, 20, 0, 0, 0),
+            max_span_days=7,
+        )
+
+        with pytest.raises(ValidationException, match="时间范围不能超过 7 天"):
+            too_wide.validate_time_range()
+
     def test_paginated_result_preserves_payload(self):
         from common.db.query import PaginatedResult
 
@@ -208,6 +231,54 @@ class TestDatabaseRefactorPrimitives:
         gateway = BaseGateway(service_name="admin-service")
 
         assert gateway.service_name == "admin-service"
+
+    @pytest.mark.asyncio
+    async def test_base_repository_get_list_applies_filters_time_window_and_pagination(self):
+        from common.db.query import ListParams
+        from common.db.repository import BaseRepository
+        from user_service.models import BalanceTransaction
+
+        class CountResult:
+            def scalar(self):
+                return 3
+
+        class ItemsResult:
+            def scalars(self):
+                return type("ScalarRows", (), {"all": lambda _self: ["tx-1", "tx-2"]})()
+
+        class FakeSession:
+            def __init__(self):
+                self.statements = []
+
+            async def execute(self, statement):
+                self.statements.append(statement)
+                if len(self.statements) == 1:
+                    return CountResult()
+                return ItemsResult()
+
+        repo = BaseRepository(FakeSession(), BalanceTransaction)
+        params = ListParams(
+            page=2,
+            page_size=5,
+            order_by="created_at",
+            order_dir="desc",
+            time_field="created_at",
+            start=datetime(2026, 4, 1, 0, 0, 0),
+            end=datetime(2026, 4, 20, 0, 0, 0),
+        )
+
+        result = await repo.get_list(
+            params,
+            extra_filters=(BalanceTransaction.user_id == 7,),
+        )
+
+        assert result.items == ["tx-1", "tx-2"]
+        assert result.total == 3
+        assert result.page == 2
+        assert result.page_size == 5
+        assert "balance_transactions.user_id" in str(repo.session.statements[0])
+        assert "balance_transactions.created_at >=" in str(repo.session.statements[1])
+        assert "LIMIT :param_1 OFFSET :param_2" in str(repo.session.statements[1])
 
 
 class TestObservabilityAndHealth:

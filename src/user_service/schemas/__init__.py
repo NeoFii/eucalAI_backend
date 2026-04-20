@@ -30,6 +30,7 @@ from user_service.schemas.billing import (
 from user_service.schemas.billing_admin import (
     AdminAdjustBalanceRequest,
     AdminApiCallLogItem,
+    AdminBalanceTransactionItem,
     AdminTopupOrderItem,
     AdminTopupRequest,
     AdminUsageStatItem,
@@ -40,6 +41,7 @@ from user_service.schemas.keys import ApiKeyCreateData, ApiKeyCreateRequest, Api
 __all__ = [
     "AdminAdjustBalanceRequest",
     "AdminApiCallLogItem",
+    "AdminBalanceTransactionItem",
     "AdminTopupOrderItem",
     "AdminTopupRequest",
     "AdminUsageStatItem",

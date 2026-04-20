@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from common.db import BaseRepository
+from common.db import BaseRepository, ListParams, PaginatedResult
 from user_service.models import TopupOrder
 
 
@@ -30,26 +30,23 @@ class TopupOrderRepository(BaseRepository[TopupOrder]):
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
-    async def list_for_user(self, *, user_id: int, page: int, page_size: int) -> tuple[list[TopupOrder], int]:
-        query = select(TopupOrder).where(TopupOrder.user_id == user_id).order_by(TopupOrder.created_at.desc())
-        total = int((await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0)
-        items = list((await self.session.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
+    async def list_for_user(self, *, user_id: int, params: ListParams) -> PaginatedResult[TopupOrder]:
+        if params.order_by is None:
+            params.order_by = "created_at"
+        return await self.get_list(params, extra_filters=(TopupOrder.user_id == user_id,))
 
     async def list_all(
         self,
         *,
-        page: int,
-        page_size: int,
+        params: ListParams,
         user_id: int | None,
         status: int | None,
-    ) -> tuple[list[TopupOrder], int]:
-        query = select(TopupOrder)
+    ) -> PaginatedResult[TopupOrder]:
+        filters = []
         if user_id is not None:
-            query = query.where(TopupOrder.user_id == user_id)
+            filters.append(TopupOrder.user_id == user_id)
         if status is not None:
-            query = query.where(TopupOrder.status == status)
-        query = query.order_by(TopupOrder.created_at.desc())
-        total = int((await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0)
-        items = list((await self.session.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
+            filters.append(TopupOrder.status == status)
+        if params.order_by is None:
+            params.order_by = "created_at"
+        return await self.get_list(params, extra_filters=tuple(filters))
