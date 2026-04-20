@@ -81,7 +81,7 @@ async def test_invitation_code_generation_to_user_registration_flow(monkeypatch)
         fake_verify_code,
     )
     monkeypatch.setattr(
-        "user_service.services.auth_service.AdminInvitationClientService.consume_invitation_code",
+        "user_service.services.auth_service.AuthService._admin_gateway.consume_invitation_code",
         fake_consume_invitation,
     )
     monkeypatch.setattr(
@@ -190,11 +190,11 @@ async def test_failed_registration_releases_consumed_invitation_code(monkeypatch
         fake_verify_code,
     )
     monkeypatch.setattr(
-        "user_service.services.auth_service.AdminInvitationClientService.consume_invitation_code",
+        "user_service.services.auth_service.AuthService._admin_gateway.consume_invitation_code",
         fake_consume_invitation,
     )
     monkeypatch.setattr(
-        "user_service.services.auth_service.AdminInvitationClientService.release_invitation_code",
+        "user_service.services.auth_service.AuthService._admin_gateway.release_invitation_code",
         fake_release_invitation,
     )
     monkeypatch.setattr(

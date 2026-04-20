@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -137,6 +138,47 @@ def test_user_internal_endpoint_accepts_signed_internal_request():
     assert response.json()["uid"] == 1001
 
 
+@pytest.mark.asyncio
+async def test_user_internal_api_key_validation_endpoint_hashes_and_delegates(monkeypatch):
+    from user_service.api.v1.endpoints.internal import (
+        InternalApiKeyValidateRequest,
+        validate_api_key,
+    )
+    from user_service.services.api_key_service import ApiKeyService
+
+    captured = {}
+
+    async def fake_validate(db, key_hash, *, model=None, client_ip=None):
+        captured["call"] = {
+            "db": db,
+            "key_hash": key_hash,
+            "model": model,
+            "client_ip": client_ip,
+        }
+        return SimpleNamespace(id=9, user_id=5, name="default")
+
+    monkeypatch.setattr(ApiKeyService, "validate_by_hash", fake_validate)
+
+    fake_db = object()
+    response = await validate_api_key(
+        payload=InternalApiKeyValidateRequest(
+            key="sk-test-123",
+            model="gpt-4o-mini",
+            client_ip="203.0.113.8",
+        ),
+        _=None,
+        db=fake_db,
+    )
+
+    assert response.model_dump() == {"id": 9, "user_id": 5, "name": "default"}
+    assert captured["call"] == {
+        "db": fake_db,
+        "key_hash": hashlib.sha256(b"sk-test-123").hexdigest(),
+        "model": "gpt-4o-mini",
+        "client_ip": "203.0.113.8",
+    }
+
+
 def test_user_internal_endpoint_rejects_untrusted_caller():
     from common.internal import build_internal_headers
 
@@ -157,6 +199,110 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Invalid internal caller"
+
+
+@pytest.mark.asyncio
+async def test_router_api_key_dependency_uses_user_internal_contract(monkeypatch):
+    import json
+    from starlette.requests import Request
+
+    from router_service.dependencies import require_api_key
+
+    captured = {}
+
+    async def fake_validate_api_key(*, api_key, model=None, client_ip=None):
+        captured["call"] = {
+            "api_key": api_key,
+            "model": model,
+            "client_ip": client_ip,
+        }
+        return SimpleNamespace(id=7, user_id=5, name="default")
+
+    monkeypatch.setattr(
+        "router_service.dependencies.IdentityClientService.validate_api_key",
+        fake_validate_api_key,
+    )
+
+    body = json.dumps(
+        {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "hi"}]}
+    ).encode("utf-8")
+    delivered = False
+
+    async def receive():
+        nonlocal delivered
+        if delivered:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        delivered = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "query_string": b"",
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"x-forwarded-for", b"203.0.113.8, 10.0.0.1"),
+            ],
+            "client": ("127.0.0.1", 12345),
+        },
+        receive,
+    )
+
+    principal = await require_api_key(request, authorization="Bearer sk-user-123")
+
+    assert principal.id == 7
+    assert principal.user_id == 5
+    assert captured["call"] == {
+        "api_key": "sk-user-123",
+        "model": "gpt-4o-mini",
+        "client_ip": "203.0.113.8",
+    }
+    assert request.state.api_key_principal.id == 7
+
+
+@pytest.mark.asyncio
+async def test_router_api_key_dependency_maps_invalid_key_to_401(monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    from common.internal import InternalServiceResponseError
+    from router_service.dependencies import require_api_key
+
+    async def fake_validate_api_key(**_kwargs):
+        raise InternalServiceResponseError(
+            "user-service returned 404",
+            target_service="user-service",
+            path="/api/v1/internal/api-keys/validate",
+            status_code=404,
+            detail="API Key 不存在",
+        )
+
+    monkeypatch.setattr(
+        "router_service.dependencies.IdentityClientService.validate_api_key",
+        fake_validate_api_key,
+    )
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/v1/models",
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+        },
+        receive,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await require_api_key(request, authorization="Bearer sk-invalid")
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "invalid api key"
 
 
 def test_admin_internal_endpoint_requires_signed_internal_request():
@@ -836,7 +982,7 @@ async def test_testing_catalog_client_maps_internal_failure(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_admin_invitation_client_maps_invitation_errors(monkeypatch):
-    from user_service.services.admin_client import AdminInvitationClientService
+    from user_service.gateway import AdminInvitationGateway
 
     request = httpx.Request("POST", "http://admin_service/api/v1/internal/invitation-codes/consume")
 
@@ -848,10 +994,10 @@ async def test_admin_invitation_client_maps_invitation_errors(monkeypatch):
         )
         raise httpx.HTTPStatusError("conflict", request=request, response=response)
 
-    monkeypatch.setattr("user_service.services.admin_client.post_internal_json", fake_used)
+    monkeypatch.setattr("user_service.gateway.post_internal_json", fake_used)
 
     with pytest.raises(Exception) as exc_info:
-        await AdminInvitationClientService.consume_invitation_code("INVITE", 1)
+        await AdminInvitationGateway().consume_invitation_code("INVITE", 1)
 
     assert exc_info.type.__name__ == "InvitationCodeUsedException"
 
@@ -859,7 +1005,7 @@ async def test_admin_invitation_client_maps_invitation_errors(monkeypatch):
 @pytest.mark.asyncio
 async def test_admin_invitation_client_maps_internal_response_errors(monkeypatch):
     from common.internal import InternalServiceResponseError
-    from user_service.services.admin_client import AdminInvitationClientService
+    from user_service.gateway import AdminInvitationGateway
 
     async def fake_used(**_kwargs):
         raise InternalServiceResponseError(
@@ -870,24 +1016,24 @@ async def test_admin_invitation_client_maps_internal_response_errors(monkeypatch
             detail="Invitation code already used",
         )
 
-    monkeypatch.setattr("user_service.services.admin_client.post_internal_json", fake_used)
+    monkeypatch.setattr("user_service.gateway.post_internal_json", fake_used)
 
     with pytest.raises(Exception) as exc_info:
-        await AdminInvitationClientService.consume_invitation_code("INVITE", 1)
+        await AdminInvitationGateway().consume_invitation_code("INVITE", 1)
 
     assert exc_info.type.__name__ == "InvitationCodeUsedException"
 
 
 @pytest.mark.asyncio
 async def test_admin_invitation_client_release_returns_flag(monkeypatch):
-    from user_service.services.admin_client import AdminInvitationClientService
+    from user_service.gateway import AdminInvitationGateway
 
     async def fake_release(**_kwargs):
         return {"released": True}
 
-    monkeypatch.setattr("user_service.services.admin_client.post_internal_json", fake_release)
+    monkeypatch.setattr("user_service.gateway.post_internal_json", fake_release)
 
-    released = await AdminInvitationClientService.release_invitation_code("INVITE", 1)
+    released = await AdminInvitationGateway().release_invitation_code("INVITE", 1)
     assert released is True
 
 
@@ -937,9 +1083,10 @@ def test_compose_and_dockerfile_include_router_and_testing_worker():
 def test_user_and_admin_services_do_not_auto_init_schema_by_default():
     repo_root = Path(__file__).resolve().parent.parent
     common_config = (repo_root / "src" / "common" / "config.py").read_text(encoding="utf-8")
-    user_main = (repo_root / "src" / "user_service" / "main.py").read_text(encoding="utf-8")
+    backend_main = (repo_root / "src" / "backend_app" / "main.py").read_text(encoding="utf-8")
     admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
 
     assert "AUTO_INIT_DB: bool = False" in common_config
-    assert "if settings.AUTO_INIT_DB:" in user_main
+    # user-service no longer has a standalone main; backend_app owns the gate.
+    assert "if user_settings.AUTO_INIT_DB:" in backend_main
     assert "if settings.AUTO_INIT_DB:" in admin_main

@@ -31,6 +31,7 @@ from common.core.exceptions import (
 from user_service.config import settings
 from user_service.dependencies import get_current_user, get_db_session
 from user_service.models import User
+from user_service.policies import require_active_user
 from user_service.schemas import (
     AuthBaseResponse,
     AuthErrorResponse,
@@ -72,8 +73,7 @@ async def register(
     request: RegisterRequest,
     response: Response,
     db: AsyncSession = Depends(get_db_session),
-    user_agent: Optional[str] = None,
-    ip_address: Optional[str] = None,
+    request_obj: Request = None,
 ) -> RegisterResponse:
     """
     用户注册接口
@@ -86,6 +86,9 @@ async def register(
     5. 返回用户信息和 Token
     """
     try:
+        user_agent = request_obj.headers.get("user-agent") if request_obj else None
+        ip_address = request_obj.client.host if request_obj and request_obj.client else None
+
         # 创建用户（内部会验证邀请码和邮箱验证码）
         user = await AuthService.register(db, request)
 
@@ -407,7 +410,7 @@ async def refresh_token(
     description="获取当前登录用户的详细信息",
 )
 async def get_me(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_user),
 ) -> UserInfoResponse:
     """
     获取当前登录用户信息
@@ -435,7 +438,7 @@ async def get_me(
 async def change_password(
     request: ChangePasswordRequest,
     response: Response,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> ChangePasswordResponse:
     """
@@ -514,9 +517,12 @@ async def send_email_code(
     - register: 用户注册
     - reset_password: 重置密码
     - login: 验证码登录
+    - verify: 邮箱验证
     """
     try:
-        await email_service.send_verification_code(db, request.email, request.purpose)
+        sent, message = await email_service.send_verification_code(db, request.email, request.purpose)
+        if not sent:
+            raise ServiceUnavailableException(detail=message)
 
         return AuthBaseResponse(code=200, message="验证码已发送")
 
@@ -541,7 +547,7 @@ async def verify_email(
     验证成功后标记用户邮箱为已验证。
     """
     try:
-        await email_service.verify_code_or_raise(db, request.email, request.code, "verify")
+        await AuthService.verify_email(db, request.email, request.code)
 
         return AuthBaseResponse(code=200, message="邮箱验证成功")
 

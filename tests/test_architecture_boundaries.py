@@ -113,7 +113,7 @@ def test_internal_service_clients_use_shared_internal_helpers():
         ROOT / "router_service" / "services" / "identity_client.py",
         ROOT / "router_service" / "services" / "testing_catalog_client.py",
         ROOT / "testing_service" / "services" / "admin_identity_client.py",
-        ROOT / "user_service" / "services" / "admin_client.py",
+        ROOT / "user_service" / "gateway.py",
     ]
 
     for path in internal_client_paths:

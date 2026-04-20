@@ -1,10 +1,35 @@
 """User service ORM models."""
 
 from user_service.models.user import User
-from user_service.models.user_active_session import UserActiveSession
 from user_service.models.user_session import UserSession
 from user_service.models.email_verification_code import EmailVerificationCode
+from user_service.models.user_api_key import UserApiKey
+from user_service.models.balance_transaction import BalanceTransaction
+from user_service.models.topup_order import TopupOrder
+from user_service.models.api_call_log import ApiCallLog
+from user_service.models.usage_stat import UsageStat
+from user_service.models.invitation_release_outbox import InvitationReleaseOutbox
 
-SERVICE_MODELS = [User, UserActiveSession, UserSession, EmailVerificationCode]
+SERVICE_MODELS = [
+    User,
+    UserSession,
+    EmailVerificationCode,
+    UserApiKey,
+    BalanceTransaction,
+    TopupOrder,
+    ApiCallLog,
+    UsageStat,
+    InvitationReleaseOutbox,
+]
 
-__all__ = ["User", "UserActiveSession", "UserSession", "EmailVerificationCode"]
+__all__ = [
+    "User",
+    "UserSession",
+    "EmailVerificationCode",
+    "UserApiKey",
+    "BalanceTransaction",
+    "TopupOrder",
+    "ApiCallLog",
+    "UsageStat",
+    "InvitationReleaseOutbox",
+]

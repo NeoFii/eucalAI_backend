@@ -7,7 +7,6 @@ import logging
 from datetime import timedelta
 from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import (
@@ -34,10 +33,12 @@ from common.utils import (
 from common.utils.jwt import decode_token, get_token_jti
 from common.utils.timezone import now
 from user_service.config import settings
-from user_service.models import User, UserSession
+from user_service.gateway import AdminInvitationGateway
+from user_service.models import InvitationReleaseOutbox, User, UserSession
+from user_service.repositories import SessionRepository, UserRepository
 from user_service.schemas import RegisterRequest
 from user_service.services.email_service import email_service
-from user_service.services.admin_client import AdminInvitationClientService
+from user_service.utils.email import normalize_email
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ LOGIN_LOCK_DURATION_HOURS = 1
 class AuthService:
     """认证服务类"""
 
+    _admin_gateway = AdminInvitationGateway()
+
     @staticmethod
     async def register(db: AsyncSession, data: RegisterRequest) -> User:
         """
@@ -55,9 +58,11 @@ class AuthService:
 
         通过内部 API 调用管理服务验证并核销邀请码
         """
+        email = normalize_email(data.email)
+        user_repo = UserRepository(db)
+
         # 检查邮箱是否已存在
-        result = await db.execute(select(User).where(User.email == data.email))
-        if result.scalar_one_or_none():
+        if await user_repo.get_by_email(email):
             raise EmailAlreadyExistsException()
 
         # 检查密码强度
@@ -66,14 +71,16 @@ class AuthService:
         if not ok:
             raise WeakPasswordException(detail=msg)
 
-        # 验证邮箱验证码
-        await email_service.verify_code_or_raise(db, data.email, data.verification_code, "register")
+        # 验证邮箱验证码，但延迟到本地事务成功后再消费
+        code_record = await email_service.get_valid_code_or_raise(
+            db, email, data.verification_code, "register"
+        )
 
         # 生成雪花 ID 作为 uid
         uid = generate_snowflake_id()
 
         # 通过内部 API 验证并核销邀请码
-        await AdminInvitationClientService.consume_invitation_code(data.invitation_code, uid)
+        await AuthService._admin_gateway.consume_invitation_code(data.invitation_code, uid)
 
         # 哈希密码
         password_hash = hash_password(data.password)
@@ -81,19 +88,41 @@ class AuthService:
         # 创建用户
         user = User(
             uid=uid,
-            email=data.email,
+            email=email,
             password_hash=password_hash,
             status=1,
             email_verified_at=now(),
         )
 
-        db.add(user)
+        user_repo.add(user)
+        email_service.mark_code_used(code_record)
         try:
             await db.commit()
-        except Exception:
+        except Exception as exc:
             await db.rollback()
-            await AdminInvitationClientService.release_invitation_code(data.invitation_code, uid)
-            raise
+            try:
+                released = await AuthService._admin_gateway.release_invitation_code(
+                    data.invitation_code, uid
+                )
+                if not released:
+                    db.add(
+                        InvitationReleaseOutbox(
+                            code=data.invitation_code,
+                            used_by_uid=uid,
+                            last_error="release_invitation_code returned false",
+                        )
+                    )
+                    await db.commit()
+            except Exception as release_exc:
+                db.add(
+                    InvitationReleaseOutbox(
+                        code=data.invitation_code,
+                        used_by_uid=uid,
+                        last_error=str(release_exc),
+                    )
+                )
+                await db.commit()
+            raise exc
         await db.refresh(user)
 
         logger.info(f"用户注册成功: {user.email}")
@@ -109,8 +138,10 @@ class AuthService:
     ) -> tuple[User, str, str]:
         """用户登录"""
         logger.info(f"尝试登录: {email}")
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        email = normalize_email(email)
+        user_repo = UserRepository(db)
+        session_repo = SessionRepository(db)
+        user = await user_repo.get_by_email(email)
 
         if not user:
             raise InvalidCredentialsException()
@@ -170,7 +201,7 @@ class AuthService:
             expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
         )
 
-        db.add(session)
+        session_repo.add(session)
         user.last_login_at = now()
         user.last_login_ip = ip_address
         await db.commit()
@@ -182,8 +213,8 @@ class AuthService:
     async def logout(db: AsyncSession, refresh_token: str) -> None:
         """用户登出"""
         token_jti = get_token_jti(refresh_token)
-        result = await db.execute(select(UserSession).where(UserSession.token_jti == token_jti))
-        session = result.scalar_one_or_none()
+        session_repo = SessionRepository(db)
+        session = await session_repo.get_by_token_jti(token_jti)
 
         if not session:
             raise SessionNotFoundException()
@@ -194,7 +225,7 @@ class AuthService:
         if session.is_revoked:
             raise SessionNotFoundException()
 
-        session.revoked_at = now()
+        session_repo.revoke(session)
         await db.commit()
         logger.info("用户登出成功")
 
@@ -209,8 +240,9 @@ class AuthService:
             raise TokenExpiredException(detail="无效的令牌类型")
 
         token_jti = get_token_jti(refresh_token)
-        result = await db.execute(select(UserSession).where(UserSession.token_jti == token_jti))
-        session = result.scalar_one_or_none()
+        session_repo = SessionRepository(db)
+        user_repo = UserRepository(db)
+        session = await session_repo.get_by_token_jti(token_jti)
 
         if not session:
             raise SessionNotFoundException()
@@ -224,8 +256,7 @@ class AuthService:
         if session.is_expired:
             raise SessionExpiredException()
 
-        user_result = await db.execute(select(User).where(User.id == session.user_id))
-        user = user_result.scalar_one_or_none()
+        user = await user_repo.get_by_id(session.user_id)
 
         if not user or user.status != 1:
             raise UserNotFoundException(detail="用户不存在或已被禁用")
@@ -256,21 +287,24 @@ class AuthService:
     @staticmethod
     async def get_current_user(db: AsyncSession, uid: int) -> Optional[User]:
         """通过 uid 获取当前用户"""
-        result = await db.execute(select(User).where(User.uid == uid))
-        return result.scalar_one_or_none()
+        return await UserRepository(db).get_by_uid(uid)
 
     @staticmethod
     async def verify_email(db: AsyncSession, email: str, code: str) -> User:
         """Verify a user's email and activate the account if needed."""
-        await email_service.verify_code_or_raise(db, email, code, "verify")
+        email = normalize_email(email)
+        code_record = await email_service.get_valid_code_or_raise(db, email, code, "verify")
 
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        user = await UserRepository(db).get_by_email(email)
         if not user:
             raise UserNotFoundException()
+        if user.status == 0:
+            raise UserDisabledException()
 
-        user.status = 1
+        if user.status == 2:
+            user.status = 1
         user.email_verified_at = now()
+        email_service.mark_code_used(code_record)
         await db.commit()
         await db.refresh(user)
         return user
@@ -287,23 +321,17 @@ class AuthService:
             raise WeakPasswordException(detail=msg)
 
         user.password_hash = hash_password(new_password)
-        await db.commit()
         await AuthService._revoke_all_user_sessions(db, user.id)
+        await db.commit()
         logger.info(f"用户修改密码成功: uid={user.uid}")
 
     @staticmethod
     async def _revoke_all_user_sessions(db: AsyncSession, user_id: int) -> None:
         """注销用户的所有会话"""
-        result = await db.execute(
-            select(UserSession).where(
-                UserSession.user_id == user_id,
-                UserSession.revoked_at.is_(None),
-            )
-        )
-        sessions = result.scalars().all()
+        session_repo = SessionRepository(db)
+        sessions = await session_repo.list_active_for_user(user_id)
         for session in sessions:
-            session.revoked_at = now()
-        await db.commit()
+            session_repo.revoke(session)
 
     @staticmethod
     async def login_with_code(
@@ -314,10 +342,10 @@ class AuthService:
         ip_address: Optional[str] = None,
     ) -> tuple[User, str, str]:
         """邮箱验证码登录"""
-        await email_service.verify_code_or_raise(db, email, code, "login")
+        email = normalize_email(email)
+        code_record = await email_service.get_valid_code_or_raise(db, email, code, "login")
 
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        user = await UserRepository(db).get_by_email(email)
 
         if not user:
             raise UserNotFoundException()
@@ -326,6 +354,9 @@ class AuthService:
             raise UserDisabledException()
         if user.status == 2:
             raise EmailNotVerifiedException()
+
+        user.login_fail_count = 0
+        user.login_locked_until = None
 
         await AuthService._revoke_all_user_sessions(db, user.id)
 
@@ -354,9 +385,10 @@ class AuthService:
             expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
         )
 
-        db.add(session)
+        SessionRepository(db).add(session)
         user.last_login_at = now()
         user.last_login_ip = ip_address
+        email_service.mark_code_used(code_record)
         await db.commit()
 
         logger.info(f"用户验证码登录成功: {email}, IP: {ip_address}")
@@ -365,13 +397,17 @@ class AuthService:
     @staticmethod
     async def reset_password(db: AsyncSession, email: str, code: str, new_password: str, lang: str = "zh") -> None:
         """通过邮箱验证码重置密码"""
-        await email_service.verify_code_or_raise(db, email, code, "reset_password")
+        email = normalize_email(email)
+        code_record = await email_service.get_valid_code_or_raise(
+            db, email, code, "reset_password"
+        )
 
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        user = await UserRepository(db).get_by_email(email)
 
         if not user:
             raise UserNotFoundException()
+        if user.status == 0:
+            raise UserDisabledException()
 
         from user_service.utils.password import check_password_strength
         ok, msg = check_password_strength(new_password, lang=lang)
@@ -379,6 +415,7 @@ class AuthService:
             raise WeakPasswordException(detail=msg)
 
         user.password_hash = hash_password(new_password)
-        await db.commit()
+        email_service.mark_code_used(code_record)
         await AuthService._revoke_all_user_sessions(db, user.id)
+        await db.commit()
         logger.info(f"用户重置密码成功: {email}")

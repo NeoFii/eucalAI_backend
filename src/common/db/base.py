@@ -33,3 +33,14 @@ class SnowflakeIdMixin:
         index=True,
         comment="Internal primary key",
     )
+
+
+class SoftDeleteMixin:
+    """Provide a nullable tombstone column for soft-delete semantics."""
+
+    deleted_at = Column(
+        DateTime,
+        nullable=True,
+        index=True,
+        comment="Soft deleted at",
+    )

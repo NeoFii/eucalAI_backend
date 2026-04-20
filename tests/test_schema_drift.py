@@ -31,7 +31,17 @@ OWNED_SCHEMAS = {
     },
     "user": {
         "schema": ROOT / "scripts" / "sql" / "user_schema.sql",
-        "tables": ["users", "user_sessions", "user_active_sessions", "email_verification_codes"],
+        "tables": [
+            "users",
+            "user_sessions",
+            "email_verification_codes",
+            "user_api_keys",
+            "balance_transactions",
+            "topup_orders",
+            "api_call_logs",
+            "usage_stats",
+            "invitation_release_outbox",
+        ],
         "views": [],
         "base": user_db.Base,
     },

@@ -18,6 +18,7 @@ from common.utils.password import hash_password, verify_password
 from common.utils.timezone import now
 from user_service.config import settings
 from user_service.models.email_verification_code import EmailVerificationCode
+from user_service.utils.email import normalize_email
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,9 @@ class EmailService:
                 elif purpose == "login":
                     subject = "[Eucal AI] Login verification code"
                     body = f"Your login code is {code}. It expires in {self.code_expire_minutes} minutes."
+                elif purpose == "verify":
+                    subject = "[Eucal AI] Email verification code"
+                    body = f"Your email verification code is {code}. It expires in {self.code_expire_minutes} minutes."
                 else:
                     subject = "[Eucal AI] Password reset verification code"
                     body = f"Your password reset code is {code}. It expires in {self.code_expire_minutes} minutes."
@@ -79,6 +83,7 @@ class EmailService:
         email: str,
         purpose: str = "register",
     ) -> tuple[bool, str]:
+        email = normalize_email(email)
         today_start = now().replace(hour=0, minute=0, second=0, microsecond=0)
         count_stmt = select(func.count()).select_from(EmailVerificationCode).where(
             EmailVerificationCode.email == email,
@@ -105,6 +110,10 @@ class EmailService:
         code = self.generate_code()
         expires_at = now() + timedelta(minutes=self.code_expire_minutes)
 
+        result = self._send_email(email, code, purpose)
+        if not result[0]:
+            return result
+
         old_stmt = select(EmailVerificationCode).where(
             EmailVerificationCode.email == email,
             EmailVerificationCode.purpose == purpose,
@@ -124,7 +133,6 @@ class EmailService:
         await db.flush()
 
         try:
-            result = self._send_email(email, code, purpose)
             await db.commit()
             logger.info("Verification code persisted: email=%s purpose=%s", email, purpose)
             return result
@@ -139,6 +147,19 @@ class EmailService:
         code: str,
         purpose: str = "register",
     ) -> None:
+        record = await self.get_valid_code_or_raise(db, email, code, purpose)
+        self.mark_code_used(record)
+        await db.commit()
+        logger.info("Verification code accepted: email=%s purpose=%s", email, purpose)
+
+    async def get_valid_code_or_raise(
+        self,
+        db: AsyncSession,
+        email: str,
+        code: str,
+        purpose: str = "register",
+    ) -> EmailVerificationCode:
+        email = normalize_email(email)
         stmt = (
             select(EmailVerificationCode)
             .where(
@@ -167,10 +188,11 @@ class EmailService:
             await db.commit()
             raise InvalidCodeException()
 
+        return record
+
+    def mark_code_used(self, record: EmailVerificationCode) -> None:
         record.used_at = now()
         record.error_count = 0
-        await db.commit()
-        logger.info("Verification code accepted: email=%s purpose=%s", email, purpose)
 
 
 email_service = EmailService()

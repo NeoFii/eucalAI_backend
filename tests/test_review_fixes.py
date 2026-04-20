@@ -1190,7 +1190,7 @@ async def test_register_consumes_invitation_code_via_admin_internal_client(monke
         fake_verify_email_code,
     )
     monkeypatch.setattr(
-        "user_service.services.auth_service.AdminInvitationClientService.consume_invitation_code",
+        "user_service.services.auth_service.AuthService._admin_gateway.consume_invitation_code",
         fake_consume_invitation,
     )
     monkeypatch.setattr(
@@ -1257,11 +1257,11 @@ async def test_register_releases_invitation_when_local_commit_fails(monkeypatch)
         fake_verify_email_code,
     )
     monkeypatch.setattr(
-        "user_service.services.auth_service.AdminInvitationClientService.consume_invitation_code",
+        "user_service.services.auth_service.AuthService._admin_gateway.consume_invitation_code",
         fake_consume_invitation,
     )
     monkeypatch.setattr(
-        "user_service.services.auth_service.AdminInvitationClientService.release_invitation_code",
+        "user_service.services.auth_service.AuthService._admin_gateway.release_invitation_code",
         fake_release_invitation,
     )
     monkeypatch.setattr(
@@ -1656,7 +1656,6 @@ def test_user_api_registers_internal_router():
 
     route_paths = {route.path for route in api_router.routes}
     assert "/api/v1/internal/users/{uid}" in route_paths
-    assert "/api/v1/internal/users/by-id/{user_id}" in route_paths
     assert "/api/v1/internal/stats/users" in route_paths
 
 
@@ -1778,7 +1777,7 @@ def test_invitation_domain_is_hosted_under_admin_services_for_admin_endpoints():
     ).read_text(encoding="utf-8")
 
     assert "from admin_service.services.invitation_service import InvitationCodeService" in admin_invitation_endpoint
-    assert "from user_service.services.admin_client import AdminInvitationClientService" in user_auth_service
+    assert "from user_service.gateway import AdminInvitationGateway" in user_auth_service
     assert "from admin_service.services.identity_client import IdentityClientService" in admin_invitation_endpoint
     assert "from user_service.models import User" not in admin_invitation_endpoint
     assert Path(r"F:\Eucal_AI\backend\admin_service\services\invitation_service.py").exists()
@@ -1817,4 +1816,3 @@ def test_admin_identity_domain_is_hosted_under_admin_services():
     assert "from admin_service.services.bootstrap_service import AdminBootstrapService" in admin_bootstrap_cli
     assert not Path(r"F:\Eucal_AI\backend\admin_service\services\auth_service_v2.py").exists()
     assert Path(r"F:\Eucal_AI\backend\admin_service\services\bootstrap_service.py").exists()
-

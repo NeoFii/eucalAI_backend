@@ -262,6 +262,93 @@ class RateLimitExceededException(APIException):
         )
 
 
+class ApiKeyException(APIException):
+    """
+    API Key 业务异常基类
+    """
+
+    def __init__(self, status_code: int, detail: str, code: str):
+        super().__init__(status_code=status_code, detail=detail, code=code)
+
+
+class ApiKeyNotFoundException(ApiKeyException):
+    """
+    API Key 不存在或不可见
+    """
+
+    def __init__(self, detail: str = "API Key 不存在"):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=detail,
+            code="api_key_not_found",
+        )
+
+
+class ApiKeyDisabledException(ApiKeyException):
+    """
+    API Key 已禁用
+    """
+
+    def __init__(self, detail: str = "API Key 已被禁用"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+            code="api_key_disabled",
+        )
+
+
+class ApiKeyExpiredException(ApiKeyException):
+    """
+    API Key 已过期
+    """
+
+    def __init__(self, detail: str = "API Key 已过期"):
+        super().__init__(
+            status_code=status.HTTP_410_GONE,
+            detail=detail,
+            code="api_key_expired",
+        )
+
+
+class ApiKeyExhaustedException(ApiKeyException):
+    """
+    API Key 额度已耗尽
+    """
+
+    def __init__(self, detail: str = "API Key 额度已耗尽"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+            code="api_key_exhausted",
+        )
+
+
+class ApiKeyModelNotAllowedException(ApiKeyException):
+    """
+    API Key 不允许访问该模型
+    """
+
+    def __init__(self, detail: str = "API Key 不允许访问该模型"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+            code="api_key_model_not_allowed",
+        )
+
+
+class ApiKeyIpNotAllowedException(ApiKeyException):
+    """
+    API Key 不允许从该 IP 使用
+    """
+
+    def __init__(self, detail: str = "API Key 不允许从该 IP 使用"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+            code="api_key_ip_not_allowed",
+        )
+
+
 # ==================== 邀请码相关异常 ====================
 
 class InvitationCodeException(RegistrationException):

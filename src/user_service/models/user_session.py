@@ -31,13 +31,6 @@ class UserSession(Base, SnowflakeIdMixin, TimestampMixin):
     revoked_at = Column(DateTime, nullable=True, comment="Revoked at")
 
     user = relationship("User", back_populates="sessions")
-    active_mapping = relationship(
-        "UserActiveSession",
-        back_populates="session",
-        cascade="all, delete-orphan",
-        uselist=False,
-        lazy="selectin",
-    )
 
     def __repr__(self) -> str:
         return f"<UserSession(session_id={self.session_id}, user_id={self.user_id}, revoked={self.is_revoked})>"

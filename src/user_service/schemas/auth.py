@@ -1,0 +1,43 @@
+"""Auth schema split for user-service."""
+
+from user_service.schemas_legacy import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
+    LoginRequest,
+    LoginResponse,
+    LoginResponseData,
+    LoginWithCodeRequest,
+    LogoutResponse,
+    RefreshResponse,
+    RefreshResponseData,
+    RegisterRequest,
+    RegisterResponse,
+    RegisterResponseData,
+    ResetPasswordRequest,
+    SendEmailCodeRequest,
+    UserData,
+    UserInfoResponse,
+    UserInfoResponseData,
+    VerifyEmailRequest,
+)
+
+__all__ = [
+    "ChangePasswordRequest",
+    "ChangePasswordResponse",
+    "LoginRequest",
+    "LoginResponse",
+    "LoginResponseData",
+    "LoginWithCodeRequest",
+    "LogoutResponse",
+    "RefreshResponse",
+    "RefreshResponseData",
+    "RegisterRequest",
+    "RegisterResponse",
+    "RegisterResponseData",
+    "ResetPasswordRequest",
+    "SendEmailCodeRequest",
+    "UserData",
+    "UserInfoResponse",
+    "UserInfoResponseData",
+    "VerifyEmailRequest",
+]
