@@ -74,3 +74,59 @@ def test_backend_app_service_name_is_canonical():
     from backend_app.config import settings
 
     assert settings.SERVICE_NAME == "backend-app"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_manager_runs_startup_and_shutdown_in_registered_order():
+    from fastapi import FastAPI
+
+    from backend_app.lifecycle import LifecycleManager
+
+    events = []
+    manager = LifecycleManager()
+
+    async def start_admin():
+        events.append("start-admin")
+
+    async def stop_admin():
+        events.append("stop-admin")
+
+    async def start_user():
+        events.append("start-user")
+
+    async def stop_user():
+        events.append("stop-user")
+
+    manager.register("admin", startup=start_admin, shutdown=stop_admin)
+    manager.register("user", startup=start_user, shutdown=stop_user)
+
+    async with manager.lifespan(FastAPI()):
+        assert events == ["start-admin", "start-user"]
+
+    assert events == ["start-admin", "start-user", "stop-user", "stop-admin"]
+
+
+def test_backend_app_uses_lifecycle_manager_as_single_lifespan_path():
+    from backend_app import main
+    from backend_app.lifecycle import LifecycleManager
+
+    def contains_lifecycle_manager(target, seen=None):
+        seen = seen or set()
+        target_id = id(target)
+        if target_id in seen:
+            return False
+        seen.add(target_id)
+
+        owner = getattr(target, "__self__", None)
+        if owner is main.lifecycle_manager:
+            return True
+
+        closure = getattr(target, "__closure__", None) or ()
+        for cell in closure:
+            if contains_lifecycle_manager(cell.cell_contents, seen):
+                return True
+        return False
+
+    assert isinstance(main.lifecycle_manager, LifecycleManager)
+    assert contains_lifecycle_manager(main.app.router.lifespan_context)
+    assert not hasattr(main, "lifespan")
