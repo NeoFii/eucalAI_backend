@@ -54,8 +54,14 @@ def build_service_alembic_config(service_name: str, url: str | None = None) -> C
     service = SERVICE_CONFIGS[service_name]
     config = Config(str(service.alembic_ini_path))
     if url:
-        config.set_main_option("sqlalchemy.url", url)
+        config.set_main_option("sqlalchemy.url", _escape_config_value(url))
     return config
+
+
+def _escape_config_value(value: str) -> str:
+    """Escape values written through ConfigParser-backed Alembic options."""
+
+    return value.replace("%", "%%")
 
 
 def get_head_revision(service_name: str) -> str:

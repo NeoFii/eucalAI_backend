@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Optional
 
+from common.db.schema_version import ensure_database_at_head
 from testing_service.db import close_db, create_engine, get_db_context, init_session_factory
 from common.utils.timezone import now
 from testing_service.config import get_settings
@@ -85,6 +86,7 @@ async def enqueue_scheduled_benchmark() -> str | None:
 
 async def on_worker_startup(ctx: dict) -> None:
     settings = get_settings()
+    await ensure_database_at_head(service_name="testing-service", url=settings.DATABASE_URL)
     create_engine(settings.DATABASE_URL)
     init_session_factory()
     ctx["settings"] = settings

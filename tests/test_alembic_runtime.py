@@ -50,6 +50,15 @@ def test_migrate_cli_uses_committed_service_alembic_ini_files():
         assert Path(config.get_main_option("script_location")).resolve() == service.script_location
 
 
+def test_alembic_database_url_supports_percent_encoded_passwords():
+    from common.db.schema_version import build_service_alembic_config
+
+    url = "mysql+aiomysql://user:p%40ss%25word@localhost:3306/example"
+    config = build_service_alembic_config("admin-service", url=url)
+
+    assert config.get_main_option("sqlalchemy.url") == url
+
+
 def test_docs_and_scripts_describe_alembic_as_only_schema_path():
     migration_readme = (ROOT / "migrations" / "README.md").read_text(encoding="utf-8")
     root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -61,6 +70,21 @@ def test_docs_and_scripts_describe_alembic_as_only_schema_path():
     assert "skip-init-db" not in root_readme
     assert "AUTO_INIT_DB" not in compose
     assert "AUTO_INIT_DB" not in env_example
+
+
+def test_docker_image_includes_migrations_for_runtime_revision_checks():
+    dockerfile = (ROOT / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY --chown=appuser:appuser migrations/ /app/migrations/" in dockerfile
+
+
+def test_testing_worker_checks_alembic_head_before_starting_jobs():
+    worker_jobs = (ROOT / "src" / "testing_service" / "benchmark" / "jobs.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'ensure_database_at_head(service_name="testing-service"' in worker_jobs
+    assert worker_jobs.index("ensure_database_at_head") < worker_jobs.index("create_engine")
 
 
 @pytest.mark.asyncio

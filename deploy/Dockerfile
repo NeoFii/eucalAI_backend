@@ -37,6 +37,7 @@ COPY --chown=appuser:appuser src/testing_service/ /app/src/testing_service/
 COPY --chown=appuser:appuser src/router_service/ /app/src/router_service/
 COPY --chown=appuser:appuser src/content_service/ /app/src/content_service/
 COPY --chown=appuser:appuser src/backend_app/ /app/src/backend_app/
+COPY --chown=appuser:appuser migrations/ /app/migrations/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
 COPY --chown=appuser:appuser deploy/router/ /app/deploy/router/
 COPY --chown=appuser:appuser pyproject.toml README.md /app/

@@ -21,6 +21,18 @@ os.environ["INTERNAL_SECRET"] = "test_secret"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
 
+def _user_internal_secret() -> str:
+    from user_service.api.v1.endpoints import internal
+
+    return internal.settings.INTERNAL_SECRET
+
+
+def _admin_internal_secret() -> str:
+    from admin_service.api.v1.endpoints import internal
+
+    return internal.settings.INTERNAL_SECRET
+
+
 class _ScalarResult:
     def __init__(self, *, scalar_one_or_none=None):
         self._scalar_one_or_none = scalar_one_or_none
@@ -101,7 +113,7 @@ def test_user_internal_endpoint_requires_signed_internal_request():
     ok = client.get(
         "/api/v1/internal/users/1001",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_user_internal_secret(),
             caller_service="router-service",
             method="GET",
             path="/api/v1/internal/users/1001",
@@ -127,7 +139,7 @@ def test_user_internal_endpoint_accepts_signed_internal_request():
     response = client.get(
         "/api/v1/internal/users/1001",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_user_internal_secret(),
             caller_service="router-service",
             method="GET",
             path="/api/v1/internal/users/1001",
@@ -190,7 +202,7 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
     response = client.get(
         "/api/v1/internal/users/1001",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_user_internal_secret(),
             caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/users/1001",
@@ -330,7 +342,7 @@ def test_admin_internal_endpoint_requires_signed_internal_request():
     ok = client.get(
         "/api/v1/internal/admins/9001",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_admin_internal_secret(),
             caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
@@ -369,7 +381,7 @@ def test_signed_internal_request_rejects_expired_timestamp():
             "X-Internal-Service": "testing-service",
             "X-Internal-Timestamp": timestamp,
             "X-Internal-Signature": _build_internal_signature(
-                secret="test_secret",
+                secret=_admin_internal_secret(),
                 caller_service="testing-service",
                 method="GET",
                 request_target="/api/v1/internal/admins/9001",
@@ -424,7 +436,7 @@ def test_admin_internal_invitation_endpoints_require_secret_and_delegate(monkeyp
     consume = client.post(
         "/api/v1/internal/invitation-codes/consume",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_admin_internal_secret(),
             caller_service="user-service",
             method="POST",
             path="/api/v1/internal/invitation-codes/consume",
@@ -439,7 +451,7 @@ def test_admin_internal_invitation_endpoints_require_secret_and_delegate(monkeyp
     release = client.post(
         "/api/v1/internal/invitation-codes/release",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_admin_internal_secret(),
             caller_service="user-service",
             method="POST",
             path="/api/v1/internal/invitation-codes/release",
@@ -470,7 +482,7 @@ def test_internal_request_signature_covers_query_string():
     valid = client.get(
         "/api/v1/internal/admins/9001?verbose=true",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_admin_internal_secret(),
             caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
@@ -482,7 +494,7 @@ def test_internal_request_signature_covers_query_string():
     tampered = client.get(
         "/api/v1/internal/admins/9001?verbose=false",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_admin_internal_secret(),
             caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
@@ -526,7 +538,7 @@ def test_admin_internal_invitation_consume_maps_domain_errors(monkeypatch, excep
     response = client.post(
         "/api/v1/internal/invitation-codes/consume",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=_admin_internal_secret(),
             caller_service="user-service",
             method="POST",
             path="/api/v1/internal/invitation-codes/consume",
