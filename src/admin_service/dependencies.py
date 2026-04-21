@@ -99,26 +99,8 @@ async def get_optional_current_admin(
         return None
 
 
-async def require_active_admin(current_admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
-    """Compatibility wrapper for the policy guard."""
-
-    from admin_service.policies import require_active_admin as policy
-
-    return await policy(current_admin)
-
-
-async def require_super_admin(current_admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
-    """Compatibility wrapper for the policy guard."""
-
-    from admin_service.policies import require_super_admin as policy
-
-    return await policy(current_admin)
-
-
 __all__ = [
     "get_current_admin",
     "get_db_session",
     "get_optional_current_admin",
-    "require_active_admin",
-    "require_super_admin",
 ]

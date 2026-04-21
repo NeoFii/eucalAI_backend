@@ -31,15 +31,20 @@ class ApiKeyRepository(BaseRepository[UserApiKey]):
         )
         return len(result.scalars().all())
 
-    async def get_owned_key(self, key_id: int, user_id: int) -> UserApiKey | None:
-        return (
-            await self.session.execute(
-                self._base_query().where(
-                    UserApiKey.id == key_id,
-                    UserApiKey.user_id == user_id,
-                )
-            )
-        ).scalar_one_or_none()
+    async def get_owned_key(
+        self,
+        key_id: int,
+        user_id: int,
+        *,
+        for_update: bool = False,
+    ) -> UserApiKey | None:
+        statement = self._base_query().where(
+            UserApiKey.id == key_id,
+            UserApiKey.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_by_hash(self, key_hash: str) -> UserApiKey | None:
         return (

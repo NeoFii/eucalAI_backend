@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from admin_service.dependencies import require_super_admin
 from admin_service.models import AdminUser
+from admin_service.policies import require_super_admin
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 

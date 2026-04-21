@@ -34,6 +34,7 @@ class BalanceService:
         if amount <= 0:
             raise ValidationException(detail="冻结金额必须大于 0")
         user = await BalanceService._get_user(db, user_id, for_update=True)
+        tx_repo = BalanceTxRepository(db)
         if await BalanceService._transaction_exists(
             db,
             tx_type=BalanceTransaction.TYPE_FREEZE,
@@ -47,7 +48,7 @@ class BalanceService:
         balance_before = int(user.balance)
         user.balance -= amount
         user.frozen_amount += amount
-        db.add(
+        tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_FREEZE,
@@ -76,6 +77,7 @@ class BalanceService:
             raise ValidationException(detail="实际结算金额不能超过冻结金额")
 
         user = await BalanceService._get_user(db, user_id, for_update=True)
+        tx_repo = BalanceTxRepository(db)
         if await BalanceService._transaction_exists(
             db,
             tx_type=BalanceTransaction.TYPE_CONSUME,
@@ -89,7 +91,7 @@ class BalanceService:
         unfreeze_before = int(user.balance)
         user.frozen_amount -= estimated_amount
         user.balance += estimated_amount
-        db.add(
+        tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_UNFREEZE,
@@ -108,7 +110,7 @@ class BalanceService:
         user.used_amount += actual_amount
         user.total_requests += 1
         user.total_tokens += total_tokens
-        db.add(
+        tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_CONSUME,
@@ -133,6 +135,7 @@ class BalanceService:
         if amount <= 0:
             raise ValidationException(detail="退款金额必须大于 0")
         user = await BalanceService._get_user(db, user_id, for_update=True)
+        tx_repo = BalanceTxRepository(db)
         if await BalanceService._transaction_exists(
             db,
             tx_type=BalanceTransaction.TYPE_REFUND,
@@ -146,7 +149,7 @@ class BalanceService:
         balance_before = int(user.balance)
         user.frozen_amount -= amount
         user.balance += amount
-        db.add(
+        tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_REFUND,
@@ -171,6 +174,7 @@ class BalanceService:
         if amount <= 0:
             raise ValidationException(detail="充值金额必须大于 0")
         user = await BalanceService._get_user(db, user_id, for_update=True)
+        tx_repo = BalanceTxRepository(db)
         order = await BalanceService._get_topup_order(db, order_no, user.id, for_update=True)
         if order.status != TopupOrder.STATUS_PENDING:
             raise ValidationException(detail="充值订单状态无效")
@@ -188,7 +192,7 @@ class BalanceService:
         from common.utils.timezone import now
 
         order.paid_at = now()
-        db.add(
+        tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_TOPUP,
@@ -214,13 +218,14 @@ class BalanceService:
         if amount == 0:
             raise ValidationException(detail="调整金额不能为 0")
         user = await BalanceService._get_user(db, user_id, for_update=True)
+        tx_repo = BalanceTxRepository(db)
         balance_after = int(user.balance) + amount
         if balance_after < 0:
             raise ValidationException(detail="调整后余额不能为负数")
 
         balance_before = int(user.balance)
         user.balance = balance_after
-        db.add(
+        tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_ADMIN_ADJUST,
@@ -279,7 +284,11 @@ class BalanceService:
         *,
         for_update: bool = False,
     ) -> UserApiKey:
-        api_key = await ApiKeyRepository(db).get_owned_key(api_key_id, user_id)
+        api_key = await ApiKeyRepository(db).get_owned_key(
+            api_key_id,
+            user_id,
+            for_update=for_update,
+        )
         if api_key is None:
             raise ValidationException(detail="API Key 不存在")
         return api_key

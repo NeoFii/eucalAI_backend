@@ -7,7 +7,6 @@ import secrets
 import string
 from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import (

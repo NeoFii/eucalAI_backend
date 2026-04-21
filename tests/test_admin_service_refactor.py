@@ -47,7 +47,12 @@ def test_admin_policy_module_owns_authorization_guards():
 
     assert require_active_admin is not None
     assert require_super_admin is not None
-    assert "AdminPermissionDeniedException" not in _source("dependencies.py")
+    source = _source("dependencies.py")
+
+    assert "async def require_active_admin" not in source
+    assert "async def require_super_admin" not in source
+    assert '"require_active_admin"' not in source
+    assert '"require_super_admin"' not in source
 
 
 def test_admin_services_use_repositories_for_database_queries():

@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 
 os.environ["INTERNAL_SECRET"] = "test_secret"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
+
+USER_ROOT = Path(__file__).resolve().parents[1] / "src" / "user_service"
+
+
+def _source(path: str) -> str:
+    return (USER_ROOT / path).read_text(encoding="utf-8")
 
 
 @pytest.mark.asyncio
@@ -108,3 +115,27 @@ def test_auth_and_billing_schema_modules_export_current_types():
     assert AdminTopupOrderItem.__module__ == "user_service.schemas.billing_admin"
     assert AdminUsageStatItem.__module__ == "user_service.schemas.billing_admin"
     assert AdminApiCallLogItem.__module__ == "user_service.schemas.billing_admin"
+
+
+def test_auth_and_billing_services_use_repository_boundaries():
+    for path in [
+        "services/auth_service.py",
+        "services/api_key_service.py",
+        "services/balance_service.py",
+        "services/email_service.py",
+        "services/topup_order_service.py",
+        "services/usage_stat_service.py",
+    ]:
+        source = _source(path)
+        assert "user_service.repositories" in source
+        assert "from sqlalchemy import" not in source
+        assert "select(" not in source
+        assert "db.execute(" not in source
+        assert "db.add(" not in source
+
+
+def test_admin_billing_endpoint_uses_policy_guard_import():
+    source = _source("api/v1/endpoints/admin_billing.py")
+
+    assert "from admin_service.policies import require_super_admin" in source
+    assert "from admin_service.dependencies import require_super_admin" not in source

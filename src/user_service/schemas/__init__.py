@@ -1,4 +1,4 @@
-"""Compatibility schema package for user-service."""
+"""Public user-service schema exports."""
 
 from user_service.schemas.auth import (
     ChangePasswordRequest,
