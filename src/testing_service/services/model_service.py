@@ -26,7 +26,13 @@ from testing_service.schemas import (
     ModelCategoryBrief,
     OfferingMetricsResponse,
 )
-from testing_service.repositories.model_repository import ModelRepository, OfferingRepository
+from testing_service.repositories.model_repository import (
+    CategoryRepository,
+    ModelRepository,
+    OfferingRepository,
+    ProviderRepository,
+    VendorRepository,
+)
 
 settings = get_settings()
 
@@ -60,34 +66,17 @@ class VendorService:
     @staticmethod
     async def list_all(db: AsyncSession, page: int = 1, page_size: int = 20) -> tuple[List[ModelVendor], int]:
         """获取所有研发商（管理端展示，不过滤 is_active），按名称排序，支持分页"""
-        base_query = (
-            select(ModelVendor)
-            .where(ModelVendor.deleted_at.is_(None))
-            .order_by(ModelVendor.name)
-        )
-        total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar() or 0
-        items = list((await db.execute(base_query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
+        return await VendorRepository.list_all(db, page=page, page_size=page_size)
 
     @staticmethod
     async def get_by_slug(db: AsyncSession, slug: str) -> Optional[ModelVendor]:
         """根据 slug 获取研发商"""
-        result = await db.execute(
-            select(ModelVendor).where(
-                and_(ModelVendor.slug == slug, ModelVendor.deleted_at.is_(None))
-            )
-        )
-        return result.scalar_one_or_none()
+        return await VendorRepository.get_by_slug(db, slug)
 
     @staticmethod
     async def get_by_id(db: AsyncSession, vendor_id: int) -> Optional[ModelVendor]:
         """根据 ID 获取研发商"""
-        result = await db.execute(
-            select(ModelVendor).where(
-                and_(ModelVendor.id == vendor_id, ModelVendor.deleted_at.is_(None))
-            )
-        )
-        return result.scalar_one_or_none()
+        return await VendorRepository.get_by_id(db, vendor_id)
 
     @staticmethod
     async def create(db: AsyncSession, data) -> ModelVendor:
@@ -172,28 +161,17 @@ class CategoryService:
     @staticmethod
     async def list_all(db: AsyncSession) -> List[ModelCategory]:
         """获取所有启用的分类，按 sort_order 排序"""
-        result = await db.execute(
-            select(ModelCategory)
-            .where(ModelCategory.is_active == True)
-            .order_by(ModelCategory.sort_order, ModelCategory.id)
-        )
-        return list(result.scalars().all())
+        return await CategoryRepository.list_all(db)
 
     @staticmethod
     async def get_by_key(db: AsyncSession, key: str) -> Optional[ModelCategory]:
         """根据分类键（如 reasoning / coding）获取分类"""
-        result = await db.execute(
-            select(ModelCategory).where(ModelCategory.key == key)
-        )
-        return result.scalar_one_or_none()
+        return await CategoryRepository.get_by_key(db, key)
 
     @staticmethod
     async def get_by_id(db: AsyncSession, category_id: int) -> Optional[ModelCategory]:
         """根据 ID 获取分类"""
-        result = await db.execute(
-            select(ModelCategory).where(ModelCategory.id == category_id)
-        )
-        return result.scalar_one_or_none()
+        return await CategoryRepository.get_by_id(db, category_id)
 
 
 # ========== 模型服务（models）==========
@@ -353,34 +331,17 @@ class ProviderService:
     @staticmethod
     async def list_all(db: AsyncSession, page: int = 1, page_size: int = 20) -> tuple[List[Provider], int]:
         """获取所有服务提供商（含已停用），管理端展示；活跃记录排在前面，支持分页"""
-        base_query = (
-            select(Provider)
-            .where(Provider.deleted_at.is_(None))
-            .order_by(Provider.is_active.desc(), Provider.name)
-        )
-        total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar() or 0
-        items = list((await db.execute(base_query.offset((page - 1) * page_size).limit(page_size))).scalars().all())
-        return items, total
+        return await ProviderRepository.list_all(db, page=page, page_size=page_size)
 
     @staticmethod
     async def get_by_id(db: AsyncSession, provider_id: int) -> Optional[Provider]:
         """根据 ID 获取提供商"""
-        result = await db.execute(
-            select(Provider).where(
-                and_(Provider.id == provider_id, Provider.deleted_at.is_(None))
-            )
-        )
-        return result.scalar_one_or_none()
+        return await ProviderRepository.get_by_id(db, provider_id)
 
     @staticmethod
     async def get_by_slug(db: AsyncSession, slug: str) -> Optional[Provider]:
         """根据 slug 获取提供商"""
-        result = await db.execute(
-            select(Provider).where(
-                and_(Provider.slug == slug, Provider.deleted_at.is_(None))
-            )
-        )
-        return result.scalar_one_or_none()
+        return await ProviderRepository.get_by_slug(db, slug)
 
     @staticmethod
     async def create(db: AsyncSession, data) -> Provider:
@@ -490,58 +451,22 @@ class OfferingService:
     @staticmethod
     async def get_by_id(db: AsyncSession, offering_id: int) -> Optional[ModelProviderOffering]:
         """获取单个报价配置"""
-        result = await db.execute(
-            select(ModelProviderOffering).where(
-                and_(
-                    ModelProviderOffering.id == offering_id,
-                    ModelProviderOffering.deleted_at.is_(None),
-                )
-            )
-        )
-        return result.scalar_one_or_none()
+        return await OfferingRepository.get_by_id(db, offering_id)
 
     @staticmethod
     async def list_by_model(db: AsyncSession, model_id: int) -> List[ModelProviderOffering]:
         """获取模型的所有启用报价配置"""
-        result = await db.execute(
-            select(ModelProviderOffering)
-            .where(
-                and_(
-                    ModelProviderOffering.model_id == model_id,
-                    ModelProviderOffering.is_active == True,
-                    ModelProviderOffering.deleted_at.is_(None),
-                )
-            )
-        )
-        return list(result.scalars().all())
+        return await OfferingRepository.list_by_model(db, model_id)
 
     @staticmethod
     async def list_all_active(db: AsyncSession) -> List[ModelProviderOffering]:
         """获取所有启用的报价配置（供定时任务使用）"""
-        result = await db.execute(
-            select(ModelProviderOffering).where(
-                and_(
-                    ModelProviderOffering.is_active == True,
-                    ModelProviderOffering.deleted_at.is_(None),
-                )
-            )
-        )
-        return list(result.scalars().all())
+        return await OfferingRepository.list_all_active(db)
 
     @staticmethod
     async def list_all_by_model(db: AsyncSession, model_id: int) -> List[ModelProviderOffering]:
         """获取模型的全部报价配置（含已废弃），供管理端展示"""
-        result = await db.execute(
-            select(ModelProviderOffering)
-            .where(
-                and_(
-                    ModelProviderOffering.model_id == model_id,
-                    ModelProviderOffering.deleted_at.is_(None),
-                )
-            )
-            .order_by(ModelProviderOffering.is_active.desc(), ModelProviderOffering.id)
-        )
-        return list(result.scalars().all())
+        return await OfferingRepository.list_all_by_model(db, model_id)
 
     @staticmethod
     async def create(db: AsyncSession, model_id: int, data) -> ModelProviderOffering:

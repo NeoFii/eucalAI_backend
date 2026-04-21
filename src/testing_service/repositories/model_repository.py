@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
@@ -20,6 +21,127 @@ from testing_service.models import (
     ProviderPerformanceMetric,
 )
 from testing_service.schemas import ModelCategoryBrief, OfferingMetricsResponse
+
+
+def _serialize_router_candidate(offering: ModelProviderOffering, provider: Provider) -> dict:
+    api_base_url = provider.probe_api_base_url or offering.api_base_url
+    return {
+        "offering_id": int(offering.id),
+        "model_id": int(offering.model_id),
+        "provider_id": int(provider.id),
+        "provider_slug": provider.slug,
+        "provider_name": provider.name,
+        "provider_model_name": (offering.provider_model_name or "").strip(),
+        "api_base_url": api_base_url.rstrip("/") if api_base_url else "",
+        "encrypted_api_key": {
+            "ciphertext": provider.probe_api_key_ciphertext,
+            "iv": provider.probe_api_key_iv,
+            "tag": provider.probe_api_key_tag,
+        },
+        "input_price_per_m": (
+            float(offering.price_input_per_m) if offering.price_input_per_m is not None else None
+        ),
+        "output_price_per_m": (
+            float(offering.price_output_per_m) if offering.price_output_per_m is not None else None
+        ),
+    }
+
+
+class VendorRepository:
+    """Read-side data access for model vendors."""
+
+    @staticmethod
+    async def list_all(
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Tuple[List[ModelVendor], int]:
+        query = select(ModelVendor).where(ModelVendor.deleted_at.is_(None)).order_by(ModelVendor.name)
+        total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
+        items = list(
+            (await db.execute(query.offset((page - 1) * page_size).limit(page_size)))
+            .scalars()
+            .all()
+        )
+        return items, total
+
+    @staticmethod
+    async def get_by_slug(db: AsyncSession, slug: str) -> Optional[ModelVendor]:
+        result = await db.execute(
+            select(ModelVendor).where(and_(ModelVendor.slug == slug, ModelVendor.deleted_at.is_(None)))
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id(db: AsyncSession, vendor_id: int) -> Optional[ModelVendor]:
+        result = await db.execute(
+            select(ModelVendor).where(
+                and_(ModelVendor.id == vendor_id, ModelVendor.deleted_at.is_(None))
+            )
+        )
+        return result.scalar_one_or_none()
+
+
+class CategoryRepository:
+    """Read-side data access for model categories."""
+
+    @staticmethod
+    async def list_all(db: AsyncSession) -> List[ModelCategory]:
+        result = await db.execute(
+            select(ModelCategory)
+            .where(ModelCategory.is_active == True)
+            .order_by(ModelCategory.sort_order, ModelCategory.id)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_by_key(db: AsyncSession, key: str) -> Optional[ModelCategory]:
+        result = await db.execute(select(ModelCategory).where(ModelCategory.key == key))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id(db: AsyncSession, category_id: int) -> Optional[ModelCategory]:
+        result = await db.execute(select(ModelCategory).where(ModelCategory.id == category_id))
+        return result.scalar_one_or_none()
+
+
+class ProviderRepository:
+    """Read-side data access for providers."""
+
+    @staticmethod
+    async def list_all(
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Tuple[List[Provider], int]:
+        query = (
+            select(Provider)
+            .where(Provider.deleted_at.is_(None))
+            .order_by(Provider.is_active.desc(), Provider.name)
+        )
+        total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
+        items = list(
+            (await db.execute(query.offset((page - 1) * page_size).limit(page_size)))
+            .scalars()
+            .all()
+        )
+        return items, total
+
+    @staticmethod
+    async def get_by_id(db: AsyncSession, provider_id: int) -> Optional[Provider]:
+        result = await db.execute(
+            select(Provider).where(
+                and_(Provider.id == provider_id, Provider.deleted_at.is_(None))
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_slug(db: AsyncSession, slug: str) -> Optional[Provider]:
+        result = await db.execute(
+            select(Provider).where(and_(Provider.slug == slug, Provider.deleted_at.is_(None)))
+        )
+        return result.scalar_one_or_none()
 
 
 class ModelRepository:
@@ -100,9 +222,124 @@ class ModelRepository:
             for row in rows.all()
         ]
 
+    @staticmethod
+    async def list_router_models(db: AsyncSession) -> dict:
+        rows = (
+            await db.execute(
+                select(
+                    Model.slug,
+                    ModelProviderOffering.provider_model_name,
+                    ModelProviderOffering,
+                    Provider,
+                )
+                .join(ModelProviderOffering, ModelProviderOffering.model_id == Model.id)
+                .join(Provider, ModelProviderOffering.provider_id == Provider.id)
+                .where(Model.is_active.is_(True))
+                .where(Provider.is_active.is_(True))
+                .where(ModelProviderOffering.is_active.is_(True))
+                .where(ModelProviderOffering.deleted_at.is_(None))
+                .where(Provider.deleted_at.is_(None))
+                .where(ModelProviderOffering.provider_model_name.is_not(None))
+            )
+        ).all()
+
+        seen: set[str] = set()
+        aggregates: dict[str, list[float | int | bool]] = defaultdict(lambda: [0.0, 0, False])
+        for model_slug, provider_model_name, offering, provider in rows:
+            api_base_url = provider.probe_api_base_url or offering.api_base_url
+            has_key = bool(
+                provider.probe_api_key_ciphertext
+                and provider.probe_api_key_iv
+                and provider.probe_api_key_tag
+            )
+            if not api_base_url or not has_key:
+                continue
+
+            if model_slug:
+                seen.add(model_slug)
+                total, count, has_unknown = aggregates[model_slug]
+                if offering.price_input_per_m is None or offering.price_output_per_m is None:
+                    aggregates[model_slug] = [total, count, True]
+                else:
+                    total += float(offering.price_input_per_m + offering.price_output_per_m)
+                    count += 1
+                    aggregates[model_slug] = [total, count, has_unknown]
+
+            if provider_model_name:
+                seen.add(f"{provider.slug}:{provider_model_name}")
+
+        priced = []
+        fallback = []
+        for slug, (total, count, has_unknown) in aggregates.items():
+            if count > 0:
+                priced.append((slug, total / count))
+            elif has_unknown:
+                fallback.append(slug)
+        priced.sort(key=lambda item: (item[1], item[0]))
+        fallback.sort()
+
+        return {
+            "items": [
+                {"id": item, "object": "model", "owned_by": "eucal-router"}
+                for item in sorted(seen)
+            ],
+            "ranked_logical_models": [slug for slug, _ in priced] + fallback,
+        }
+
 
 class OfferingRepository:
     """Read-side data access for offerings and benchmark metric projections."""
+
+    @staticmethod
+    async def get_by_id(db: AsyncSession, offering_id: int) -> Optional[ModelProviderOffering]:
+        result = await db.execute(
+            select(ModelProviderOffering).where(
+                and_(
+                    ModelProviderOffering.id == offering_id,
+                    ModelProviderOffering.deleted_at.is_(None),
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_by_model(db: AsyncSession, model_id: int) -> List[ModelProviderOffering]:
+        result = await db.execute(
+            select(ModelProviderOffering).where(
+                and_(
+                    ModelProviderOffering.model_id == model_id,
+                    ModelProviderOffering.is_active == True,
+                    ModelProviderOffering.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_all_active(db: AsyncSession) -> List[ModelProviderOffering]:
+        result = await db.execute(
+            select(ModelProviderOffering).where(
+                and_(
+                    ModelProviderOffering.is_active == True,
+                    ModelProviderOffering.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_all_by_model(db: AsyncSession, model_id: int) -> List[ModelProviderOffering]:
+        result = await db.execute(
+            select(ModelProviderOffering)
+            .where(
+                and_(
+                    ModelProviderOffering.model_id == model_id,
+                    ModelProviderOffering.deleted_at.is_(None),
+                )
+            )
+            .order_by(ModelProviderOffering.is_active.desc(), ModelProviderOffering.id)
+        )
+        return list(result.scalars().all())
 
     @staticmethod
     async def get_active_provider_counts(
@@ -249,3 +486,76 @@ class OfferingRepository:
             }
             for row in rows
         ]
+
+    @staticmethod
+    async def resolve_router_routes(
+        db: AsyncSession,
+        *,
+        model_name: str,
+        provider_hint: Optional[str] = None,
+    ) -> list[dict]:
+        stmt = (
+            select(ModelProviderOffering, Provider, Model)
+            .join(Provider, ModelProviderOffering.provider_id == Provider.id)
+            .join(Model, ModelProviderOffering.model_id == Model.id)
+            .where(Model.is_active.is_(True))
+            .where(Provider.is_active.is_(True))
+            .where(ModelProviderOffering.is_active.is_(True))
+            .where(ModelProviderOffering.deleted_at.is_(None))
+            .where(Provider.deleted_at.is_(None))
+            .where(ModelProviderOffering.provider_model_name.is_not(None))
+            .where(
+                or_(
+                    Model.slug == model_name,
+                    ModelProviderOffering.provider_model_name == model_name,
+                )
+            )
+        )
+        if provider_hint:
+            stmt = stmt.where(Provider.slug == provider_hint)
+
+        rows = (await db.execute(stmt)).all()
+        candidates = []
+        for offering, provider, _model in rows:
+            api_base_url = provider.probe_api_base_url or offering.api_base_url
+            if not api_base_url:
+                continue
+            if (
+                not provider.probe_api_key_ciphertext
+                or not provider.probe_api_key_iv
+                or not provider.probe_api_key_tag
+            ):
+                continue
+            provider_model_name = (offering.provider_model_name or "").strip()
+            if not provider_model_name:
+                continue
+            candidates.append(_serialize_router_candidate(offering, provider))
+
+        candidates.sort(
+            key=lambda item: (
+                float("inf")
+                if item["input_price_per_m"] is None or item["output_price_per_m"] is None
+                else item["input_price_per_m"] + item["output_price_per_m"],
+                item["provider_slug"],
+            )
+        )
+        return candidates
+
+    @staticmethod
+    async def get_router_offering(db: AsyncSession, offering_id: int) -> Optional[dict]:
+        row = (
+            await db.execute(
+                select(ModelProviderOffering, Provider, Model)
+                .join(Provider, ModelProviderOffering.provider_id == Provider.id)
+                .join(Model, ModelProviderOffering.model_id == Model.id)
+                .where(ModelProviderOffering.id == offering_id)
+                .limit(1)
+            )
+        ).first()
+        if row is None:
+            return None
+        offering, provider, model = row
+        payload = _serialize_router_candidate(offering, provider)
+        payload["model_slug"] = model.slug
+        payload["model_name"] = model.name
+        return payload
