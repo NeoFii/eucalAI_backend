@@ -106,12 +106,15 @@ class TestTestingModules:
         assert AdminProbeAuditService is not None
 
     def test_refactor_targets_replace_legacy_modules(self):
-        from testing_service.dependencies import AdminIdentityClientService
-        from testing_service.gateway import AdminIdentity, AdminIdentityGateway
+        import testing_service.dependencies as dependencies
+        import testing_service.gateway as gateway
+        import testing_service.services as services
 
-        assert AdminIdentity is not None
-        assert AdminIdentityGateway is not None
-        assert AdminIdentityClientService is AdminIdentityGateway
+        assert gateway.AdminIdentity is not None
+        assert gateway.AdminIdentityGateway is not None
+        assert not hasattr(gateway, "AdminIdentityClientService")
+        assert not hasattr(dependencies, "AdminIdentityClientService")
+        assert "AdminIdentityClientService" not in services.__all__
         assert os.path.isdir(os.path.join(backend_dir, "src", "testing_service", "schemas"))
         assert not os.path.exists(
             os.path.join(backend_dir, "src", "testing_service", "schemas.py")
@@ -239,9 +242,89 @@ class TestTestingApi:
 
         response = client.get("/api/v1/benchmark/trends", params={"model_slug": "demo-model", "days": 7})
 
-        assert response.status_code == 200
-        assert response.json()["data"]["model_slug"] == "demo-model"
-        assert response.json()["data"]["providers"] == []
+    def test_internal_router_uses_repository_queries(self, monkeypatch):
+        from testing_service.dependencies import get_db_session
+        from testing_service.api.v1.endpoints import internal_router
+
+        async def _fake_db():
+            yield SimpleNamespace()
+
+        async def _allow_internal():
+            return None
+
+        async def _fake_list_router_models(db):
+            assert db is not None
+            return {
+                "items": [{"id": "gpt-4", "object": "model", "owned_by": "eucal-router"}],
+                "ranked_logical_models": ["gpt-4"],
+            }
+
+        async def _fake_resolve_routes(db, *, model_name, provider_hint=None):
+            assert model_name == "gpt-4"
+            assert provider_hint == "openai"
+            return [
+                {
+                    "offering_id": 11,
+                    "model_id": 21,
+                    "provider_id": 31,
+                    "provider_slug": "openai",
+                    "provider_name": "OpenAI",
+                    "provider_model_name": "gpt-4.1",
+                    "api_base_url": "https://api.openai.com/v1",
+                    "encrypted_api_key": {"ciphertext": "c", "iv": "i", "tag": "t"},
+                    "input_price_per_m": 1.0,
+                    "output_price_per_m": 2.0,
+                }
+            ]
+
+        async def _fake_get_router_offering(db, offering_id):
+            assert offering_id == 11
+            return {
+                "offering_id": 11,
+                "model_id": 21,
+                "provider_id": 31,
+                "provider_slug": "openai",
+                "provider_name": "OpenAI",
+                "provider_model_name": "gpt-4.1",
+                "api_base_url": "https://api.openai.com/v1",
+                "encrypted_api_key": {"ciphertext": "c", "iv": "i", "tag": "t"},
+                "input_price_per_m": 1.0,
+                "output_price_per_m": 2.0,
+                "model_slug": "gpt-4",
+                "model_name": "GPT-4",
+            }
+
+        monkeypatch.setattr(internal_router.ModelRepository, "list_router_models", _fake_list_router_models)
+        monkeypatch.setattr(
+            internal_router.OfferingRepository,
+            "resolve_router_routes",
+            _fake_resolve_routes,
+        )
+        monkeypatch.setattr(
+            internal_router.OfferingRepository,
+            "get_router_offering",
+            _fake_get_router_offering,
+        )
+
+        app = FastAPI(redirect_slashes=False)
+        app.include_router(internal_router.router, prefix="/api/v1")
+        app.dependency_overrides[get_db_session] = _fake_db
+        app.dependency_overrides[internal_router.verify_internal_secret] = _allow_internal
+        client = TestClient(app)
+
+        models_response = client.get("/api/v1/internal/router/models")
+        resolve_response = client.post(
+            "/api/v1/internal/router/routes/resolve",
+            json={"model_name": "gpt-4", "provider_hint": "openai"},
+        )
+        offering_response = client.get("/api/v1/internal/router/offerings/11")
+
+        assert models_response.status_code == 200
+        assert models_response.json()["ranked_logical_models"] == ["gpt-4"]
+        assert resolve_response.status_code == 200
+        assert resolve_response.json()["items"][0]["provider_slug"] == "openai"
+        assert offering_response.status_code == 200
+        assert offering_response.json()["model_slug"] == "gpt-4"
 
     def test_benchmark_import(self):
         from testing_service.api.v1.endpoints import benchmark

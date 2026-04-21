@@ -59,7 +59,4 @@ class AdminIdentityGateway:
             status=int(payload["status"]),
         )
 
-
-AdminIdentityClientService = AdminIdentityGateway
-
-__all__ = ["AdminIdentity", "AdminIdentityGateway", "AdminIdentityClientService"]
+__all__ = ["AdminIdentity", "AdminIdentityGateway"]
