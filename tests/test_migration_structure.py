@@ -140,6 +140,8 @@ def test_deploy_and_env_examples_use_service_database_urls_only():
 
     assert "\n      DATABASE_URL:" not in compose
     assert "\nDATABASE_URL=" not in env_example
+    assert "AUTO_INIT_DB" not in compose
+    assert "AUTO_INIT_DB" not in env_example
 
 
 def test_start_services_uses_environment_preflight():
@@ -148,3 +150,13 @@ def test_start_services_uses_environment_preflight():
     assert "validate_environment(selected)" in source
     assert "--skip-preflight" in source
     assert "load_project_dotenv()" in source
+
+
+def test_runtime_schema_management_is_alembic_only():
+    root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    migration_readme = (ROOT / "migrations" / "README.md").read_text(encoding="utf-8")
+
+    assert "uv run bootstrap-databases" in root_readme
+    assert "skip-init-db" not in root_readme
+    assert "AUTO_INIT_DB" not in root_readme
+    assert "唯一 schema 真理" in migration_readme

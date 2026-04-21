@@ -68,3 +68,20 @@ def test_admin_service_config_no_longer_defines_content_service_url():
     for path in checked_paths:
         source = path.read_text(encoding="utf-8")
         assert "CONTENT_SERVICE_URL" not in source, f"{path} still defines CONTENT_SERVICE_URL"
+
+
+def test_runtime_schema_creation_paths_are_removed_from_public_files():
+    checked_paths = [
+        ROOT / "src" / "backend_app" / "lifecycle.py",
+        ROOT / "src" / "admin_service" / "main.py",
+        ROOT / "src" / "testing_service" / "main.py",
+        ROOT / "src" / "admin_service" / "bootstrap_superadmin.py",
+        ROOT / "README.md",
+        ROOT / ".env.example",
+        ROOT / "deploy" / "docker-compose.yml",
+    ]
+
+    for path in checked_paths:
+        source = path.read_text(encoding="utf-8")
+        assert "AUTO_INIT_DB" not in source, f"{path} still advertises AUTO_INIT_DB"
+        assert "skip-init-db" not in source, f"{path} still advertises skip-init-db"

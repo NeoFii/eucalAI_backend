@@ -481,10 +481,18 @@ async def test_bootstrap_cli_check_only_returns_nonzero_when_missing(monkeypatch
     monkeypatch.setattr("admin_service.bootstrap_superadmin._run_check_only", fake_run_check_only)
     monkeypatch.setattr("admin_service.bootstrap_superadmin.close_db", fake_close_db)
 
-    exit_code = await async_main(["--check-only", "--skip-init-db"])
+    exit_code = await async_main(["--check-only"])
 
     assert exit_code == 1
-    assert calls == [("setup", True), "check", "close"]
+    assert calls == [("setup", False), "check", "close"]
+
+
+def test_bootstrap_cli_parser_does_not_accept_skip_init_db_flag():
+    from admin_service.bootstrap_superadmin import build_parser
+
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--skip-init-db"])
 
 
 class _FakeScalarResult:
@@ -652,4 +660,3 @@ async def test_auth_login_after_lock_expired_records_unlock_audit(monkeypatch):
     assert audit_actions == ["admin_login_success", "admin_login_unlocked"]
     assert admin.login_fail_count == 0
     assert admin.login_locked_until is None
-

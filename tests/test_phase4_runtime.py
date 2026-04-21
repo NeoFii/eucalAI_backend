@@ -25,6 +25,8 @@ def test_service_entrypoints_install_observability_and_readiness_routes():
         assert "install_observability(app, service_name=settings.SERVICE_NAME)" in source
         assert '@app.get("/ready"' in source
         assert "build_readiness_response(" in source
+        assert "init_db(" not in source
+        assert "AUTO_INIT_DB" not in source
 
 
 def test_observability_middleware_propagates_request_id():
