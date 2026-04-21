@@ -16,9 +16,9 @@ if backend_dir not in sys.path:
 
 from admin_service.api import api_router
 from admin_service.config import settings
-from admin_service.db import close_db, create_engine, get_engine, init_db, init_session_factory
-from admin_service.models import SERVICE_MODELS
+from admin_service.db import close_db, create_engine, get_engine, init_session_factory
 from admin_service.services.bootstrap_service import AdminBootstrapService
+from common.db import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability, log_event
@@ -45,11 +45,8 @@ async def lifespan(app: FastAPI):
         echo=settings.DATABASE_ECHO,
     )
     init_session_factory()
-    if settings.AUTO_INIT_DB:
-        await init_db(SERVICE_MODELS)
-        log_event(logger, logging.INFO, "schema_auto_init_enabled", service=settings.SERVICE_NAME)
-    else:
-        log_event(logger, logging.INFO, "schema_auto_init_skipped", service=settings.SERVICE_NAME)
+    await ensure_database_at_head(service_name="admin-service", url=settings.DATABASE_URL)
+    log_event(logger, logging.INFO, "schema_revision_verified", service=settings.SERVICE_NAME)
 
     bootstrap_created = await AdminBootstrapService.ensure_super_admin()
     log_event(

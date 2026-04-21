@@ -2,7 +2,7 @@
 
 ## Schema 真理来源
 
-- **Alembic revision 是唯一的 schema 真理**。每一次 schema 变更都通过
+- **Alembic revision 是唯一 schema 真理**。每一次 schema 变更都通过
   `uv run migrate --service <X> revision --autogenerate -m "..."` 生成新的
   revision 文件，然后人工审查。
 - `scripts/sql/*.sql` 是 schema 快照，由 `scripts/phase2_cutover.py` 引用

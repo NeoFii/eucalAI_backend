@@ -1106,17 +1106,25 @@ def test_compose_and_dockerfile_include_router_and_testing_worker():
     assert "EXPOSE 8000 8001 8002 8003 8004 8012" in dockerfile
 
 
-def test_user_and_admin_services_do_not_auto_init_schema_by_default():
+def test_runtime_entrypoints_require_alembic_head_before_followup_work():
     repo_root = Path(__file__).resolve().parent.parent
-    common_config = (repo_root / "src" / "common" / "config.py").read_text(encoding="utf-8")
     backend_main = (repo_root / "src" / "backend_app" / "main.py").read_text(encoding="utf-8")
     backend_lifecycle = (repo_root / "src" / "backend_app" / "lifecycle.py").read_text(
         encoding="utf-8"
     )
     admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
+    testing_main = (repo_root / "src" / "testing_service" / "main.py").read_text(encoding="utf-8")
+    bootstrap_cli = (
+        repo_root / "src" / "admin_service" / "bootstrap_superadmin.py"
+    ).read_text(encoding="utf-8")
 
-    assert "AUTO_INIT_DB: bool = False" in common_config
-    # user-service no longer has a standalone main; backend_app owns the gate.
     assert "lifespan=lifecycle_manager.lifespan" in backend_main
-    assert "auto_init=user_settings.AUTO_INIT_DB" in backend_lifecycle
-    assert "if settings.AUTO_INIT_DB:" in admin_main
+    assert "ensure_database_at_head" in backend_lifecycle
+    assert 'service_name="admin-service"' in backend_lifecycle
+    assert 'service_name="user-service"' in backend_lifecycle
+    assert 'service_name="testing-service"' in backend_lifecycle
+    assert "AUTO_INIT_DB" not in backend_lifecycle
+    assert 'ensure_database_at_head(service_name="admin-service"' in admin_main
+    assert 'ensure_database_at_head(service_name="testing-service"' in testing_main
+    assert 'ensure_database_at_head(service_name="admin-service"' in bootstrap_cli
+    assert "skip-init-db" not in bootstrap_cli

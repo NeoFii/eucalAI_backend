@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Iterable, Optional
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -81,31 +81,6 @@ class ServiceDatabaseRuntime:
                 raise
             finally:
                 await session.close()
-
-    @staticmethod
-    def _collect_model_tables(models: Iterable[type]) -> list:
-        tables = []
-        seen = set()
-        for model in models:
-            table = getattr(model, "__table__", None)
-            if table is None or table.info.get("is_view", False):
-                continue
-            if table.name in seen:
-                continue
-            seen.add(table.name)
-            tables.append(table)
-        return tables
-
-    async def init_db(self, models: Optional[Iterable[type]] = None) -> None:
-        """Create service-owned tables for the current base."""
-        engine = self.get_engine()
-        tables = (
-            [table for table in self._base.metadata.sorted_tables if not table.info.get("is_view", False)]
-            if models is None
-            else self._collect_model_tables(models)
-        )
-        async with engine.begin() as conn:
-            await conn.run_sync(self._base.metadata.create_all, tables=tables)
 
     async def close_db(self) -> None:
         """Dispose the current engine and clear the session factory."""
