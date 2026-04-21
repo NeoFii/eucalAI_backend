@@ -1,4 +1,4 @@
-"""Benchmarking services for testing-service."""
+"""Benchmark services for testing-service."""
 
 from testing_service.services.benchmark_job_service import AdminProbeAuditService, BenchmarkJobService
 

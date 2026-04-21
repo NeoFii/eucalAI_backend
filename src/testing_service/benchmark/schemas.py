@@ -1,4 +1,4 @@
-"""Benchmarking schemas for testing-service."""
+"""Benchmark schemas for testing-service."""
 
 from __future__ import annotations
 

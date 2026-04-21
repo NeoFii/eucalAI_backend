@@ -4,10 +4,9 @@ Testing 服务业务逻辑层
 提供模型、研发商、服务提供商、报价和性能指标的查询与写入服务
 """
 
-from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.crypto import encrypt_api_key, mask_api_key
@@ -22,12 +21,12 @@ from testing_service.models import (
     Provider,
     ModelProviderOffering,
     ProviderPerformanceMetric,
-    ProviderMetricsRanked,
 )
 from testing_service.schemas import (
     ModelCategoryBrief,
     OfferingMetricsResponse,
 )
+from testing_service.repositories.model_repository import ModelRepository, OfferingRepository
 
 settings = get_settings()
 
@@ -218,65 +217,24 @@ class ModelService:
           - q：关键词匹配 name / slug / description
         排序规则：mcm.sort_order ASC → m.sort_order ASC → m.name ASC
         """
-        query = (
-            select(Model)
-            .join(ModelVendor, Model.vendor_id == ModelVendor.id)
-            .where(Model.is_active == True)
+        return await ModelRepository.list_all(
+            db,
+            category_key=category_key,
+            vendor_slugs=vendor_slugs,
+            q=q,
+            page=page,
+            page_size=page_size,
         )
-
-        # 按分类筛选：JOIN model_category_map + model_categories
-        if category_key:
-            query = (
-                query
-                .join(ModelCategoryMap, ModelCategoryMap.model_id == Model.id)
-                .join(ModelCategory, ModelCategoryMap.category_id == ModelCategory.id)
-                .where(ModelCategory.key == category_key)
-                # 分类内排序：先按 model_category_map.sort_order，再按模型全局 sort_order
-                .order_by(ModelCategoryMap.sort_order, Model.sort_order, Model.name)
-            )
-        else:
-            query = query.order_by(Model.sort_order, Model.name)
-
-        # 按研发商 slug 多选筛选（OR 同维度）
-        if vendor_slugs:
-            query = query.where(ModelVendor.slug.in_(vendor_slugs))
-
-        # 关键词搜索：模糊匹配 name / slug / description
-        if q:
-            like_pattern = f"%{q}%"
-            query = query.where(
-                or_(
-                    Model.name.ilike(like_pattern),
-                    Model.slug.ilike(like_pattern),
-                    Model.description.ilike(like_pattern),
-                )
-            )
-
-        # 计数（使用子查询避免 count 与 order_by 冲突）
-        count_query = select(func.count()).select_from(query.subquery())
-        total = (await db.execute(count_query)).scalar() or 0
-
-        # 分页
-        query = query.offset((page - 1) * page_size).limit(page_size)
-        models = list((await db.execute(query)).scalars().all())
-
-        return models, total
 
     @staticmethod
     async def get_by_slug(db: AsyncSession, slug: str) -> Optional[Model]:
         """根据 slug 获取模型（含研发商、分类、报价关联，使用 selectin 预加载）"""
-        result = await db.execute(
-            select(Model).where(Model.slug == slug)
-        )
-        return result.scalar_one_or_none()
+        return await ModelRepository.get_by_slug(db, slug)
 
     @staticmethod
     async def get_by_id(db: AsyncSession, model_id: int) -> Optional[Model]:
         """根据 ID 获取模型"""
-        result = await db.execute(
-            select(Model).where(Model.id == model_id)
-        )
-        return result.scalar_one_or_none()
+        return await ModelRepository.get_by_id(db, model_id)
 
     @staticmethod
     async def get_category_briefs(db: AsyncSession, model_id: int) -> List[ModelCategoryBrief]:
@@ -284,21 +242,7 @@ class ModelService:
         获取模型所属分类列表（含该分类下的排序权重）
         返回的 sort_order 来自 model_category_map，而非 model_categories
         """
-        rows = await db.execute(
-            select(
-                ModelCategory.key,
-                ModelCategory.name,
-                ModelCategoryMap.sort_order,
-            )
-            .join(ModelCategoryMap, ModelCategoryMap.category_id == ModelCategory.id)
-            .where(ModelCategoryMap.model_id == model_id)
-            .where(ModelCategory.is_active == True)
-            .order_by(ModelCategoryMap.sort_order)
-        )
-        return [
-            ModelCategoryBrief(key=row.key, name=row.name, sort_order=row.sort_order)
-            for row in rows.all()
-        ]
+        return await ModelRepository.get_category_briefs(db, model_id)
 
     @staticmethod
     async def create(db: AsyncSession, data) -> Model:
@@ -541,23 +485,7 @@ class OfferingService:
         model_ids: list[int],
     ) -> dict[int, int]:
         """Return active provider-offering counts keyed by model id."""
-        if not model_ids:
-            return {}
-
-        rows = await db.execute(
-            select(
-                ModelProviderOffering.model_id,
-                func.count(ModelProviderOffering.id).label("provider_count"),
-            )
-            .join(Provider, Provider.id == ModelProviderOffering.provider_id)
-            .where(ModelProviderOffering.model_id.in_(model_ids))
-            .where(ModelProviderOffering.is_active == True)
-            .where(ModelProviderOffering.deleted_at.is_(None))
-            .where(Provider.is_active == True)
-            .where(Provider.deleted_at.is_(None))
-            .group_by(ModelProviderOffering.model_id)
-        )
-        return {int(row.model_id): int(row.provider_count) for row in rows.all()}
+        return await OfferingRepository.get_active_provider_counts(db, model_ids)
 
     @staticmethod
     async def get_by_id(db: AsyncSession, offering_id: int) -> Optional[ModelProviderOffering]:
@@ -683,34 +611,7 @@ class OfferingService:
         数据来源：provider_metrics_ranked 视图（WHERE rn <= n）
         支持按 probe_region 筛选；若不传 region 则返回所有区域的聚合结果
         """
-        stmt = (
-            select(
-                ProviderMetricsRanked.probe_region,
-                func.round(func.avg(ProviderMetricsRanked.throughput_tps), 2).label("avg_throughput_tps"),
-                func.round(func.avg(ProviderMetricsRanked.ttft_ms), 0).label("avg_ttft_ms"),
-                func.round(func.avg(ProviderMetricsRanked.e2e_latency_ms), 0).label("avg_e2e_latency_ms"),
-                func.count().label("sample_count"),
-                func.max(ProviderMetricsRanked.measured_at).label("last_measured_at"),
-            )
-            .where(ProviderMetricsRanked.offering_id == offering_id)
-            .where(ProviderMetricsRanked.rn <= n)
-            .group_by(ProviderMetricsRanked.probe_region)
-        )
-        if region:
-            stmt = stmt.where(ProviderMetricsRanked.probe_region == region)
-
-        rows = (await db.execute(stmt)).all()
-        return [
-            OfferingMetricsResponse(
-                probe_region=row.probe_region,
-                avg_throughput_tps=float(row.avg_throughput_tps) if row.avg_throughput_tps else None,
-                avg_ttft_ms=int(row.avg_ttft_ms) if row.avg_ttft_ms else None,
-                avg_e2e_latency_ms=int(row.avg_e2e_latency_ms) if row.avg_e2e_latency_ms else None,
-                sample_count=row.sample_count,
-                last_measured_at=row.last_measured_at,
-            )
-            for row in rows
-        ]
+        return await OfferingRepository.get_metrics(db, offering_id, n=n, region=region)
 
 
 # ========== 性能探测记录服务（provider_performance_metrics，append-only）==========
@@ -755,16 +656,7 @@ class PerformanceMetricService:
         offering_id: int,
     ) -> Optional[ProviderPerformanceMetric]:
         """Return the newest probe row for one offering."""
-        result = await db.execute(
-            select(ProviderPerformanceMetric)
-            .where(ProviderPerformanceMetric.offering_id == offering_id)
-            .order_by(
-                ProviderPerformanceMetric.measured_at.desc(),
-                ProviderPerformanceMetric.id.desc(),
-            )
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
+        return await OfferingRepository.get_latest_metric_by_offering(db, offering_id)
 
     @staticmethod
     async def get_trend_data(
@@ -774,66 +666,4 @@ class PerformanceMetricService:
         region: Optional[str] = None,
     ) -> list[dict]:
         """Return benchmark trend rows for one model using a calendar-day cutoff."""
-        current = now()
-        cutoff = datetime(current.year, current.month, current.day) - timedelta(days=days - 1)
-
-        stmt = (
-            select(
-                ProviderPerformanceMetric.measured_at.label("date"),
-                Provider.id.label("provider_id"),
-                Provider.name.label("provider_name"),
-                Provider.slug.label("provider_slug"),
-                Provider.logo_url.label("provider_logo_url"),
-                func.round(func.avg(ProviderPerformanceMetric.throughput_tps), 2).label(
-                    "avg_throughput_tps"
-                ),
-                func.round(func.avg(ProviderPerformanceMetric.ttft_ms), 0).label("avg_ttft_ms"),
-                func.round(func.avg(ProviderPerformanceMetric.e2e_latency_ms), 0).label(
-                    "avg_e2e_latency_ms"
-                ),
-                func.count().label("sample_count"),
-            )
-            .select_from(ProviderPerformanceMetric)
-            .join(
-                ModelProviderOffering,
-                ModelProviderOffering.id == ProviderPerformanceMetric.offering_id,
-            )
-            .join(Provider, Provider.id == ModelProviderOffering.provider_id)
-            .where(ModelProviderOffering.model_id == model_id)
-            .where(ModelProviderOffering.deleted_at.is_(None))
-            .where(ProviderPerformanceMetric.success == True)
-            .where(ProviderPerformanceMetric.measured_at >= cutoff)
-            .group_by(
-                ProviderPerformanceMetric.measured_at,
-                Provider.id,
-                Provider.name,
-                Provider.slug,
-                Provider.logo_url,
-            )
-            .order_by(
-                ProviderPerformanceMetric.measured_at.asc(),
-                Provider.id.asc(),
-            )
-        )
-        if region:
-            stmt = stmt.where(ProviderPerformanceMetric.probe_region == region)
-
-        rows = (await db.execute(stmt)).all()
-        return [
-            {
-                "date": row.date,
-                "provider_id": row.provider_id,
-                "provider_name": row.provider_name,
-                "provider_slug": row.provider_slug,
-                "provider_logo_url": row.provider_logo_url,
-                "avg_throughput_tps": (
-                    float(row.avg_throughput_tps) if row.avg_throughput_tps is not None else None
-                ),
-                "avg_ttft_ms": int(row.avg_ttft_ms) if row.avg_ttft_ms is not None else None,
-                "avg_e2e_latency_ms": (
-                    int(row.avg_e2e_latency_ms) if row.avg_e2e_latency_ms is not None else None
-                ),
-                "sample_count": row.sample_count,
-            }
-            for row in rows
-        ]
+        return await OfferingRepository.get_trend_data(db, model_id, days=days, region=region)

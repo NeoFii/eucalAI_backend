@@ -6,11 +6,14 @@ from __future__ import annotations
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.timezone import now
 from testing_service.models import AdminProbeAuditLog, BenchmarkJob
+from testing_service.repositories.benchmark_repository import (
+    AdminProbeAuditRepository,
+    BenchmarkJobRepository,
+)
 
 TERMINAL_JOB_STATUSES = {"succeeded", "failed", "partial"}
 
@@ -49,48 +52,23 @@ class BenchmarkJobService:
 
     @staticmethod
     async def get_by_job_id(db: AsyncSession, job_id: str) -> Optional[BenchmarkJob]:
-        result = await db.execute(select(BenchmarkJob).where(BenchmarkJob.job_id == job_id))
-        return result.scalar_one_or_none()
+        return await BenchmarkJobRepository.get_by_job_id(db, job_id)
 
     @staticmethod
     async def update_total_offerings(db: AsyncSession, job_id: str, total_offerings: int) -> None:
-        await db.execute(
-            update(BenchmarkJob)
-            .where(BenchmarkJob.job_id == job_id)
-            .values(total_offerings=total_offerings, updated_at=now())
-        )
+        await BenchmarkJobRepository.update_total_offerings(db, job_id, total_offerings)
 
     @staticmethod
     async def mark_running(db: AsyncSession, job_id: str) -> None:
-        started_at = now()
-        await db.execute(
-            update(BenchmarkJob)
-            .where(BenchmarkJob.job_id == job_id, BenchmarkJob.status == "queued")
-            .values(status="running", started_at=started_at, updated_at=started_at)
-        )
+        await BenchmarkJobRepository.mark_running(db, job_id)
 
     @staticmethod
     async def mark_failed(db: AsyncSession, job_id: str, error_message: str) -> None:
-        finished_at = now()
-        await db.execute(
-            update(BenchmarkJob)
-            .where(BenchmarkJob.job_id == job_id)
-            .values(
-                status="failed",
-                error_message=error_message,
-                finished_at=finished_at,
-                updated_at=finished_at,
-            )
-        )
+        await BenchmarkJobRepository.mark_failed(db, job_id, error_message)
 
     @staticmethod
     async def mark_succeeded_empty(db: AsyncSession, job_id: str) -> None:
-        finished_at = now()
-        await db.execute(
-            update(BenchmarkJob)
-            .where(BenchmarkJob.job_id == job_id)
-            .values(status="succeeded", finished_at=finished_at, updated_at=finished_at)
-        )
+        await BenchmarkJobRepository.mark_succeeded_empty(db, job_id)
 
     @staticmethod
     async def record_child_result(
@@ -100,34 +78,26 @@ class BenchmarkJobService:
         success: bool,
         error_message: Optional[str] = None,
     ) -> Optional[BenchmarkJob]:
-        started_at = now()
-        await db.execute(
-            update(BenchmarkJob)
-            .where(BenchmarkJob.job_id == job_id)
-            .values(
-                status="running",
-                started_at=func.coalesce(BenchmarkJob.started_at, started_at),
-                completed_offerings=BenchmarkJob.completed_offerings + 1,
-                succeeded_offerings=BenchmarkJob.succeeded_offerings + (1 if success else 0),
-                failed_offerings=BenchmarkJob.failed_offerings + (0 if success else 1),
-                error_message=error_message if error_message else BenchmarkJob.error_message,
-                updated_at=started_at,
-            )
+        await BenchmarkJobRepository.increment_child_result(
+            db,
+            job_id=job_id,
+            success=success,
+            error_message=error_message,
         )
         job = await BenchmarkJobService.get_by_job_id(db, job_id)
         if job is None:
             return None
         if job.completed_offerings >= job.total_offerings:
-            finished_at = now()
             final_status = "succeeded"
             if job.failed_offerings > 0 and job.succeeded_offerings > 0:
                 final_status = "partial"
             elif job.failed_offerings > 0 and job.succeeded_offerings == 0:
                 final_status = "failed"
-            await db.execute(
-                update(BenchmarkJob)
-                .where(BenchmarkJob.job_id == job_id, BenchmarkJob.status.notin_(TERMINAL_JOB_STATUSES))
-                .values(status=final_status, finished_at=finished_at, updated_at=finished_at)
+            await BenchmarkJobRepository.mark_terminal_if_incomplete(
+                db,
+                job_id=job_id,
+                final_status=final_status,
+                terminal_statuses=TERMINAL_JOB_STATUSES,
             )
             job = await BenchmarkJobService.get_by_job_id(db, job_id)
         return job
@@ -180,18 +150,7 @@ class AdminProbeAuditService:
         await db.refresh(audit)
         return audit
 
-    @staticmethod
-    def build_query(
-        *,
-        offering_id: Optional[int] = None,
-        job_id: Optional[str] = None,
-    ) -> Select:
-        stmt: Select = select(AdminProbeAuditLog)
-        if offering_id is not None:
-            stmt = stmt.where(AdminProbeAuditLog.offering_id == offering_id)
-        if job_id:
-            stmt = stmt.where(AdminProbeAuditLog.job_id == job_id)
-        return stmt.order_by(AdminProbeAuditLog.created_at.desc(), AdminProbeAuditLog.id.desc())
+    build_query = staticmethod(AdminProbeAuditRepository.build_query)
 
     @staticmethod
     async def list(
@@ -201,6 +160,9 @@ class AdminProbeAuditService:
         job_id: Optional[str] = None,
         limit: int = 20,
     ) -> List[AdminProbeAuditLog]:
-        stmt = AdminProbeAuditService.build_query(offering_id=offering_id, job_id=job_id).limit(limit)
-        result = await db.execute(stmt)
-        return list(result.scalars().all())
+        return await AdminProbeAuditRepository.list(
+            db,
+            offering_id=offering_id,
+            job_id=job_id,
+            limit=limit,
+        )

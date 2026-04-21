@@ -11,7 +11,7 @@ from typing import Optional
 from testing_service.db import close_db, create_engine, get_db_context, init_session_factory
 from common.utils.timezone import now
 from testing_service.config import get_settings
-from testing_service.benchmarking import AdminProbeAuditService, BenchmarkJobService
+from testing_service.benchmark import AdminProbeAuditService, BenchmarkJobService
 from testing_service.provider_config import OfferingService
 from testing_service.benchmark.queue import BenchmarkQueueUnavailableError, build_redis_settings, enqueue_job
 
