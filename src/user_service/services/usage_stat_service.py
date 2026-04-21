@@ -42,7 +42,7 @@ class UsageStatService:
             UsageStatService._accumulate_bucket(
                 buckets[(int(log.user_id), None, log.model_name)],
                 log,
-        )
+            )
 
         for (user_id, api_key_id, model_name), metrics in buckets.items():
             existing = await repo.get_bucket(
