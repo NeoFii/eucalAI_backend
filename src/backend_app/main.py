@@ -19,7 +19,6 @@ import asyncio
 import logging
 import os
 import sys
-from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, FastAPI
@@ -31,10 +30,8 @@ if _backend_dir not in sys.path:
 
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
-from common.observability import configure_logging, install_observability, log_event
-from common.utils.snowflake import configure_snowflake
+from common.observability import configure_logging, install_observability
 
-from admin_service import db as admin_db
 from admin_service.api.v1.endpoints import (
     admin_audit_logs as admin_audit_logs_endpoint,
     admin_users as admin_users_endpoint,
@@ -42,30 +39,19 @@ from admin_service.api.v1.endpoints import (
     internal as admin_internal_endpoint,
     invitation as admin_invitation_endpoint,
 )
-from admin_service.config import settings as admin_settings
-from admin_service.models import SERVICE_MODELS as ADMIN_MODELS
-from admin_service.services.bootstrap_service import AdminBootstrapService
-
-from user_service import db as user_db
 from user_service.api.v1.endpoints import admin_billing as user_admin_billing_endpoint
 from user_service.api.v1.endpoints import auth as user_auth_endpoint
 from user_service.api.v1.endpoints import billing as user_billing_endpoint
 from user_service.api.v1.endpoints import internal as user_internal_endpoint
 from user_service.api.v1.endpoints import keys as user_keys_endpoint
-from user_service.config import settings as user_settings
-from user_service.models import SERVICE_MODELS as USER_MODELS
-
-from testing_service import db as testing_db
 from testing_service.api import api_router as testing_api_router
-from testing_service.config import get_settings as get_testing_settings
-from testing_service.models import SERVICE_MODELS as TESTING_MODELS
 
 from backend_app.config import settings
+from backend_app.lifecycle import build_lifecycle_manager
 
 configure_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(settings.SERVICE_NAME)
-
-testing_settings = get_testing_settings()
+lifecycle_manager = build_lifecycle_manager(logger=logger)
 
 
 def _build_user_api_router() -> APIRouter:
@@ -112,85 +98,6 @@ admin_public_router = _build_admin_public_api_router()
 admin_internal_router = _build_admin_internal_api_router()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Boot four DB engines + admin superadmin bootstrap in fixed order."""
-    del app
-    log_event(logger, logging.INFO, "service_starting", service=settings.SERVICE_NAME)
-
-    configure_snowflake(
-        worker_id=settings.SNOWFLAKE_WORKER_ID,
-        datacenter_id=settings.SNOWFLAKE_DATACENTER_ID,
-    )
-
-    admin_db.create_engine(
-        database_url=admin_settings.DATABASE_URL,
-        pool_size=admin_settings.DATABASE_POOL_SIZE,
-        max_overflow=admin_settings.DATABASE_MAX_OVERFLOW,
-        echo=admin_settings.DATABASE_ECHO,
-    )
-    admin_db.init_session_factory()
-
-    user_db.create_engine(
-        database_url=user_settings.DATABASE_URL,
-        pool_size=user_settings.DATABASE_POOL_SIZE,
-        max_overflow=user_settings.DATABASE_MAX_OVERFLOW,
-        echo=user_settings.DATABASE_ECHO,
-    )
-    user_db.init_session_factory()
-
-    testing_db.create_engine(
-        database_url=testing_settings.DATABASE_URL,
-        pool_size=testing_settings.DATABASE_POOL_SIZE,
-        max_overflow=testing_settings.DATABASE_MAX_OVERFLOW,
-        echo=testing_settings.DATABASE_ECHO,
-    )
-    testing_db.init_session_factory()
-
-    if admin_settings.AUTO_INIT_DB:
-        await admin_db.init_db(ADMIN_MODELS)
-    if user_settings.AUTO_INIT_DB:
-        await user_db.init_db(USER_MODELS)
-    if testing_settings.auto_init_db:
-        await testing_db.init_db(TESTING_MODELS)
-
-    bootstrap_created = await AdminBootstrapService.ensure_super_admin()
-    log_event(
-        logger,
-        logging.INFO,
-        "super_admin_bootstrap_completed",
-        service=settings.SERVICE_NAME,
-        created=bootstrap_created,
-        enabled=admin_settings.BOOTSTRAP_SUPERADMIN_ENABLED,
-        required=admin_settings.BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP,
-    )
-
-    if testing_settings.probe_scheduler_enabled:
-        log_event(
-            logger,
-            logging.WARNING,
-            "probe_scheduler_flag_ignored_in_backend_app",
-            service=settings.SERVICE_NAME,
-            note="testing-scheduler must run as a separate process",
-        )
-
-    log_event(
-        logger,
-        logging.INFO,
-        "service_started",
-        service=settings.SERVICE_NAME,
-        port=settings.PORT,
-        domains=["admin", "user", "testing"],
-    )
-    try:
-        yield
-    finally:
-        log_event(logger, logging.INFO, "service_stopping", service=settings.SERVICE_NAME)
-        await testing_db.close_db()
-        await user_db.close_db()
-        await admin_db.close_db()
-
-
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description=settings.DESCRIPTION,
@@ -198,7 +105,7 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
-    lifespan=lifespan,
+    lifespan=lifecycle_manager.lifespan,
     redirect_slashes=False,
 )
 

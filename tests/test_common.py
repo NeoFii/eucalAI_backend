@@ -167,6 +167,7 @@ class TestDatabase:
 
 class TestDatabaseRefactorPrimitives:
     def test_database_refactor_platform_imports(self):
+        from common.api.pagination import PaginatedResponse
         from common.db.base import SoftDeleteMixin
         from common.db.query import ListParams, PaginatedResult
         from common.db.repository import BaseRepository
@@ -176,6 +177,7 @@ class TestDatabaseRefactorPrimitives:
         assert BaseRepository is not None
         assert ListParams is not None
         assert PaginatedResult is not None
+        assert PaginatedResponse is not None
         assert BaseGateway is not None
 
     def test_soft_delete_mixin_exposes_deleted_at_column(self):
@@ -224,6 +226,19 @@ class TestDatabaseRefactorPrimitives:
         assert payload.total == 2
         assert payload.page == 1
         assert payload.page_size == 20
+
+    def test_paginated_response_builds_from_paginated_result(self):
+        from common.api.pagination import PaginatedResponse
+        from common.db.query import PaginatedResult
+
+        result = PaginatedResult(items=[1, 2], total=9, page=2, page_size=5)
+
+        payload = PaginatedResponse.from_result(result)
+
+        assert payload.items == [1, 2]
+        assert payload.total == 9
+        assert payload.page == 2
+        assert payload.page_size == 5
 
     def test_base_gateway_can_store_service_name(self):
         from common.gateway.base import BaseGateway
