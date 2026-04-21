@@ -43,7 +43,7 @@ class EmailService:
 
     def _send_email(self, email: str, code: str, purpose: str) -> tuple[bool, str]:
         if not self.smtp_host or not self.smtp_user:
-            logger.debug("Mock email send: email=%s purpose=%s code=%s", email, purpose, code)
+            logger.debug("Mock email send: email=%s purpose=%s", email, purpose)
             return True, ""
 
         try:
@@ -142,7 +142,9 @@ class EmailService:
         purpose: str = "register",
     ) -> EmailVerificationCode:
         email = normalize_email(email)
-        record = await EmailCodeRepository(db).latest_unused_for_email(email, purpose)
+        record = await EmailCodeRepository(db).latest_unused_for_email(
+            email, purpose, for_update=True,
+        )
         if not record:
             raise CodeNotFoundException()
 

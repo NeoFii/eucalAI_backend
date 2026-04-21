@@ -74,6 +74,7 @@ async def retry_invitation_release_outbox(ctx: dict) -> None:
             .scalars()
             .all()
         )
+        success, fail = 0, 0
         for item in items:
             try:
                 released = await gateway.release_invitation_code(
@@ -82,12 +83,25 @@ async def retry_invitation_release_outbox(ctx: dict) -> None:
                 )
                 if released:
                     await db.delete(item)
-                    continue
-                item.retry_count += 1
-                item.last_error = "release_invitation_code returned false"
+                    success += 1
+                else:
+                    item.retry_count += 1
+                    item.last_error = "release_invitation_code returned false"
+                    fail += 1
+                await db.commit()
             except Exception as exc:
-                item.retry_count += 1
-                item.last_error = str(exc)[:255]
+                await db.rollback()
+                try:
+                    await db.refresh(item)
+                    item.retry_count += 1
+                    item.last_error = str(exc)[:255]
+                    await db.commit()
+                except Exception:
+                    logger.error("Failed to update retry_count for outbox id=%s", item.id)
+                fail += 1
+                logger.warning("Invitation release failed: code=%s error=%s", item.code, exc)
+        if items:
+            logger.info("Invitation release batch: %d succeeded, %d failed", success, fail)
 
 
 async def cleanup_expired_verification_codes(ctx: dict) -> None:
@@ -108,6 +122,7 @@ async def cleanup_expired_verification_codes(ctx: dict) -> None:
         )
         for record in records:
             await db.delete(record)
+        await db.commit()
 
 
 def get_worker_settings_kwargs() -> dict:

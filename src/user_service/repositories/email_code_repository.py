@@ -34,7 +34,9 @@ class EmailCodeRepository(BaseRepository[EmailVerificationCode]):
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
-    async def latest_unused_for_email(self, email: str, purpose: str) -> EmailVerificationCode | None:
+    async def latest_unused_for_email(
+        self, email: str, purpose: str, *, for_update: bool = False,
+    ) -> EmailVerificationCode | None:
         statement = (
             select(EmailVerificationCode)
             .where(
@@ -45,6 +47,8 @@ class EmailCodeRepository(BaseRepository[EmailVerificationCode]):
             .order_by(EmailVerificationCode.created_at.desc())
             .limit(1)
         )
+        if for_update:
+            statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def list_unused_for_email(self, email: str, purpose: str) -> list[EmailVerificationCode]:

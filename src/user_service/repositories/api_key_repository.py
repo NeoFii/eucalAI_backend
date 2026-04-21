@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from common.db import BaseRepository
 from user_service.models import UserApiKey
@@ -27,9 +27,11 @@ class ApiKeyRepository(BaseRepository[UserApiKey]):
 
     async def count_for_user(self, user_id: int) -> int:
         result = await self.session.execute(
-            self._base_query().where(UserApiKey.user_id == user_id)
+            select(func.count())
+            .select_from(UserApiKey)
+            .where(UserApiKey.deleted_at.is_(None), UserApiKey.user_id == user_id)
         )
-        return len(result.scalars().all())
+        return int(result.scalar() or 0)
 
     async def get_owned_key(
         self,

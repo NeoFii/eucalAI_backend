@@ -13,9 +13,11 @@ from admin_service.dependencies import get_db_session
 from admin_service.models import AdminUser
 from admin_service.policies import require_active_admin
 from admin_service.schemas import (
+    AdminChangePasswordRequest,
     AdminChangePasswordResponse,
     AdminInfoResponse,
     AdminInfoResponseData,
+    AdminLoginRequest,
     AdminLoginResponse,
     AdminLoginResponseData,
     AdminLogoutResponse,
@@ -65,24 +67,19 @@ def _clear_auth_cookies(response: Response) -> None:
 
 @router.post("/auth/login", response_model=AdminLoginResponse, summary="Admin login")
 async def login(
+    payload: AdminLoginRequest,
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminLoginResponse:
     """Authenticate an admin and issue cookies."""
     try:
-        body = await request.json()
-        email = body.get("email")
-        password = body.get("password")
-        if not email or not password:
-            raise InvalidCredentialsException()
-
         user_agent = request.headers.get("user-agent")
         ip_address = request.client.host if request.client else None
         admin, access_token = await AdminAuthService.login(
             db,
-            email,
-            password,
+            payload.email,
+            payload.password,
             user_agent,
             ip_address,
         )
@@ -131,13 +128,14 @@ async def logout(
 async def refresh_token(
     response: Response,
     refresh_token: Optional[str] = Cookie(None, alias="refresh_token"),
+    db: AsyncSession = Depends(get_db_session),
 ) -> AdminRefreshResponse:
     """Refresh admin auth cookies."""
     try:
         if not isinstance(refresh_token, str) or not refresh_token:
             raise AuthenticationException(detail="未提供刷新令牌")
         new_access_token, new_refresh_token = await AdminAuthService.refresh_access_token(
-            refresh_token
+            db, refresh_token
         )
 
         _set_auth_cookies(response, new_access_token, new_refresh_token)
@@ -183,22 +181,18 @@ async def get_me(
     summary="Change admin password",
 )
 async def change_password(
-    request: Request,
+    payload: AdminChangePasswordRequest,
     response: Response,
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminChangePasswordResponse:
     """Change the current admin password and clear cookies."""
     try:
-        body = await request.json()
-        old_password = body.get("old_password")
-        new_password = body.get("new_password")
-
         await AdminAuthService.change_password(
             db,
             current_admin,
-            old_password,
-            new_password,
+            payload.old_password,
+            payload.new_password,
         )
         _clear_auth_cookies(response)
         return AdminChangePasswordResponse(code=200, message="密码修改成功，请重新登录")

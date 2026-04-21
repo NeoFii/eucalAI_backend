@@ -72,19 +72,19 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
         "InvitationCode",
         foreign_keys="InvitationCode.created_by",
         back_populates="creator",
-        lazy="selectin",
+        lazy="noload",
     )
     audit_logs = relationship(
         "AdminAuditLog",
         foreign_keys="AdminAuditLog.actor_admin_id",
         back_populates="actor_admin",
-        lazy="selectin",
+        lazy="noload",
     )
     targeted_audit_logs = relationship(
         "AdminAuditLog",
         foreign_keys="AdminAuditLog.target_admin_id",
         back_populates="target_admin",
-        lazy="selectin",
+        lazy="noload",
     )
 
     def __init__(self, **kwargs):

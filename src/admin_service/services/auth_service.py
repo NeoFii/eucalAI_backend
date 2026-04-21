@@ -13,6 +13,7 @@ from admin_service.models import AdminUser
 from admin_service.repositories import AdminUserRepository
 from admin_service.services.audit_service import AdminAuditService
 from common.core.exceptions import (
+    AuthenticationException,
     InvalidCredentialsException,
     InvalidTokenException,
     TokenExpiredException,
@@ -143,7 +144,9 @@ class AdminAuthService:
         logger.info("Admin logout: %s", admin.email)
 
     @staticmethod
-    async def refresh_access_token(refresh_token: str) -> tuple[str, str]:
+    async def refresh_access_token(
+        db: AsyncSession, refresh_token: str
+    ) -> tuple[str, str]:
         """Issue new access and refresh tokens from a refresh token."""
         payload = decode_token(refresh_token, settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM)
         if not payload:
@@ -154,6 +157,10 @@ class AdminAuthService:
         uid = payload.get("uid")
         if not uid:
             raise InvalidTokenException()
+
+        admin = await AdminUserRepository(db).get_by_uid(uid)
+        if not admin or admin.status == 0:
+            raise AuthenticationException(detail="Account is disabled or does not exist")
 
         new_access_token = create_access_token(
             data={"uid": uid, "sub": str(uid)},

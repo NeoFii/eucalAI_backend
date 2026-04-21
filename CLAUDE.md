@@ -23,6 +23,8 @@ All packages live under `src/`. Typical deployment uses `backend-app` (merged co
 
 Router runtime assets (`runtime_config.json`, `model_paths.json`) live under `deploy/router/`. Install inference ML deps with `uv sync --extra inference`.
 
+`backend-app` merges admin/user/testing into one process but they still make HMAC-signed HTTP calls to themselves over loopback for wire compatibility with standalone deployments.
+
 ## Common Commands
 
 ```bash
@@ -110,3 +112,11 @@ All config via `.env` loaded by pydantic-settings. Each service config extends `
 ## Testing
 - pytest with `asyncio_mode = "auto"` — all async tests run automatically
 - Tests in `tests/` directory, covering architecture boundaries, schema drift, runtime orchestration, and service-specific logic
+- Tests use in-memory SQLite (`sqlite+aiosqlite:///:memory:`) and monkeypatch for mocking — no real DB required
+- Alembic revisions are the schema source of truth; SQL snapshots in `scripts/sql/` are reference only
+
+## Deployment
+- Docker Compose in `deploy/docker-compose.yml` orchestrates backend-app + router-service + redis + testing-worker + testing-scheduler
+- MySQL is managed separately (not in compose)
+- `testing-scheduler` runs APScheduler in a separate process from `testing-service`
+- `testing-worker` is an arq consumer process for the benchmark queue

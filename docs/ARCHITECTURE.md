@@ -198,7 +198,9 @@ uv run bootstrap-databases                  # 3 库一把 upgrade
 
 ## 7. 部署
 
-`deploy/docker-compose.yml`：
+> 三容器部署拓扑（router GPU 拆分）详见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+
+当前 `deploy/docker-compose.yml`：
 
 | 容器 | 镜像 | 端口 | 依赖 |
 |---|---|---|---|
