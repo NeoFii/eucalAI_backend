@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 def test_service_package_roots_expose_only_final_public_contracts():
     from admin_service import UserStatsGateway, require_super_admin
@@ -14,9 +16,22 @@ def test_service_package_roots_expose_only_final_public_contracts():
 def test_router_and_testing_gateways_expose_final_contracts_only():
     import testing_service.gateway as testing_gateway
     from router_service.gateway import UserIdentityGateway, ValidatedApiKey
+    from router_service.schemas.requests import ChatCompletionRequest, CompletionRequest
     from testing_service.gateway import AdminIdentityGateway
 
     assert UserIdentityGateway.__module__ == "router_service.gateway"
     assert ValidatedApiKey.__module__ == "router_service.gateway"
+    assert ChatCompletionRequest.__module__ == "router_service.schemas.requests"
+    assert CompletionRequest.__module__ == "router_service.schemas.requests"
     assert AdminIdentityGateway.__module__ == "testing_service.gateway"
     assert not hasattr(testing_gateway, "AdminIdentityClientService")
+
+
+def test_router_schema_package_does_not_reexport_removed_request_symbols():
+    import router_service.schemas as router_schemas
+
+    assert not hasattr(router_schemas, "ChatCompletionRequest")
+    assert not hasattr(router_schemas, "CompletionRequest")
+
+    with pytest.raises(ImportError):
+        exec("from router_service.schemas import ChatCompletionRequest")
