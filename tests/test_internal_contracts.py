@@ -219,7 +219,7 @@ async def test_router_api_key_dependency_uses_user_internal_contract(monkeypatch
         return SimpleNamespace(id=7, user_id=5, name="default")
 
     monkeypatch.setattr(
-        "router_service.dependencies.IdentityClientService.validate_api_key",
+        "router_service.dependencies.UserIdentityGateway.validate_api_key",
         fake_validate_api_key,
     )
 
@@ -279,7 +279,7 @@ async def test_router_api_key_dependency_maps_invalid_key_to_401(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "router_service.dependencies.IdentityClientService.validate_api_key",
+        "router_service.dependencies.UserIdentityGateway.validate_api_key",
         fake_validate_api_key,
     )
 
@@ -908,27 +908,51 @@ async def test_request_internal_json_opens_circuit_after_threshold(monkeypatch):
         )
 
 
-@pytest.mark.skip(
-    reason="router_service.services.identity_client was part of the legacy router; "
-    "new ML router does not call identity. Re-enable if reintroduced."
-)
 @pytest.mark.asyncio
-async def test_router_identity_client_maps_none_and_timeout(monkeypatch):
-    from router_service.services.identity_client import IdentityClientService
+async def test_router_user_identity_gateway_maps_payload(monkeypatch):
+    from router_service.gateway import UserIdentityGateway
+
+    captured = {}
+
+    async def fake_post_internal_json(**kwargs):
+        captured["call"] = kwargs
+        return {
+            "id": 17,
+            "user_id": 23,
+            "name": "router-key",
+        }
+
+    monkeypatch.setattr("router_service.gateway.post_internal_json", fake_post_internal_json)
+
+    principal = await UserIdentityGateway.validate_api_key(
+        api_key="sk-user-123",
+        model="gpt-4o-mini",
+        client_ip="203.0.113.8",
+    )
+
+    assert principal.id == 17
+    assert principal.user_id == 23
+    assert principal.name == "router-key"
+    assert captured["call"]["target_service"] == "user-service"
+    assert captured["call"]["path"] == "/api/v1/internal/api-keys/validate"
+    assert captured["call"]["json_body"] == {
+        "key": "sk-user-123",
+        "model": "gpt-4o-mini",
+        "client_ip": "203.0.113.8",
+    }
+
+
+@pytest.mark.asyncio
+async def test_router_user_identity_gateway_maps_timeout(monkeypatch):
+    from router_service.gateway import UserIdentityGateway
     from common.core.exceptions import ServiceUnavailableException
-
-    async def fake_get_none(**_kwargs):
-        return None
-
-    monkeypatch.setattr("router_service.services.identity_client.get_internal_json", fake_get_none)
-    assert await IdentityClientService.fetch_user_by_uid(42) is None
 
     async def fake_timeout(**_kwargs):
         raise ServiceUnavailableException("Identity service unavailable")
 
-    monkeypatch.setattr("router_service.services.identity_client.get_internal_json", fake_timeout)
+    monkeypatch.setattr("router_service.gateway.post_internal_json", fake_timeout)
     with pytest.raises(ServiceUnavailableException):
-        await IdentityClientService.fetch_user_by_uid(42)
+        await UserIdentityGateway.validate_api_key(api_key="sk-timeout")
 
 
 @pytest.mark.asyncio
