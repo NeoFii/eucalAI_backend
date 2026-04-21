@@ -17,7 +17,7 @@ from testing_service.benchmark.jobs import (
     enqueue_single_benchmark_job,
 )
 from testing_service.config import get_settings
-from testing_service.benchmarking import (
+from testing_service.benchmark import (
     AdminProbeAuditListResponse,
     AdminProbeAuditResponse,
     BenchmarkJobAcceptedResponse,
@@ -28,7 +28,7 @@ from testing_service.benchmarking import (
     TrendDataPoint,
 )
 from testing_service.schemas import ApiResponse
-from testing_service.benchmarking import AdminProbeAuditService, BenchmarkJobService
+from testing_service.benchmark import AdminProbeAuditService, BenchmarkJobService
 from testing_service.catalog import ModelService
 from testing_service.provider_config import OfferingService, PerformanceMetricService
 

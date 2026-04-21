@@ -933,7 +933,7 @@ async def test_router_identity_client_maps_none_and_timeout(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_testing_admin_identity_client_maps_payload(monkeypatch):
-    from testing_service.services.admin_identity_client import AdminIdentityClientService
+    from testing_service.gateway import AdminIdentityGateway
 
     async def fake_get_payload(**_kwargs):
         return {
@@ -946,11 +946,11 @@ async def test_testing_admin_identity_client_maps_payload(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "testing_service.services.admin_identity_client.get_internal_json",
+        "testing_service.gateway.get_internal_json",
         fake_get_payload,
     )
 
-    identity = await AdminIdentityClientService.fetch_admin_by_uid(99)
+    identity = await AdminIdentityGateway().fetch_admin_by_uid(99)
 
     assert identity is not None
     assert identity.uid == 99
@@ -1041,7 +1041,7 @@ async def test_admin_invitation_client_release_returns_flag(monkeypatch):
 async def test_testing_admin_identity_client_maps_unexpected_4xx_to_service_unavailable(monkeypatch):
     from common.core.exceptions import ServiceUnavailableException
     from common.internal import InternalServiceResponseError
-    from testing_service.services.admin_identity_client import AdminIdentityClientService
+    from testing_service.gateway import AdminIdentityGateway
 
     async def fake_get_payload(**_kwargs):
         raise InternalServiceResponseError(
@@ -1053,12 +1053,12 @@ async def test_testing_admin_identity_client_maps_unexpected_4xx_to_service_unav
         )
 
     monkeypatch.setattr(
-        "testing_service.services.admin_identity_client.get_internal_json",
+        "testing_service.gateway.get_internal_json",
         fake_get_payload,
     )
 
     with pytest.raises(ServiceUnavailableException) as exc_info:
-        await AdminIdentityClientService.fetch_admin_by_uid(99)
+        await AdminIdentityGateway().fetch_admin_by_uid(99)
 
     assert exc_info.value.status_code == 503
 

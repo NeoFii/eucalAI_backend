@@ -12,7 +12,7 @@ from common.core.exceptions import AuthenticationException, InvalidTokenExceptio
 from testing_service.db import get_db
 from common.utils.jwt import decode_token
 from testing_service.config import get_settings
-from testing_service.services.admin_identity_client import AdminIdentityClientService
+from testing_service.gateway import AdminIdentityClientService
 
 security = HTTPBearer(auto_error=False)
 settings = get_settings()

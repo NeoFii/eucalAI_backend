@@ -1,4 +1,4 @@
-"""Internal admin identity client used by testing service."""
+"""Gateway contracts for testing-service cross-service calls."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ class AdminIdentity:
     status: int
 
 
-class AdminIdentityClientService:
-    """Internal client for the admin identity contract."""
+class AdminIdentityGateway:
+    """Gateway for the admin identity contract exposed by admin-service."""
 
     @staticmethod
     async def fetch_admin_by_uid(uid: int) -> AdminIdentity | None:
@@ -58,3 +58,8 @@ class AdminIdentityClientService:
             role=payload["role"],
             status=int(payload["status"]),
         )
+
+
+AdminIdentityClientService = AdminIdentityGateway
+
+__all__ = ["AdminIdentity", "AdminIdentityGateway", "AdminIdentityClientService"]

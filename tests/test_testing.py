@@ -92,7 +92,7 @@ class TestTestingConfig:
 
 class TestTestingModules:
     def test_import_explicit_service_modules(self):
-        from testing_service.benchmarking import AdminProbeAuditService, BenchmarkJobService
+        from testing_service.benchmark import AdminProbeAuditService, BenchmarkJobService
         from testing_service.catalog import CategoryService, ModelService, VendorService
         from testing_service.provider_config import OfferingService, PerformanceMetricService, ProviderService
 
@@ -105,12 +105,41 @@ class TestTestingModules:
         assert BenchmarkJobService is not None
         assert AdminProbeAuditService is not None
 
+    def test_refactor_targets_replace_legacy_modules(self):
+        from testing_service.dependencies import AdminIdentityClientService
+        from testing_service.gateway import AdminIdentity, AdminIdentityGateway
+
+        assert AdminIdentity is not None
+        assert AdminIdentityGateway is not None
+        assert AdminIdentityClientService is AdminIdentityGateway
+        assert os.path.isdir(os.path.join(backend_dir, "src", "testing_service", "schemas"))
+        assert not os.path.exists(
+            os.path.join(backend_dir, "src", "testing_service", "schemas.py")
+        )
+        assert not os.path.exists(
+            os.path.join(
+                backend_dir,
+                "src",
+                "testing_service",
+                "services",
+                "admin_identity_client.py",
+            )
+        )
+        assert not os.path.exists(
+            os.path.join(backend_dir, "src", "testing_service", "benchmarking")
+        )
+
     def test_benchmark_task_exports(self):
         from testing_service.benchmark.tasks import ProbeScheduler, ProbeTask
 
         assert hasattr(ProbeTask, "probe_offering")
         assert hasattr(ProbeTask, "probe_all_active")
         assert hasattr(ProbeScheduler, "run_scheduled_probe")
+
+    def test_benchmark_package_exports_merged_schema_types(self):
+        from testing_service.benchmark import BenchmarkSummaryItem
+
+        assert BenchmarkSummaryItem is not None
 
     def test_benchmark_engine_exports(self):
         from testing_service.benchmark.engine import BenchmarkEngine
