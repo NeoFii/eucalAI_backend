@@ -11,8 +11,7 @@ from admin_service.db import Base
 from common.db.base import SnowflakeIdMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from admin_service.models.admin_audit_log import AdminAuditLog
-    from admin_service.models.invitation_code import InvitationCode
+    pass
 
 
 class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):

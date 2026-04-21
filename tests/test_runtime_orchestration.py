@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(r"F:\Eucal_AI\backend")
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_compose_uses_readiness_checks_and_explicit_scheduler_role():

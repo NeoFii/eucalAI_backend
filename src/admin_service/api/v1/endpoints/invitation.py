@@ -6,8 +6,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_service.dependencies import get_current_admin, get_db_session
+from admin_service.dependencies import get_db_session
+from admin_service.gateway import UserStatsGateway
 from admin_service.models import AdminUser
+from admin_service.policies import require_active_admin
 from admin_service.schemas import (
     DashboardStatsResponse,
     DashboardStatsResponseData,
@@ -21,21 +23,22 @@ from admin_service.schemas import (
     InvitationCodeOperationResponse,
     UpdateInvitationCodeRequest,
 )
-from admin_service.services.identity_client import IdentityClientService
 from admin_service.services.invitation_service import InvitationCodeService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["invitation-codes"])
 
 
-@router.get("/dashboard/stats", response_model=DashboardStatsResponse, summary="Get dashboard stats")
+@router.get(
+    "/dashboard/stats", response_model=DashboardStatsResponse, summary="Get dashboard stats"
+)
 async def get_dashboard_stats(
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> DashboardStatsResponse:
     del current_admin
     code_stats = await InvitationCodeService.get_stats(db)
-    total_users = await IdentityClientService.fetch_total_users()
+    total_users = await UserStatsGateway().fetch_total_users()
     return DashboardStatsResponse(
         code=200,
         message="success",
@@ -55,7 +58,7 @@ async def get_dashboard_stats(
 )
 async def generate_invitation_codes(
     request: GenerateInvitationCodeRequest,
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> GenerateInvitationCodeResponse:
     codes = await InvitationCodeService.generate(
@@ -88,16 +91,20 @@ async def generate_invitation_codes(
     )
 
 
-@router.get("/invitation-codes", response_model=InvitationCodeListResponse, summary="List invitation codes")
+@router.get(
+    "/invitation-codes", response_model=InvitationCodeListResponse, summary="List invitation codes"
+)
 async def list_invitation_codes(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[int] = Query(None),
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeListResponse:
     del current_admin
-    codes, total = await InvitationCodeService.list(db=db, page=page, page_size=page_size, status=status)
+    codes, total = await InvitationCodeService.list(
+        db=db, page=page, page_size=page_size, status=status
+    )
     return InvitationCodeListResponse(
         code=200,
         message="success",
@@ -123,10 +130,14 @@ async def list_invitation_codes(
     )
 
 
-@router.patch("/invitation-codes/{code_id}/enable", response_model=InvitationCodeOperationResponse, summary="Enable invitation code")
+@router.patch(
+    "/invitation-codes/{code_id}/enable",
+    response_model=InvitationCodeOperationResponse,
+    summary="Enable invitation code",
+)
 async def enable_invitation_code(
     code_id: int,
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeOperationResponse:
     del current_admin
@@ -134,10 +145,14 @@ async def enable_invitation_code(
     return InvitationCodeOperationResponse(code=200, message="success")
 
 
-@router.patch("/invitation-codes/{code_id}/disable", response_model=InvitationCodeOperationResponse, summary="Disable invitation code")
+@router.patch(
+    "/invitation-codes/{code_id}/disable",
+    response_model=InvitationCodeOperationResponse,
+    summary="Disable invitation code",
+)
 async def disable_invitation_code(
     code_id: int,
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeOperationResponse:
     del current_admin
@@ -145,11 +160,15 @@ async def disable_invitation_code(
     return InvitationCodeOperationResponse(code=200, message="success")
 
 
-@router.patch("/invitation-codes/{code_id}", response_model=InvitationCodeOperationResponse, summary="Update invitation code")
+@router.patch(
+    "/invitation-codes/{code_id}",
+    response_model=InvitationCodeOperationResponse,
+    summary="Update invitation code",
+)
 async def update_invitation_code(
     code_id: int,
     request: UpdateInvitationCodeRequest,
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeOperationResponse:
     del current_admin

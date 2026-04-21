@@ -12,7 +12,7 @@ from common.db.base import SnowflakeIdMixin, TimestampMixin
 from common.utils.timezone import now
 
 if TYPE_CHECKING:
-    from admin_service.models.admin_user import AdminUser
+    pass
 
 
 class InvitationCode(Base, SnowflakeIdMixin, TimestampMixin):

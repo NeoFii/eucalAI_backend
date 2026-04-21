@@ -14,14 +14,14 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-from admin_service.models import SERVICE_MODELS
 from admin_service.api import api_router
 from admin_service.config import settings
+from admin_service.db import close_db, create_engine, get_engine, init_db, init_session_factory
+from admin_service.models import SERVICE_MODELS
+from admin_service.services.bootstrap_service import AdminBootstrapService
+from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability, log_event
-from common.core.exception_handlers import register_exception_handlers
-from admin_service.db import close_db, create_engine, get_engine, init_db, init_session_factory
-from admin_service.services.bootstrap_service import AdminBootstrapService
 from common.utils.snowflake import configure_snowflake
 
 configure_logging(settings.LOG_LEVEL)
@@ -123,4 +123,3 @@ if __name__ == "__main__":
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )
-

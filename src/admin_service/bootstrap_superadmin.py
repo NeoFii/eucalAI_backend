@@ -8,9 +8,9 @@ import logging
 from collections.abc import Sequence
 
 from admin_service.config import settings
+from admin_service.db import close_db, create_engine, get_db_context, init_db, init_session_factory
 from admin_service.models import SERVICE_MODELS
 from admin_service.services.bootstrap_service import AdminBootstrapService
-from admin_service.db import close_db, create_engine, get_db_context, init_db, init_session_factory
 from common.utils.snowflake import configure_snowflake
 
 logger = logging.getLogger(__name__)
@@ -95,5 +95,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,4 +1,4 @@
-﻿"""Admin authentication endpoints."""
+"""Admin authentication endpoints."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from admin_service.dependencies import (
     get_db_session,
 )
 from admin_service.models import AdminUser
+from admin_service.policies import require_active_admin
 from admin_service.schemas import (
     AdminChangePasswordResponse,
     AdminInfoResponse,
@@ -121,7 +122,7 @@ async def login(
 @router.post("/auth/logout", response_model=AdminLogoutResponse, summary="Admin logout")
 async def logout(
     response: Response,
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
 ) -> AdminLogoutResponse:
     """Clear admin cookies."""
     await AdminAuthService.logout(current_admin)
@@ -161,7 +162,7 @@ async def refresh_token(
 
 @router.get("/auth/me", response_model=AdminInfoResponse, summary="Current admin")
 async def get_me(
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
 ) -> AdminInfoResponse:
     """Return the current admin profile."""
     return AdminInfoResponse(

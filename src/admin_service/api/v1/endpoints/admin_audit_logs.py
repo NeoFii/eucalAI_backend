@@ -3,7 +3,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_service.dependencies import get_db_session, require_super_admin
+from admin_service.dependencies import get_db_session
+from admin_service.models import AdminAuditLog, AdminUser
+from admin_service.policies import require_super_admin
 from admin_service.schemas import (
     AdminAuditActor,
     AdminAuditCategory,
@@ -11,7 +13,6 @@ from admin_service.schemas import (
     AdminAuditLogListData,
     AdminAuditLogListResponse,
 )
-from admin_service.models import AdminAuditLog, AdminUser
 from admin_service.services.audit_service import AdminAuditService
 
 router = APIRouter(prefix="/admin-audit-logs", tags=["admin-audit-logs"])

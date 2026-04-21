@@ -7,15 +7,15 @@ import string
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.models import InvitationCode
+from admin_service.repositories import InvitationCodeRepository
 from common.core.exceptions import (
+    InvalidInvitationCodeException,
     InvitationCodeDisabledException,
     InvitationCodeExpiredException,
     InvitationCodeUsedException,
-    InvalidInvitationCodeException,
 )
 from common.utils.timezone import now
 
@@ -44,10 +44,11 @@ class InvitationCodeService:
 
         codes: list[InvitationCode] = []
         resolved_expires_at = expires_at or now() + timedelta(days=expires_days or 7)
+        repo = InvitationCodeRepository(db)
 
         for _ in range(quantity):
             code_str = InvitationCodeService.generate_code()
-            while await InvitationCodeService.get_by_code(db, code_str):
+            while await repo.get_by_code(code_str):
                 code_str = InvitationCodeService.generate_code()
 
             code = InvitationCode(
@@ -57,7 +58,7 @@ class InvitationCodeService:
                 expires_at=resolved_expires_at,
                 remark=remark,
             )
-            db.add(code)
+            repo.add(code)
             codes.append(code)
 
         await db.commit()
@@ -68,8 +69,7 @@ class InvitationCodeService:
     @staticmethod
     async def get_by_code(db: AsyncSession, code: str) -> InvitationCode | None:
         """Look up an invitation code by its raw code value."""
-        result = await db.execute(select(InvitationCode).where(InvitationCode.code == code))
-        return result.scalar_one_or_none()
+        return await InvitationCodeRepository(db).get_by_code(code)
 
     @staticmethod
     async def verify_and_use(
@@ -80,10 +80,7 @@ class InvitationCodeService:
         commit: bool = True,
     ) -> InvitationCode:
         """Validate an invitation code and mark it as consumed."""
-        result = await db.execute(
-            select(InvitationCode).where(InvitationCode.code == code).with_for_update()
-        )
-        invitation_code = result.scalar_one_or_none()
+        invitation_code = await InvitationCodeRepository(db).get_by_code(code, for_update=True)
 
         if invitation_code is None:
             raise InvalidInvitationCodeException()
@@ -113,10 +110,7 @@ class InvitationCodeService:
         commit: bool = True,
     ) -> bool:
         """Release a previously consumed invitation code for compensation flows."""
-        result = await db.execute(
-            select(InvitationCode).where(InvitationCode.code == code).with_for_update()
-        )
-        invitation_code = result.scalar_one_or_none()
+        invitation_code = await InvitationCodeRepository(db).get_by_code(code, for_update=True)
         if invitation_code is None:
             raise InvalidInvitationCodeException()
 
@@ -137,8 +131,7 @@ class InvitationCodeService:
     @staticmethod
     async def enable(db: AsyncSession, code_id: int) -> InvitationCode:
         """Enable an unused invitation code."""
-        result = await db.execute(select(InvitationCode).where(InvitationCode.id == code_id))
-        code = result.scalar_one_or_none()
+        code = await InvitationCodeRepository(db).get_by_id(code_id)
 
         if code is None:
             raise InvalidInvitationCodeException()
@@ -153,8 +146,7 @@ class InvitationCodeService:
     @staticmethod
     async def disable(db: AsyncSession, code_id: int) -> InvitationCode:
         """Disable an invitation code."""
-        result = await db.execute(select(InvitationCode).where(InvitationCode.id == code_id))
-        code = result.scalar_one_or_none()
+        code = await InvitationCodeRepository(db).get_by_id(code_id)
 
         if code is None:
             raise InvalidInvitationCodeException()
@@ -172,8 +164,7 @@ class InvitationCodeService:
         remark: Optional[str] = None,
     ) -> InvitationCode:
         """Update editable invitation-code fields."""
-        result = await db.execute(select(InvitationCode).where(InvitationCode.id == code_id))
-        code = result.scalar_one_or_none()
+        code = await InvitationCodeRepository(db).get_by_id(code_id)
 
         if code is None:
             raise InvalidInvitationCodeException()
@@ -197,28 +188,13 @@ class InvitationCodeService:
         status: Optional[int] = None,
     ) -> tuple[list[InvitationCode], int]:
         """List invitation codes for the control plane."""
-        query = select(InvitationCode)
-        if status is not None:
-            query = query.where(InvitationCode.status == status)
-
-        total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
-        items = (
-            await db.execute(
-                query.order_by(InvitationCode.created_at.desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
-            )
-        ).scalars().all()
-        return list(items), total
+        return await InvitationCodeRepository(db).list_codes(
+            page=page,
+            page_size=page_size,
+            status=status,
+        )
 
     @staticmethod
     async def get_stats(db: AsyncSession) -> dict[str, int]:
         """Return invitation-code summary counts."""
-        total = (await db.execute(select(func.count(InvitationCode.id)))).scalar() or 0
-        used = (
-            await db.execute(select(func.count(InvitationCode.id)).where(InvitationCode.status == 1))
-        ).scalar() or 0
-        valid = (
-            await db.execute(select(func.count(InvitationCode.id)).where(InvitationCode.status == 0))
-        ).scalar() or 0
-        return {"total": total, "used": used, "valid": valid}
+        return await InvitationCodeRepository(db).get_stats()

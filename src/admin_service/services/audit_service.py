@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from admin_service.schemas import AdminAuditCategory
-from admin_service.models import AdminAuditLog, AdminUser
+from admin_service.models import AdminAuditLog
+from admin_service.repositories import AdminAuditLogRepository, AdminUserRepository
+from admin_service.schemas.audit_log import AdminAuditCategory
 
 
 class AdminAuditService:
@@ -62,7 +61,7 @@ class AdminAuditService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        db.add(audit_log)
+        AdminAuditLogRepository(db).add(audit_log)
         await db.flush()
         return audit_log
 
@@ -79,40 +78,25 @@ class AdminAuditService:
     ) -> tuple[list[AdminAuditLog], int]:
         actor_admin_id = None
         if actor_uid is not None:
-            actor_result = await db.execute(select(AdminUser.id).where(AdminUser.uid == actor_uid))
-            actor_admin_id = actor_result.scalar_one_or_none()
+            actor_admin_id = await AdminUserRepository(db).get_id_by_uid(actor_uid)
             if actor_admin_id is None:
                 return [], 0
 
         target_admin_id = None
         if target_uid is not None:
-            target_result = await db.execute(select(AdminUser.id).where(AdminUser.uid == target_uid))
-            target_admin_id = target_result.scalar_one_or_none()
+            target_admin_id = await AdminUserRepository(db).get_id_by_uid(target_uid)
             if target_admin_id is None:
                 return [], 0
 
-        query = select(AdminAuditLog).options(
-            selectinload(AdminAuditLog.actor_admin),
-            selectinload(AdminAuditLog.target_admin),
-        )
-        count_query = select(func.count()).select_from(AdminAuditLog)
-
+        category_actions = None
         if category != "all":
             category_actions = AdminAuditService.CATEGORY_ACTIONS[category]
-            query = query.where(AdminAuditLog.action.in_(category_actions))
-            count_query = count_query.where(AdminAuditLog.action.in_(category_actions))
 
-        if action:
-            query = query.where(AdminAuditLog.action == action)
-            count_query = count_query.where(AdminAuditLog.action == action)
-        if actor_admin_id is not None:
-            query = query.where(AdminAuditLog.actor_admin_id == actor_admin_id)
-            count_query = count_query.where(AdminAuditLog.actor_admin_id == actor_admin_id)
-        if target_admin_id is not None:
-            query = query.where(AdminAuditLog.target_admin_id == target_admin_id)
-            count_query = count_query.where(AdminAuditLog.target_admin_id == target_admin_id)
-
-        query = query.order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc())
-        total = int((await db.execute(count_query)).scalar() or 0)
-        result = await db.execute(query.offset((page - 1) * page_size).limit(page_size))
-        return list(result.scalars().all()), total
+        return await AdminAuditLogRepository(db).list_logs(
+            page=page,
+            page_size=page_size,
+            actions=category_actions,
+            action=action,
+            actor_admin_id=actor_admin_id,
+            target_admin_id=target_admin_id,
+        )

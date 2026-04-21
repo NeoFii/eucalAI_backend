@@ -1,24 +1,36 @@
-"""Identity client used by admin control-plane endpoints."""
+"""Gateways for admin-service external contracts."""
 
 from __future__ import annotations
 
-from common.core.exceptions import ServiceUnavailableException
+from abc import ABC, abstractmethod
+
 from admin_service.config import settings
+from common.core.exceptions import ServiceUnavailableException
+from common.gateway.base import BaseGateway
 from common.internal import InternalServiceError, get_internal_json
 
 IDENTITY_TIMEOUT_SECONDS = 3.0
 
 
-class IdentityClientService:
-    """Internal client for identity-service contracts."""
+class UserStatsGatewayInterface(ABC):
+    """Contract for user-service statistics needed by admin-service."""
 
-    @staticmethod
-    async def fetch_total_users() -> int:
-        """Fetch the total user count from the identity service."""
+    @abstractmethod
+    async def fetch_total_users(self) -> int:
+        """Return the total user count."""
+
+
+class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
+    """HTTP gateway for user-service statistics."""
+
+    def __init__(self) -> None:
+        super().__init__(service_name="user-service")
+
+    async def fetch_total_users(self) -> int:
         try:
             payload = await get_internal_json(
                 base_url=settings.USER_SERVICE_URL,
-                target_service="user-service",
+                target_service=self.service_name,
                 path="/api/v1/internal/stats/users",
                 secret=settings.INTERNAL_SECRET,
                 caller_service=settings.SERVICE_NAME,

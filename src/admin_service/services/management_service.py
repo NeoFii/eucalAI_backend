@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.exceptions import AdminConflictException, AdminPermissionDeniedException
 from admin_service.models import AdminUser
+from admin_service.repositories import AdminUserRepository
 from admin_service.services.audit_service import AdminAuditService
 from admin_service.utils.password import check_password_strength
 from common.core.exceptions import NotFoundException, ValidationException
@@ -26,15 +26,11 @@ class AdminManagementService:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[AdminUser], int]:
-        query = select(AdminUser).order_by(AdminUser.created_at.desc(), AdminUser.id.desc())
-        total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
-        result = await db.execute(query.offset((page - 1) * page_size).limit(page_size))
-        return list(result.scalars().all()), total
+        return await AdminUserRepository(db).list_admins(page=page, page_size=page_size)
 
     @staticmethod
     async def get_by_uid(db: AsyncSession, uid: int) -> AdminUser | None:
-        result = await db.execute(select(AdminUser).where(AdminUser.uid == uid))
-        return result.scalar_one_or_none()
+        return await AdminUserRepository(db).get_by_uid(uid)
 
     @staticmethod
     async def create_admin(
@@ -47,8 +43,8 @@ class AdminManagementService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> AdminUser:
-        existing = await db.execute(select(AdminUser).where(AdminUser.email == email))
-        if existing.scalar_one_or_none():
+        user_repo = AdminUserRepository(db)
+        if await user_repo.get_by_email(email):
             raise AdminConflictException("Admin email already exists")
 
         ok, message = check_password_strength(password)
@@ -65,7 +61,7 @@ class AdminManagementService:
             created_by_admin_id=actor_admin.id,
             updated_by_admin_id=actor_admin.id,
         )
-        db.add(admin)
+        user_repo.add(admin)
         await db.flush()
         await db.refresh(admin)
 
