@@ -7,6 +7,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
+from common.api import PaginatedResponse
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
 
 AdminAuditCategory = Literal["all", "governance", "auth"]
@@ -43,16 +44,7 @@ class AdminAuditLogItem(DateTimeModel):
     created_at: datetime = Field(..., description="Created at")
 
 
-class AdminAuditLogListData(BaseModel):
-    """Admin audit-log list response payload."""
-
-    items: list[AdminAuditLogItem] = Field(..., description="Audit log list")
-    total: int = Field(..., description="Total count")
-    page: int = Field(..., description="Current page")
-    page_size: int = Field(..., description="Page size")
-
-
 class AdminAuditLogListResponse(AdminBaseResponse):
     """Admin audit-log list response."""
 
-    data: Optional[AdminAuditLogListData] = None
+    data: Optional[PaginatedResponse[AdminAuditLogItem]] = None

@@ -35,7 +35,7 @@ from user_service.schemas.billing_admin import (
     AdminTopupRequest,
     AdminUsageStatItem,
 )
-from user_service.schemas.common import ApiResponse, AuthBaseResponse, AuthErrorResponse, DateTimeModel, ListResponse
+from user_service.schemas.common import ApiResponse, AuthBaseResponse, AuthErrorResponse, DateTimeModel
 from user_service.schemas.keys import ApiKeyCreateData, ApiKeyCreateRequest, ApiKeyItem, ApiKeyUpdateRequest
 
 __all__ = [
@@ -58,7 +58,6 @@ __all__ = [
     "ChangePasswordRequest",
     "ChangePasswordResponse",
     "DateTimeModel",
-    "ListResponse",
     "LoginRequest",
     "LoginResponse",
     "LoginResponseData",

@@ -38,10 +38,3 @@ class ApiResponse(BaseModel, Generic[T]):
     code: int = Field(default=200)
     message: str = Field(default="success")
     data: Optional[T] = None
-
-
-class ListResponse(BaseModel, Generic[T]):
-    items: list[T]
-    total: int
-    page: int
-    page_size: int

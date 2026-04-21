@@ -8,9 +8,11 @@ the merged app must not ship.
 from __future__ import annotations
 
 from collections import Counter
+from types import SimpleNamespace
 
 import pytest
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 
 
 def _build_app_routes_snapshot():
@@ -68,6 +70,37 @@ def test_backend_app_declares_health_and_ready_endpoints():
     pairs = _build_app_routes_snapshot()
     assert ("GET", "/health") in pairs
     assert ("GET", "/ready") in pairs
+
+
+def test_backend_app_ready_endpoint_executes_all_database_probes(monkeypatch):
+    from backend_app import main
+
+    async def fake_check_database_ready(get_engine):
+        return True, get_engine()
+
+    monkeypatch.setattr(main, "check_database_ready", fake_check_database_ready)
+    monkeypatch.setattr(main, "admin_db", SimpleNamespace(get_engine=lambda: "admin"))
+    monkeypatch.setattr(main, "user_db", SimpleNamespace(get_engine=lambda: "user"))
+    monkeypatch.setattr(main, "testing_db", SimpleNamespace(get_engine=lambda: "testing"))
+
+    client = TestClient(main.app)
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "service": "backend-app",
+        "checks": {
+            "database": {
+                "status": "ok",
+                "detail": {
+                    "admin": {"ready": True, "error": "admin"},
+                    "user": {"ready": True, "error": "user"},
+                    "testing": {"ready": True, "error": "testing"},
+                },
+            }
+        },
+    }
 
 
 def test_backend_app_service_name_is_canonical():

@@ -7,10 +7,10 @@ Testing 服务研发商端点
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from testing_service.dependencies import AdminPrincipal, get_current_admin, get_db_session
 from testing_service.schemas import (
     ApiResponse,
-    ListResponse,
     ModelVendorResponse,
     VendorCreate,
     VendorUpdate,
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/vendors", tags=["研发商"])
 
 @router.get(
     "",
-    response_model=ApiResponse[ListResponse[ModelVendorResponse]],
+    response_model=ApiResponse[PaginatedResponse[ModelVendorResponse]],
     summary="获取研发商列表",
     description="获取所有研发商（含已停用），按名称排序",
 )

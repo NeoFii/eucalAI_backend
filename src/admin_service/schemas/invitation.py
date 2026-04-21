@@ -7,6 +7,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from common.api import PaginatedResponse
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
 
 
@@ -67,19 +68,10 @@ class InvitationCodeListItem(DateTimeModel):
     created_at: datetime = Field(..., description="创建时间")
 
 
-class InvitationCodeListResponseData(BaseModel):
-    """Invitation-code list response payload."""
-
-    items: list[InvitationCodeListItem] = Field(..., description="邀请码列表")
-    total: int = Field(..., description="总数")
-    page: int = Field(..., description="当前页码")
-    page_size: int = Field(..., description="每页数量")
-
-
 class InvitationCodeListResponse(AdminBaseResponse):
     """Invitation-code list response."""
 
-    data: Optional[InvitationCodeListResponseData] = None
+    data: Optional[PaginatedResponse[InvitationCodeListItem]] = None
 
 
 class UpdateInvitationCodeRequest(BaseModel):

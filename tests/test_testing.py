@@ -44,10 +44,11 @@ class TestTestingModels:
 
 class TestTestingSchemas:
     def test_import_current_schemas(self):
-        from testing_service.schemas import ApiResponse, ListResponse, ModelCreate, ProviderCreate
+        from common.api import PaginatedResponse
+        from testing_service.schemas import ApiResponse, ModelCreate, ProviderCreate
 
         assert ApiResponse is not None
-        assert ListResponse is not None
+        assert PaginatedResponse is not None
         assert ModelCreate is not None
         assert ProviderCreate is not None
 

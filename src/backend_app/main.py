@@ -32,6 +32,7 @@ from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability
 
+from admin_service import db as admin_db
 from admin_service.api.v1.endpoints import (
     admin_audit_logs as admin_audit_logs_endpoint,
     admin_users as admin_users_endpoint,
@@ -44,6 +45,8 @@ from user_service.api.v1.endpoints import auth as user_auth_endpoint
 from user_service.api.v1.endpoints import billing as user_billing_endpoint
 from user_service.api.v1.endpoints import internal as user_internal_endpoint
 from user_service.api.v1.endpoints import keys as user_keys_endpoint
+from user_service import db as user_db
+from testing_service import db as testing_db
 from testing_service.api import api_router as testing_api_router
 
 from backend_app.config import settings
@@ -129,10 +132,10 @@ app.include_router(testing_api_router)
 app.include_router(user_api_router)
 
 
-async def _check_all_databases() -> dict[str, Any]:
+async def _check_all_databases() -> tuple[bool, dict[str, Any]]:
     """Run readiness probes for all three engines concurrently."""
 
-    probes: list[Callable[[], Awaitable[dict[str, Any]]]] = [
+    probes: list[Callable[[], Awaitable[tuple[bool, str | None]]]] = [
         lambda: check_database_ready(admin_db.get_engine),
         lambda: check_database_ready(user_db.get_engine),
         lambda: check_database_ready(testing_db.get_engine),
@@ -145,12 +148,16 @@ async def _check_all_databases() -> dict[str, Any]:
     )
 
     payload: dict[str, Any] = {}
+    ready = True
     for name, result in zip(names, results):
         if isinstance(result, Exception):
+            ready = False
             payload[name] = {"ready": False, "error": str(result)}
         else:
-            payload[name] = result
-    return payload
+            db_ready, detail = result
+            ready = ready and db_ready
+            payload[name] = {"ready": db_ready, "error": detail}
+    return ready, payload
 
 
 @app.get("/health", tags=["health"])

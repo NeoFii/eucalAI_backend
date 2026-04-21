@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from common.db import ListParams
 from common.utils.timezone import now
 from user_service.dependencies import get_db_session
@@ -17,7 +18,6 @@ from user_service.schemas import (
     ApiResponse,
     BalanceResponseData,
     BalanceTransactionItem,
-    ListResponse,
     TopupOrderItem,
     UsageStatItem,
 )
@@ -76,7 +76,7 @@ async def get_balance(
 
 @router.get(
     "/transactions",
-    response_model=ApiResponse[ListResponse[BalanceTransactionItem]],
+    response_model=ApiResponse[PaginatedResponse[BalanceTransactionItem]],
     summary="List balance transactions",
 )
 async def list_transactions(
@@ -104,7 +104,7 @@ async def list_transactions(
 
 @router.get(
     "/topup-orders",
-    response_model=ApiResponse[ListResponse[TopupOrderItem]],
+    response_model=ApiResponse[PaginatedResponse[TopupOrderItem]],
     summary="List top-up orders",
 )
 async def list_topup_orders(
@@ -157,7 +157,7 @@ async def list_usage_stats(
 
 @router.get(
     "/usage/logs",
-    response_model=ApiResponse[ListResponse[ApiCallLogItem]],
+    response_model=ApiResponse[PaginatedResponse[ApiCallLogItem]],
     summary="List usage logs",
 )
 async def list_usage_logs(
