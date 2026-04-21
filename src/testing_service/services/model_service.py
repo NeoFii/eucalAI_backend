@@ -6,7 +6,6 @@ Testing 服务业务逻辑层
 
 from typing import List, Optional, Tuple
 
-from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.crypto import encrypt_api_key, mask_api_key
@@ -86,10 +85,7 @@ class VendorService:
         - 若 slug 对应软删除记录（is_active=False）→ 复用并更新字段
         - 否则 → 创建新记录
         """
-        existing_result = await db.execute(
-            select(ModelVendor).where(ModelVendor.slug == data.slug)
-        )
-        existing = existing_result.scalar_one_or_none()
+        existing = await VendorRepository.get_any_by_slug(db, data.slug)
         if existing:
             if existing.is_active:
                 raise ValueError(f"slug '{data.slug}' 已存在")
@@ -114,10 +110,7 @@ class VendorService:
     @staticmethod
     async def update(db: AsyncSession, vendor_id: int, data) -> Optional[ModelVendor]:
         """更新研发商，仅更新非 None 字段"""
-        result = await db.execute(
-            select(ModelVendor).where(ModelVendor.id == vendor_id)
-        )
-        vendor = result.scalar_one_or_none()
+        vendor = await VendorRepository.get_any_by_id(db, vendor_id)
         if not vendor:
             return None
         for field, value in data.model_dump(exclude_none=True).items():
@@ -133,18 +126,10 @@ class VendorService:
         若存在关联 Model 则拒绝，防止模型引用无效研发商。
         返回 (True, "") 表示成功，(False, 原因) 表示失败。
         """
-        result = await db.execute(
-            select(ModelVendor).where(ModelVendor.id == vendor_id)
-        )
-        vendor = result.scalar_one_or_none()
+        vendor = await VendorRepository.get_any_by_id(db, vendor_id)
         if not vendor:
             return False, "not_found"
-        count_result = await db.execute(
-            select(func.count()).select_from(Model).where(
-                and_(Model.vendor_id == vendor_id, Model.is_active == True)
-            )
-        )
-        model_count = count_result.scalar() or 0
+        model_count = await VendorRepository.count_active_models(db, vendor_id)
         if model_count > 0:
             return False, f"该研发商下存在 {model_count} 个模型，请先删除相关模型"
         vendor.is_active = False
@@ -231,10 +216,7 @@ class ModelService:
         - 否则 → 创建新记录
         同时写入 ModelCategoryMap 分类关联。
         """
-        existing_result = await db.execute(
-            select(Model).where(Model.slug == data.slug)
-        )
-        existing = existing_result.scalar_one_or_none()
+        existing = await ModelRepository.get_by_slug(db, data.slug)
         if existing:
             if existing.is_active:
                 raise ValueError(f"slug '{data.slug}' 已存在")
@@ -251,9 +233,7 @@ class ModelService:
             existing.deleted_at = None
             await db.flush()
             # 重建分类关联
-            await db.execute(
-                ModelCategoryMap.__table__.delete().where(ModelCategoryMap.model_id == existing.id)
-            )
+            await ModelRepository.delete_category_maps(db, existing.id)
             for cat in data.categories:
                 db.add(ModelCategoryMap(model_id=existing.id, category_id=cat.category_id, sort_order=cat.sort_order))
             await db.flush()
@@ -286,8 +266,7 @@ class ModelService:
         更新模型字段。
         若 data.categories 不为 None，则先删除旧分类关联再写入新关联。
         """
-        result = await db.execute(select(Model).where(Model.slug == slug))
-        model = result.scalar_one_or_none()
+        model = await ModelRepository.get_by_slug(db, slug)
         if not model:
             return None
         simple_fields = [
@@ -301,9 +280,7 @@ class ModelService:
                 setattr(model, field, value)
         await db.flush()
         if data.categories is not None:
-            await db.execute(
-                ModelCategoryMap.__table__.delete().where(ModelCategoryMap.model_id == model.id)
-            )
+            await ModelRepository.delete_category_maps(db, model.id)
             for cat in data.categories:
                 db.add(ModelCategoryMap(model_id=model.id, category_id=cat.category_id, sort_order=cat.sort_order))
             await db.flush()
@@ -313,8 +290,7 @@ class ModelService:
     @staticmethod
     async def delete(db: AsyncSession, slug: str) -> tuple[bool, str]:
         """软删除模型（设置 is_active=False）"""
-        result = await db.execute(select(Model).where(Model.slug == slug))
-        model = result.scalar_one_or_none()
+        model = await ModelRepository.get_by_slug(db, slug)
         if not model:
             return False, "not_found"
         model.is_active = False
@@ -351,10 +327,7 @@ class ProviderService:
         - 若 slug 对应软删除记录（is_active=False）→ 复用该记录并更新字段（恢复）
         - 否则 → 创建新记录
         """
-        existing_result = await db.execute(
-            select(Provider).where(Provider.slug == data.slug)
-        )
-        existing = existing_result.scalar_one_or_none()
+        existing = await ProviderRepository.get_any_by_slug(db, data.slug)
         if existing:
             if existing.is_active:
                 raise ValueError(f"slug '{data.slug}' 已存在")
@@ -382,10 +355,7 @@ class ProviderService:
     @staticmethod
     async def update(db: AsyncSession, provider_id: int, data) -> Optional[Provider]:
         """更新服务提供商，仅更新非 None 字段"""
-        result = await db.execute(
-            select(Provider).where(Provider.id == provider_id)
-        )
-        provider = result.scalar_one_or_none()
+        provider = await ProviderRepository.get_any_by_id(db, provider_id)
         if not provider:
             return None
         payload = data.model_dump(exclude_unset=True)
@@ -411,22 +381,10 @@ class ProviderService:
         若存在关联 ModelProviderOffering 则拒绝，防止探针任务访问已停用提供商。
         返回 (True, "") 表示成功，(False, 原因) 表示失败。
         """
-        result = await db.execute(
-            select(Provider).where(Provider.id == provider_id)
-        )
-        provider = result.scalar_one_or_none()
+        provider = await ProviderRepository.get_any_by_id(db, provider_id)
         if not provider:
             return False, "not_found"
-        count_result = await db.execute(
-            select(func.count()).select_from(ModelProviderOffering).where(
-                and_(
-                    ModelProviderOffering.provider_id == provider_id,
-                    ModelProviderOffering.deleted_at.is_(None),
-                    ModelProviderOffering.is_active == True,
-                )
-            )
-        )
-        offering_count = count_result.scalar() or 0
+        offering_count = await ProviderRepository.count_active_offerings(db, provider_id)
         if offering_count > 0:
             return False, f"该供应商下存在 {offering_count} 条模型报价，请先删除相关报价"
         # 软删除：设置 is_active=False，不物理删除行
@@ -476,15 +434,11 @@ class OfferingService:
         - 若同一 (model_id, provider_id) 的软删除记录存在 → 复用并恢复
         - 否则 → 创建新记录
         """
-        existing_result = await db.execute(
-            select(ModelProviderOffering).where(
-                and_(
-                    ModelProviderOffering.model_id == model_id,
-                    ModelProviderOffering.provider_id == data.provider_id,
-                )
-            )
+        existing = await OfferingRepository.get_any_by_model_provider(
+            db,
+            model_id,
+            data.provider_id,
         )
-        existing = existing_result.scalar_one_or_none()
         if existing:
             if existing.is_active:
                 raise ValueError("该服务商的报价配置已存在")
@@ -513,10 +467,7 @@ class OfferingService:
     @staticmethod
     async def delete(db: AsyncSession, offering_id: int) -> bool:
         """软删除报价配置（设置 is_active=False），返回是否找到记录"""
-        result = await db.execute(
-            select(ModelProviderOffering).where(ModelProviderOffering.id == offering_id)
-        )
-        offering = result.scalar_one_or_none()
+        offering = await OfferingRepository.get_by_id(db, offering_id)
         if not offering:
             return False
         offering.is_active = False

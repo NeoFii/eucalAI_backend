@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from common.gateway.base import BaseGateway
 from common.internal import post_internal_json
 
 IDENTITY_TIMEOUT_SECONDS = 3.0
@@ -19,8 +20,11 @@ class ValidatedApiKey:
     name: str
 
 
-class UserIdentityGateway:
+class UserIdentityGateway(BaseGateway):
     """Gateway for user-service API-key validation."""
+
+    def __init__(self) -> None:
+        super().__init__(service_name="user-service")
 
     @staticmethod
     async def validate_api_key(

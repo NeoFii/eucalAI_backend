@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func, select, text
-
 from admin_service.config import settings
 from admin_service.db import get_db_context
 from admin_service.models import AdminUser
+from admin_service.repositories.admin_user_repository import AdminUserRepository
 from admin_service.services.audit_service import AdminAuditService
 from admin_service.utils.password import check_password_strength
 from common.utils import generate_snowflake_id, hash_password
@@ -59,15 +58,7 @@ class AdminBootstrapService:
 
     @classmethod
     async def _count_active_super_admins(cls, db) -> int:
-        result = await db.execute(
-            select(func.count())
-            .select_from(AdminUser)
-            .where(
-                AdminUser.role == "super_admin",
-                AdminUser.status == 1,
-            )
-        )
-        return int(result.scalar() or 0)
+        return await AdminUserRepository(db).count_active_super_admins()
 
     @classmethod
     async def _maybe_update_existing_super_admin(cls, db) -> bool:
@@ -79,14 +70,9 @@ class AdminBootstrapService:
         ):
             return False
 
-        result = await db.execute(
-            select(AdminUser).where(
-                AdminUser.email == settings.BOOTSTRAP_SUPERADMIN_EMAIL,
-                AdminUser.role == "super_admin",
-                AdminUser.status == 1,
-            )
+        admin = await AdminUserRepository(db).get_active_super_admin_by_email(
+            settings.BOOTSTRAP_SUPERADMIN_EMAIL
         )
-        admin = result.scalar_one_or_none()
         if admin is None:
             return False
 
@@ -134,10 +120,7 @@ class AdminBootstrapService:
 
     @classmethod
     async def _upsert_bootstrap_super_admin(cls, db) -> tuple[AdminUser, bool]:
-        result = await db.execute(
-            select(AdminUser).where(AdminUser.email == settings.BOOTSTRAP_SUPERADMIN_EMAIL)
-        )
-        existing = result.scalar_one_or_none()
+        existing = await AdminUserRepository(db).get_by_email(settings.BOOTSTRAP_SUPERADMIN_EMAIL)
         if existing is not None:
             if existing.role != "super_admin":
                 raise RuntimeError("Bootstrap email conflicts with a non-super admin account")
@@ -198,19 +181,15 @@ class AdminBootstrapService:
 
     @classmethod
     async def _acquire_lock(cls, db) -> bool:
-        result = await db.execute(
-            text("SELECT GET_LOCK(:lock_name, :timeout_seconds)"),
-            {"lock_name": cls.LOCK_NAME, "timeout_seconds": cls.LOCK_TIMEOUT_SECONDS},
+        return await AdminUserRepository(db).acquire_named_lock(
+            cls.LOCK_NAME,
+            cls.LOCK_TIMEOUT_SECONDS,
         )
-        return result.scalar() == 1
 
     @classmethod
     async def _release_lock(cls, db) -> None:
         try:
-            await db.execute(
-                text("SELECT RELEASE_LOCK(:lock_name)"),
-                {"lock_name": cls.LOCK_NAME},
-            )
+            await AdminUserRepository(db).release_named_lock(cls.LOCK_NAME)
         except Exception:
             logger.exception("Failed to release bootstrap lock")
 

@@ -71,3 +71,39 @@ def test_service_local_pagination_shims_are_removed():
     assert "PaginatedResponse" in admin_user_schemas
     assert "PaginatedResponse" in admin_audit_schemas
     assert "PaginatedResponse" in admin_invitation_schemas
+
+
+def test_remaining_service_and_endpoint_database_queries_are_in_repositories():
+    checked_paths = [
+        SRC_ROOT / "admin_service" / "api" / "v1" / "endpoints" / "internal.py",
+        SRC_ROOT / "admin_service" / "services" / "bootstrap_service.py",
+        SRC_ROOT / "user_service" / "api" / "v1" / "endpoints" / "internal.py",
+        SRC_ROOT / "testing_service" / "services" / "model_service.py",
+    ]
+
+    for path in checked_paths:
+        source = path.read_text(encoding="utf-8")
+        assert "await db.execute(" not in source, f"{path} still executes SQL directly"
+        assert "select(" not in source, f"{path} still builds SQL directly"
+
+
+def test_gateway_implementations_share_base_gateway():
+    expected_markers = {
+        SRC_ROOT / "user_service" / "gateway.py": [
+            "class AdminInvitationGatewayInterface",
+            "class AdminInvitationGateway(BaseGateway, AdminInvitationGatewayInterface):",
+        ],
+        SRC_ROOT / "testing_service" / "gateway.py": [
+            "from common.gateway.base import BaseGateway",
+            "class AdminIdentityGateway(BaseGateway):",
+        ],
+        SRC_ROOT / "router_service" / "gateway.py": [
+            "from common.gateway.base import BaseGateway",
+            "class UserIdentityGateway(BaseGateway):",
+        ],
+    }
+
+    for path, markers in expected_markers.items():
+        source = path.read_text(encoding="utf-8")
+        for marker in markers:
+            assert marker in source, f"{path} is missing {marker}"

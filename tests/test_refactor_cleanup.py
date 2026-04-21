@@ -85,3 +85,20 @@ def test_runtime_schema_creation_paths_are_removed_from_public_files():
         source = path.read_text(encoding="utf-8")
         assert "AUTO_INIT_DB" not in source, f"{path} still advertises AUTO_INIT_DB"
         assert "skip-init-db" not in source, f"{path} still advertises skip-init-db"
+
+
+def test_project_structure_doc_matches_refactored_layout():
+    source = (ROOT / "docs" / "PROJECT_STRUCTURE.md").read_text(encoding="utf-8")
+    stale_markers = [
+        "src/admin_service/schemas.py",
+        "src/user_service/schemas.py",
+        "src/testing_service/schemas.py",
+        "src/router_service/schemas.py",
+        "src/admin_service/services/identity_client.py",
+        "src/user_service/services/admin_client.py",
+        "src/testing_service/services/admin_identity_client.py",
+        "src/testing_service/benchmarking/",
+    ]
+
+    for marker in stale_markers:
+        assert marker not in source, f"PROJECT_STRUCTURE.md still documents {marker}"

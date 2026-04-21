@@ -241,14 +241,20 @@
 - `src/admin_service/models/admin_audit_log.py`：管理员审计日志模型。
 - `src/admin_service/models/admin_user.py`：管理员用户模型。
 - `src/admin_service/models/invitation_code.py`：邀请码模型。
-- `src/admin_service/schemas.py`：Pydantic 请求响应模型。
+- `src/admin_service/gateway.py`：调用用户服务统计接口的 Gateway。
+- `src/admin_service/policies.py`：管理员权限策略依赖。
+- `src/admin_service/repositories/`：管理员域数据访问目录。
+- `src/admin_service/schemas/`：管理员服务 Pydantic schema 包。
+- `src/admin_service/schemas/auth.py`：管理员认证请求响应模型。
+- `src/admin_service/schemas/invitation.py`：邀请码请求响应模型。
+- `src/admin_service/schemas/admin_user.py`：管理员用户管理模型。
+- `src/admin_service/schemas/audit_log.py`：管理员审计日志模型。
 - `src/admin_service/services/`：管理员服务业务逻辑目录。
 - `src/admin_service/services/__init__.py`：服务层初始化文件。
 - `src/admin_service/services/__pycache__/`：服务层缓存目录。
 - `src/admin_service/services/audit_service.py`：审计日志业务逻辑。
 - `src/admin_service/services/auth_service.py`：管理员认证逻辑。
 - `src/admin_service/services/bootstrap_service.py`：超级管理员引导逻辑。
-- `src/admin_service/services/identity_client.py`：调用 `user_service` 身份接口的客户端。
 - `src/admin_service/services/invitation_service.py`：邀请码业务逻辑。
 - `src/admin_service/services/management_service.py`：管理员管理操作逻辑。
 - `src/admin_service/utils/`：管理员服务工具目录。
@@ -292,11 +298,17 @@
 - `src/user_service/models/user.py`：用户主模型。
 - `src/user_service/models/user_api_key.py`：用户 API Key 模型。
 - `src/user_service/models/user_session.py`：用户会话模型。
-- `src/user_service/schemas.py`：用户服务 Pydantic 模型。
+- `src/user_service/gateway.py`：调用管理员服务邀请码接口的 Gateway。
+- `src/user_service/policies.py`：用户权限策略依赖。
+- `src/user_service/repositories/`：用户域数据访问目录。
+- `src/user_service/schemas/`：用户服务 Pydantic schema 包。
+- `src/user_service/schemas/auth.py`：用户认证请求响应模型。
+- `src/user_service/schemas/billing.py`：用户端计费响应模型。
+- `src/user_service/schemas/billing_admin.py`：管理端计费响应模型。
+- `src/user_service/schemas/keys.py`：API Key 请求响应模型。
 - `src/user_service/services/`：用户服务业务逻辑目录。
 - `src/user_service/services/__init__.py`：服务层初始化文件。
 - `src/user_service/services/__pycache__/`：服务层缓存目录。
-- `src/user_service/services/admin_client.py`：调用 `admin_service` 的客户端。
 - `src/user_service/services/api_key_service.py`：API Key 业务逻辑。
 - `src/user_service/services/auth_service.py`：用户认证业务逻辑。
 - `src/user_service/services/balance_service.py`：余额账本业务逻辑。
@@ -338,12 +350,9 @@
 - `src/testing_service/benchmark/jobs.py`：Benchmark 任务定义。
 - `src/testing_service/benchmark/probe_runner.py`：探测运行器。
 - `src/testing_service/benchmark/queue.py`：Benchmark 队列封装。
+- `src/testing_service/benchmark/schemas.py`：Benchmark 领域 schema。
+- `src/testing_service/benchmark/services.py`：Benchmark 业务编排逻辑。
 - `src/testing_service/benchmark/tasks.py`：Benchmark 执行任务。
-- `src/testing_service/benchmarking/`：较高层的 benchmark 组织目录。
-- `src/testing_service/benchmarking/__init__.py`：包初始化文件。
-- `src/testing_service/benchmarking/__pycache__/`：包缓存目录。
-- `src/testing_service/benchmarking/schemas.py`：Benchmark 领域模型定义。
-- `src/testing_service/benchmarking/services.py`：Benchmark 业务编排逻辑。
 - `src/testing_service/catalog/`：模型目录能力预留目录。
 - `src/testing_service/catalog/__init__.py`：目录包初始化文件。
 - `src/testing_service/catalog/__pycache__/`：目录包缓存目录。
@@ -361,11 +370,15 @@
 - `src/testing_service/provider_config/`：provider 配置组织目录。
 - `src/testing_service/provider_config/__init__.py`：provider 配置包初始化文件。
 - `src/testing_service/provider_config/__pycache__/`：provider 配置缓存目录。
-- `src/testing_service/schemas.py`：测试服务 Pydantic 模型。
+- `src/testing_service/gateway.py`：调用管理员身份接口的 Gateway。
+- `src/testing_service/repositories/`：测试服务数据访问目录。
+- `src/testing_service/schemas/`：测试服务 Pydantic schema 包。
+- `src/testing_service/schemas/model.py`：模型目录请求响应模型。
+- `src/testing_service/schemas/provider.py`：provider 配置请求响应模型。
+- `src/testing_service/schemas/vendor.py`：vendor 请求响应模型。
 - `src/testing_service/services/`：测试服务业务逻辑目录。
 - `src/testing_service/services/__init__.py`：服务层初始化文件。
 - `src/testing_service/services/__pycache__/`：服务层缓存目录。
-- `src/testing_service/services/admin_identity_client.py`：调用 `admin_service` 身份接口的客户端。
 - `src/testing_service/services/benchmark_job_service.py`：Benchmark 作业业务逻辑。
 - `src/testing_service/services/model_service.py`：模型目录业务逻辑。
 - `src/testing_service/worker.py`：Benchmark 队列 worker 入口。
@@ -388,11 +401,12 @@
 - `src/router_service/routers/chat.py`：聊天补全接口。
 - `src/router_service/routers/completions.py`：文本补全接口。
 - `src/router_service/routers/meta.py`：元信息与健康类接口。
-- `src/router_service/schemas.py`：路由服务 Pydantic 模型。
+- `src/router_service/gateway.py`：调用用户服务 API Key 校验接口的 Gateway。
+- `src/router_service/schemas/`：路由服务 Pydantic schema 包。
+- `src/router_service/schemas/requests.py`：OpenAI 兼容请求模型。
 - `src/router_service/services/`：路由服务业务层目录。
 - `src/router_service/services/__init__.py`：服务层初始化文件。
 - `src/router_service/services/__pycache__/`：服务层缓存目录。
-- `src/router_service/services/identity_client.py`：调用身份相关内部接口的客户端。
 - `src/router_service/services/router_engine.py`：路由决策引擎。
 - `src/router_service/services/upstream.py`：上游 LLM 调用逻辑。
 - `src/router_service/utils/`：路由服务工具目录。
