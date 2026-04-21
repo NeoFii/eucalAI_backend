@@ -53,7 +53,7 @@ class ModelVendor(Base, TimestampMixin):
     is_active = Column(Boolean, nullable=False, default=True, comment="Whether active")
     deleted_at = Column(DateTime, nullable=True, comment="Soft delete time")
 
-    models = relationship("Model", back_populates="vendor", lazy="selectin")
+    models = relationship("Model", back_populates="vendor", lazy="noload")
 
     __table_args__ = (
         Index("idx_model_vendors_is_active", "is_active"),
@@ -145,7 +145,7 @@ class ProviderProbeConfig(Base, TimestampMixin):
     probe_key_updated_at = Column(DateTime, nullable=True, comment="Probe key updated at")
     key_updated_by_admin_id = Column(BigInteger, nullable=True, comment="Key updater admin id")
 
-    provider = relationship("Provider", back_populates="probe_config", lazy="selectin")
+    provider = relationship("Provider", back_populates="probe_config", lazy="noload")
 
     @property
     def has_probe_api_key(self) -> bool:
@@ -177,7 +177,7 @@ class Provider(Base, TimestampMixin):
         "ModelProviderOffering",
         back_populates="provider",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="noload",
     )
 
     __table_args__ = (
@@ -278,7 +278,7 @@ class ModelProviderOffering(Base, TimestampMixin):
         "ProviderPerformanceDailyStat",
         back_populates="offering",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="noload",
     )
 
     __table_args__ = (
@@ -343,7 +343,7 @@ class ProviderPerformanceDailyStat(Base, TimestampMixin):
     max_ttft_ms = Column(Integer, nullable=True, comment="Max TTFT")
     last_measured_at = Column(DateTime, nullable=True, comment="Last measured at")
 
-    offering = relationship("ModelProviderOffering", back_populates="daily_stats", lazy="selectin")
+    offering = relationship("ModelProviderOffering", back_populates="daily_stats", lazy="noload")
 
     __table_args__ = (
         UniqueConstraint(
@@ -385,7 +385,7 @@ class BenchmarkJob(Base, TimestampMixin):
     finished_at = Column(DateTime, nullable=True, comment="Finished at")
     error_message = Column(Text, nullable=True, comment="Last job error message")
 
-    offering = relationship("ModelProviderOffering", lazy="selectin")
+    offering = relationship("ModelProviderOffering", lazy="noload")
 
     __table_args__ = (
         Index("idx_benchmark_jobs_status", "status"),
@@ -436,9 +436,9 @@ class AdminProbeAuditLog(Base, TimestampMixin):
     started_at = Column(DateTime, nullable=True, comment="Started at")
     finished_at = Column(DateTime, nullable=True, comment="Finished at")
 
-    offering = relationship("ModelProviderOffering", lazy="selectin")
-    model = relationship("Model", lazy="selectin")
-    provider = relationship("Provider", lazy="selectin")
+    offering = relationship("ModelProviderOffering", lazy="noload")
+    model = relationship("Model", lazy="noload")
+    provider = relationship("Provider", lazy="noload")
 
     __table_args__ = (
         Index("idx_admin_probe_audits_job_id", "job_id"),
