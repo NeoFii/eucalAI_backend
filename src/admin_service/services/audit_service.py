@@ -30,6 +30,14 @@ class AdminAuditService:
     CATEGORY_ACTIONS = {
         "governance": GOVERNANCE_ACTIONS,
         "auth": AUTH_ACTIONS,
+        "user_management": (
+            "enable_user",
+            "disable_user",
+            "reset_user_password",
+            "topup_user",
+            "adjust_user_balance",
+            "disable_user_api_key",
+        ),
     }
 
     @staticmethod

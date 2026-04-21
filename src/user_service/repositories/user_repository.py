@@ -28,5 +28,26 @@ class UserRepository(BaseRepository[User]):
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def list_users(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        search: str | None = None,
+        status: int | None = None,
+    ) -> tuple[list[User], int]:
+        stmt = select(User)
+        if search:
+            stmt = stmt.where(User.email.like(f"{search}%"))
+        if status is not None:
+            stmt = stmt.where(User.status == status)
+        stmt = stmt.order_by(User.created_at.desc(), User.id.desc())
+        total = int(
+            (await self.session.execute(select(func.count()).select_from(stmt.subquery()))).scalar()
+            or 0
+        )
+        rows = await self.session.execute(stmt.offset((page - 1) * page_size).limit(page_size))
+        return list(rows.scalars().all()), total
+
     def add(self, user: User) -> None:
         self.session.add(user)

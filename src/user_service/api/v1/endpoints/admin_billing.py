@@ -1,4 +1,7 @@
-"""Admin-facing user billing endpoints."""
+"""Admin-facing user billing endpoints.
+
+DEPRECATED: 迁移至 admin-service user_management 端点，前端切换后删除此文件。
+"""
 
 from __future__ import annotations
 
