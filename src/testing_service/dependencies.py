@@ -12,7 +12,7 @@ from common.core.exceptions import AuthenticationException, InvalidTokenExceptio
 from testing_service.db import get_db
 from common.utils.jwt import decode_token
 from testing_service.config import get_settings
-from testing_service.gateway import AdminIdentityClientService
+from testing_service.gateway import AdminIdentityGateway
 
 security = HTTPBearer(auto_error=False)
 settings = get_settings()
@@ -67,7 +67,7 @@ async def get_current_admin(
     if not uid:
         raise InvalidTokenException(detail="Token payload missing admin uid")
 
-    admin = await AdminIdentityClientService.fetch_admin_by_uid(uid)
+    admin = await AdminIdentityGateway.fetch_admin_by_uid(uid)
     if not admin:
         raise AuthenticationException(detail="Admin identity not found")
     if admin.status == 0:
