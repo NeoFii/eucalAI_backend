@@ -7,32 +7,13 @@ import os
 import threading
 from typing import Any, Dict, List, Tuple
 
-from router_service.config import (
-    DEFAULT_ROUTER_ALIAS,
+from inference_service.config import (
     FIVEWAY_DEFAULT_WEIGHTS,
     FIVEWAY_ROUTE_ORDER,
 )
+from inference_service.utils.scoring import parse_score_bands
 
-
-def parse_score_bands(raw: str) -> List[Tuple[float, float, int]]:
-    bands: List[Tuple[float, float, int]] = []
-    for item in raw.split(","):
-        left, _, right = item.partition(":")
-        if not left or not right:
-            continue
-        tier = int(right.strip())
-        if "-" in left:
-            start_raw, _, end_raw = left.partition("-")
-            start = float(start_raw.strip())
-            end = float(end_raw.strip())
-        else:
-            start = end = float(left.strip())
-        if start > end:
-            raise ValueError("score band start must be <= end")
-        bands.append((start, end, tier))
-    if not bands:
-        raise ValueError("score bands must not be empty")
-    return bands
+DEFAULT_ROUTER_ALIAS = "auto"
 
 
 def build_default_runtime_config() -> Dict[str, Any]:

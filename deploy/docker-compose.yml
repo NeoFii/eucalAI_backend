@@ -1,14 +1,14 @@
-# Backend compose topology: 2 main services + redis + scheduler/worker workers.
+# Backend compose topology: 3 main services + redis + scheduler/worker.
 #
 # Topology:
 #   - backend-app :8001  (admin + user + content + testing merged)
-#   - router-service :8003  (hot path, scalable via `deploy.replicas`)
+#   - router-service :8003  (CPU gateway, scalable via `deploy.replicas`)
+#   - inference-svc :8004  (GPU inference, Qwen + CG-TabM)
 #   - testing-worker  (arq consumer; no HTTP)
 #   - testing-scheduler :8012 (apscheduler; activate via `--profile scheduler`)
 #   - redis (shared by testing-worker + testing-scheduler)
 #
-# MySQL lives outside compose (managed separately); the four service database
-# URLs (ADMIN/USER/CONTENT/TESTING) point at it. Router has no DB.
+# MySQL lives outside compose (managed separately).
 
 services:
   backend-app:
@@ -66,21 +66,24 @@ services:
   router-service:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
+      dockerfile: deploy/Dockerfile.router-cpu
     container_name: router-service
     env_file:
       - ../.env
     restart: unless-stopped
     environment:
-      # Router is a pure ML inference service — no database, no HMAC to other
-      # services. Config files ship under /app/deploy/router/.
       ROUTER_RUNTIME_CONFIG: "/app/deploy/router/runtime_config.json"
-      ROUTER_MODEL_PATHS: "/app/deploy/router/model_paths.json"
       ROUTER_LOG_DIR: "/app/logs"
+      INFERENCE_SERVICE_URL: "http://inference-svc:8004"
+      INFERENCE_SERVICE_SECRET: "${INFERENCE_SERVICE_SECRET}"
+      USER_SERVICE_URL: "http://backend-app:8001"
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
       DEBUG: ${DEBUG:-false}
-    command: ["/app/.venv/bin/uvicorn", "router_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "2"]
+    command: ["/app/.venv/bin/uvicorn", "router_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "4"]
     ports:
       - "8003:8003"
+    deploy:
+      replicas: 2
     volumes:
       - backend_logs:/app/logs
     healthcheck:
@@ -88,7 +91,46 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 20s
+    depends_on:
+      inference-svc:
+        condition: service_healthy
+    networks:
+      - eucal_network
+
+  inference-svc:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.inference
+    container_name: inference-svc
+    restart: unless-stopped
+    environment:
+      ROUTER_MODEL_PATHS: "/app/deploy/router/model_paths.json"
+      ROUTER_RUNTIME_CONFIG: "/app/deploy/router/runtime_config.json"
+      INFERENCE_SERVICE_SECRET: "${INFERENCE_SERVICE_SECRET}"
+      INFERENCE_PORT: "8004"
+      INFERENCE_LOG_DIR: "/app/logs"
+      CUDA_VISIBLE_DEVICES: "0"
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/uvicorn", "inference_service.main:app", "--host", "0.0.0.0", "--port", "8004", "--workers", "1"]
+    ports:
+      - "8004:8004"
+    volumes:
+      - backend_logs:/app/logs
+      - model_weights:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8004"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
     networks:
       - eucal_network
 
@@ -187,3 +229,5 @@ volumes:
     name: eucal_backend_logs
   redis_data:
     name: eucal_redis_data
+  model_weights:
+    name: eucal_model_weights

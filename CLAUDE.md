@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Eucal AI backend — a mono-repo of Python microservices built with FastAPI, async SQLAlchemy (aiomysql), and Alembic migrations. Source lives under `src/` (src layout). Most services own their own database schema on MySQL 8.x; `router-service` is a pure ML inference service and has no DB. Services communicate via HMAC-signed internal HTTP calls (`common/internal.py`); router does not participate in HMAC.
+Eucal AI backend — a mono-repo of Python microservices built with FastAPI, async SQLAlchemy (aiomysql), and Alembic migrations. Source lives under `src/` (src layout). Most services own their own database schema on MySQL 8.x; `router-service` is a CPU gateway (no DB, no ML deps) and `inference-service` handles GPU-based ML inference. Services communicate via HMAC-signed internal HTTP calls (`common/internal.py`); router and inference do not participate in HMAC.
 
 ## Services
 
-All packages live under `src/`. Typical deployment uses `backend-app` (merged control plane) + `router-service` (scalable hot path) + `testing-scheduler` + `testing-worker`.
+All packages live under `src/`. Typical deployment uses `backend-app` (merged control plane) + `router-service` (CPU gateway) + `inference-service` (GPU inference) + `testing-scheduler` + `testing-worker`.
 
 | Service | Module | Port | Purpose |
 |---------|--------|------|---------|
@@ -16,11 +16,12 @@ All packages live under `src/`. Typical deployment uses `backend-app` (merged co
 | user-service | `user_service` | 8000 | Registration, login, password |
 | admin-service | `admin_service` | 8001 | Admin auth, super-admin, invite codes, audit (standalone mode) |
 | testing-service | `testing_service` | 8002 | Model catalog, providers, quotes, benchmark (standalone mode) |
-| router-service | `router_service` | 8003 | ML inference routing (numpy/torch/transformers). No DB. |
+| router-service | `router_service` | 8003 | CPU gateway: API key auth, routing via inference-svc, upstream forwarding. No DB, no ML deps. |
+| inference-service | `inference_service` | 8004 | GPU inference: Qwen backbone + 5 CG-TabM routers. No DB. |
 | testing-scheduler | `testing_service.main:app` | 8012 | Scheduled probe dispatcher |
 | testing-worker | `testing_service.worker` | — | Benchmark queue consumer (arq + Redis) |
 
-Router runtime assets (`runtime_config.json`, `model_paths.json`) live under `deploy/router/`. Install router ML deps with `uv sync --extra router`.
+Router runtime assets (`runtime_config.json`, `model_paths.json`) live under `deploy/router/`. Install inference ML deps with `uv sync --extra inference`.
 
 ## Common Commands
 
@@ -91,9 +92,11 @@ uv run mypy .
 - IDs are snowflake-based (`SnowflakeIdMixin`)
 
 ### Inter-service calls
-Signed with `INTERNAL_SECRET` using headers `X-Internal-Service`, `X-Internal-Timestamp`, `X-Internal-Signature`. Verification via `common.internal.verify_internal_signature`. Key dependency graph:
+Signed with `INTERNAL_SECRET` using headers `X-Internal-Service`, `X-Internal-Timestamp`, `X-Internal-Signature`. Verification via `common.internal.verify_internal_signature`. Calls include circuit breaker (threshold 3, cooldown 30s) and configurable retries. Key dependency graph:
 - admin <-> user (bidirectional)
-- testing -> admin
+- testing -> admin (real-time identity verification on every admin request)
+- router -> inference-svc (internal HTTP: `/internal/v1/classify`, shared secret via `X-Inference-Secret`)
+- router -> user-service (API Key validation via backend-app)
 
 ### Config
 All config via `.env` loaded by pydantic-settings. Each service config extends `BaseServiceSettings` and maps `<SERVICE>_DATABASE_URL` to its local `DATABASE_URL`. No generic `DATABASE_URL` fallback exists.

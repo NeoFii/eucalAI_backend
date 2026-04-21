@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple, Union
 
-from router_service.utils.text import (
+from inference_service.utils.text import (
     join_nonempty,
     normalize_chat_or_text,
     normalize_text,

@@ -925,6 +925,11 @@ async def test_request_internal_json_opens_circuit_after_threshold(monkeypatch):
 @pytest.mark.asyncio
 async def test_router_user_identity_gateway_maps_payload(monkeypatch):
     from router_service.gateway import UserIdentityGateway
+    from router_service.settings import RouterSettings
+
+    monkeypatch.setattr(
+        "router_service.dependencies._settings", RouterSettings.from_env()
+    )
 
     captured = {}
 
@@ -959,7 +964,12 @@ async def test_router_user_identity_gateway_maps_payload(monkeypatch):
 @pytest.mark.asyncio
 async def test_router_user_identity_gateway_maps_timeout(monkeypatch):
     from router_service.gateway import UserIdentityGateway
+    from router_service.settings import RouterSettings
     from common.core.exceptions import ServiceUnavailableException
+
+    monkeypatch.setattr(
+        "router_service.dependencies._settings", RouterSettings.from_env()
+    )
 
     async def fake_timeout(**_kwargs):
         raise ServiceUnavailableException("Identity service unavailable")

@@ -5,7 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = ROOT / "src"
-SERVICE_NAMES = ("admin_service", "user_service", "testing_service", "router_service")
+SERVICE_NAMES = (
+    "admin_service", "user_service", "testing_service",
+    "router_service", "inference_service",
+)
 
 
 def _service_files(service_name: str) -> list[Path]:

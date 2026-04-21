@@ -9,18 +9,12 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from router_service.config import (
-    DEFAULT_SERVICE_HOST,
-    DEFAULT_SERVICE_PORT,
-    load_model_paths,
-)
+from router_service.config import DEFAULT_SERVICE_HOST, DEFAULT_SERVICE_PORT
 from router_service.dependencies import init_globals
 from router_service.logging import setup_logging, get_app_logger
 from router_service.routers import chat, completions, meta
 
 
-# Router runtime data files live under ``deploy/router/`` so the Python
-# package tree stays free of environment-specific config blobs.
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_ROUTER_ASSETS = _BACKEND_ROOT / "deploy" / "router"
 
@@ -34,30 +28,36 @@ def _default_asset(name: str, override_env: str) -> str:
 
 def create_app(
     runtime_config_path: str | None = None,
-    model_paths_config: str | None = None,
     log_dir: str | None = None,
 ) -> FastAPI:
+    from router_service.services.inference_client import InferenceClient
+    from router_service.settings import RouterSettings
+
+    settings = RouterSettings.from_env()
     runtime_config_path = runtime_config_path or _default_asset(
         "runtime_config.json", "ROUTER_RUNTIME_CONFIG"
-    )
-    model_paths_config = model_paths_config or _default_asset(
-        "model_paths.json", "ROUTER_MODEL_PATHS"
     )
     log_dir = log_dir or os.getenv("ROUTER_LOG_DIR", "logs")
 
     setup_logging(log_dir=log_dir)
     logger = get_app_logger()
 
+    inference_client = InferenceClient(
+        base_url=settings.inference_service_url,
+        secret=settings.inference_service_secret,
+    )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logger.info("initializing router engine...")
-        model_paths = load_model_paths(model_paths_config)
+        logger.info("initializing router gateway...")
         init_globals(
             runtime_config_path=runtime_config_path,
-            model_paths=model_paths,
+            settings=settings,
+            inference_client=inference_client,
         )
-        logger.info("router engine ready")
+        logger.info("router gateway ready")
         yield
+        await inference_client.close()
         logger.info("shutting down")
 
     app = FastAPI(
@@ -83,11 +83,6 @@ def cli():
         type=str,
         default=_default_asset("runtime_config.json", "ROUTER_RUNTIME_CONFIG"),
     )
-    parser.add_argument(
-        "--model-paths",
-        type=str,
-        default=_default_asset("model_paths.json", "ROUTER_MODEL_PATHS"),
-    )
     parser.add_argument("--log-dir", type=str, default=os.getenv("ROUTER_LOG_DIR", "logs"))
     args = parser.parse_args()
 
@@ -95,7 +90,6 @@ def cli():
 
     cli_app = create_app(
         runtime_config_path=args.runtime_config,
-        model_paths_config=args.model_paths,
         log_dir=args.log_dir,
     )
 
@@ -104,7 +98,6 @@ def cli():
     print(f"  host: {args.host}")
     print(f"  port: {args.port}")
     print(f"  runtime config: {args.runtime_config}")
-    print(f"  model paths: {args.model_paths}")
     print(f"  log dir: {args.log_dir}")
     print("=" * 60)
 
