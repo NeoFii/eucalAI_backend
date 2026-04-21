@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from router_service.config import FIVEWAY_ROUTE_ORDER, NORMALIZE_RANGES
+from inference_service.config import FIVEWAY_ROUTE_ORDER, NORMALIZE_RANGES
 
 
 def minmax_scale_to_0_2(score: float, min_val: float, max_val: float) -> float:

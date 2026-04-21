@@ -54,6 +54,12 @@ SERVICES = {
         "port": 8003,
         "color": "\033[96m",
     },
+    "inference-service": {
+        "name": "inference-service",
+        "app": "inference_service.main:app",
+        "port": 8004,
+        "color": "\033[35m",
+    },
     "testing-scheduler": {
         "name": "testing-scheduler",
         "app": "testing_service.main:app",
@@ -76,6 +82,7 @@ SERVICES = {
 }
 DEFAULT_SERVICES = [
     "backend-app",
+    "inference-service",
     "router-service",
     "testing-worker",
     "testing-scheduler",
@@ -87,6 +94,7 @@ START_ORDER = {
             "backend-app",
             "admin-service",
             "testing-service",
+            "inference-service",
             "router-service",
             "testing-worker",
             "testing-scheduler",

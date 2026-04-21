@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from router_service.config import (
+from inference_service.config import (
     FIVEWAY_ROUTE_ORDER,
     FINAL_SCORE_LOWER,
     FINAL_SCORE_UPPER,
@@ -32,15 +32,14 @@ from router_service.config import (
     ROUTE_TASK,
     ROUTE_TOOL,
 )
-from router_service.logging import get_app_logger
-from router_service.nn.cg_tabm import CGTabMRegressor
-from router_service.utils.input_builder import (
+from inference_service.nn.cg_tabm import CGTabMRegressor
+from inference_service.utils.input_builder import (
     build_full_llm_input_for_chat_messages,
     build_proto_semantic_text,
     shared_record_from_chat_messages,
 )
-from router_service.utils.runtime_config import clone_runtime_config, normalize_runtime_config
-from router_service.utils.scoring import (
+from inference_service.utils.runtime_config import clone_runtime_config, normalize_runtime_config
+from inference_service.utils.scoring import (
     compute_weighted_total_score_0_10,
     l2_normalize_vec,
     level_from_0_10,
@@ -50,9 +49,11 @@ from router_service.utils.scoring import (
     scale_final_score_to_0_10,
     softmax_np,
 )
-from router_service.utils.text import normalize_chat_or_text
+from inference_service.utils.text import normalize_chat_or_text
 
-logger = get_app_logger()
+import logging
+
+logger = logging.getLogger("inference_service")
 
 
 def _ensure_special_tokens_map(model_dir: str):

@@ -1,7 +1,7 @@
 # Eucal AI Backend — 项目架构文档
 
-> 更新：2026-04-17（src/ layout 规范化 + 旧 router 功能下线）
-> 范围：`F:\Eucal_AI\backend`
+> 更新：2026-04-21（router-service 拆分为 CPU 网关 + GPU inference-service）
+> 范围：`/home/luofei/backend`
 
 ---
 
@@ -10,42 +10,45 @@
 Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout 统一代码布局：
 
 - **backend-app**（:8001）—— 单个 FastAPI 进程承载 admin + user + testing 三个管理面域。所有 CRUD、鉴权、目录管理都在这里。
-- **router-service**（:8003）—— 独立进程，**纯 ML 推理路由**（Hybrid Integrated Difficulty Router）。无数据库、无 HMAC、无 API Key/计费。水平扩容友好。
+- **router-service**（:8003）—— CPU 网关，接收 LLM 请求，调 inference-svc 获取路由决策，转发到上游供应商。无数据库、无 ML 依赖。水平扩容友好。
+- **inference-service**（:8004）—— GPU 推理服务，加载 Qwen backbone + 5 CG-TabM 路由器，对请求做难度分类和评分。
 - **testing-scheduler**（:8012）+ **testing-worker**（arq）—— 独立后台进程，跑 apscheduler 和基准测试队列消费者。
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                 客户端 / 前端 / LLM 调用方                 │
-└──────────────────────┬──────────────────┬──────────────┘
-                       │                  │
-          ┌────────────▼────────────┐  ┌──▼──────────────────┐
-          │       backend-app       │  │   router-service    │
-          │         :8001           │  │       :8003         │
-          │                         │  │  (可扩容 N 副本)     │
-          │  /api/v1/auth/*         │  │                     │
-          │  /api/v1/admin/auth/*   │  │  /v1/chat/*         │
-          │  /api/v1/admin-users/*  │  │  /v1/completions/*  │
-          │  /api/v1/invitation-*   │  │  /v1/models         │
-          │  /api/v1/models/*       │  │  /v1/router/config  │
-          │  /api/v1/providers/*    │  │  /ready             │
-          │  /api/v1/benchmark/*    │  │  ML 推理，无 DB      │
-          │  /api/v1/internal/*     │  │  无 HMAC callout    │
-          │                         │  │                     │
-          └────┬────────────────────┘  └─────────────────────┘
-               │
-               ├─ testing-scheduler :8012
-               └─ testing-worker    (arq + Redis)
+┌────────────────────────────────────────────────────────────────────┐
+│                    客户端 / 前端 / LLM 调用方                          │
+└────────────────────┬──────────────────────┬────────────────────────┘
+                     │                      │
+       ┌─────────────▼──────────────┐  ┌────▼─────────────────────────┐
+       │   Container 1: backend-app │  │  Container 2: router-service │
+       │          :8001             │  │          :8003               │
+       │   CPU-only                 │  │   CPU-only, 水平扩展          │
+       │                            │  │                              │
+       │   admin + user + testing   │  │   HTTP 网关 / 流式转发        │
+       │   scheduler + worker       │  │   API Key 校验               │
+       │   + Redis                  │  │   上游供应商路由              │
+       └────────────────────────────┘  └──────────────┬───────────────┘
+                                                      │ POST /internal/v1/classify
+                                       ┌──────────────▼───────────────┐
+                                       │  Container 3: inference-svc  │
+                                       │          :8004               │
+                                       │   GPU, 独立扩缩              │
+                                       │                              │
+                                       │   Qwen backbone              │
+                                       │   5× CG-TabM 路由器          │
+                                       │   Proto 语义加权              │
+                                       └──────────────────────────────┘
 ```
 
 ### 核心设计原则
 
-- **Control Plane / Data Plane 拆分**：非热路径全部合一（backend-app），热路径独立（router-service）
-- **src/ layout**：所有 Python 包位于 `src/` 下（`src/common`、`src/admin_service`、…、`src/backend_app`），pyproject hatchling 统一打包
-- **Database-per-service**：3 个 MySQL 库独立（admin/user/testing），backend-app 内部持 3 个 engine；router 无 DB
+- **Control Plane / Data Plane 拆分**：非热路径全部合一（backend-app），热路径拆为 CPU 网关（router-service）+ GPU 推理（inference-service）
+- **src/ layout**：所有 Python 包位于 `src/` 下（`src/common`、`src/admin_service`、…、`src/inference_service`、`src/backend_app`），pyproject hatchling 统一打包
+- **Database-per-service**：3 个 MySQL 库独立（admin/user/testing），backend-app 内部持 3 个 engine；router 和 inference 无 DB
 - **异步优先**：FastAPI + SQLAlchemy 2 async + aiomysql + httpx
 - **Snowflake ID**：全局唯一 ID（`common/utils/snowflake.py`，`SnowflakeIdMixin`）
-- **签名调用**：跨进程 HTTP 调用走 HMAC（`common/internal.py`）；backend-app 内部调用仍走 localhost HMAC（loopback 成本 <5ms），为回滚保留兼容。router 不参与 HMAC
-- **ML 依赖分层**：numpy/torch/transformers 等进 `[project.optional-dependencies].router`，默认 `uv sync` 不装，避免把 1GB+ 依赖强加给所有开发者
+- **签名调用**：跨进程 HTTP 调用走 HMAC（`common/internal.py`）；backend-app 内部调用仍走 localhost HMAC（loopback 成本 <5ms），为回滚保留兼容。router 和 inference 不参与 HMAC
+- **ML 依赖隔离**：torch/transformers/numpy 仅存在于 inference-service 镜像（`[project.optional-dependencies].inference`），router 和 backend-app 零 ML 依赖
 
 ---
 
@@ -54,11 +57,12 @@ Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout
 | 进程 | 模块 | 端口 | 数据库 | 依赖 | 扩容 |
 |---|---|---|---|---|---|
 | **backend-app** | `backend_app.main:app` | 8001 | admin/user/testing 3 库 | 标准依赖 | 单实例（可做多实例无状态） |
-| **router-service** | `router_service.main:app` | 8003 | — | `uv sync --extra router`（含 torch） | 水平扩容 |
+| **router-service** | `router_service.main:app` | 8003 | — | 标准依赖（无 torch） | 水平扩容（CPU-only） |
+| **inference-service** | `inference_service.main:app` | 8004 | — | `uv sync --extra inference`（含 torch） | 按 GPU 卡数扩容 |
 | **testing-scheduler** | `testing_service.main:app` | 8012 | `eucal_ai_testing` | 标准依赖 | 单实例 |
 | **testing-worker** | `testing_service.worker.WorkerSettings`（arq） | — | `eucal_ai_testing` | 标准依赖 | 按队列深度扩容 |
 
-子服务的 `src/<service>/main.py` 仍保留，用于 **单域调试**（`uv run start admin-service` 会起 admin 独立进程）。默认 `uv run start` 启动上表 4 个进程。
+子服务的 `src/<service>/main.py` 仍保留，用于 **单域调试**（`uv run start admin-service` 会起 admin 独立进程）。默认 `uv run start` 启动上表 5 个进程。
 
 ### 2.1 backend-app 内部子域
 
@@ -81,14 +85,22 @@ Eucal AI 后端采用 **Control Plane / Data Plane** 拆分，配合 src/ layout
 
 admin 的**内部 HMAC 端点**（`/api/v1/internal/admins/*`、`/api/v1/internal/invitation-codes/*`）保持原路径不变，避免打断 HMAC 客户端。
 
-### 2.3 router-service 独立性
+### 2.3 router-service + inference-service 独立性
 
-新 router 是 ML 推理服务，与其他服务**没有共享**：
+router-service 是 CPU 网关，与其他服务**最小共享**：
 
-- 不用 `BaseServiceSettings`；配置靠 `runtime_config.json` + `model_paths.json`（位于 `deploy/router/`，可用 `ROUTER_RUNTIME_CONFIG`/`ROUTER_MODEL_PATHS` 环境变量覆盖）
+- 不用 `BaseServiceSettings`；配置靠 `RouterSettings` dataclass（从环境变量加载）+ `runtime_config.json`（位于 `deploy/router/`）
 - 不用 `ServiceDatabaseRuntime`；没有 ORM
-- 不用 `common.internal`；不主动调用其他服务
-- 自带 `router_service/logging.py`（不走 `common.observability`）；未来可按需统一
+- 通过 `common.internal` 调 user-service 做 API Key 校验（带 60s 本地缓存）
+- 通过 `httpx.AsyncClient` 调 inference-svc `/internal/v1/classify`（shared secret 鉴权）
+- 自带 `router_service/logging.py`（不走 `common.observability`）
+
+inference-service 是 GPU 推理服务，**完全独立**：
+
+- 不用 `common/` 层任何模块
+- 配置靠 `InferenceSettings` dataclass + `model_paths.json` + `runtime_config.json`
+- 仅暴露 `/internal/v1/classify` 和 `/ready` 两个端点
+- 通过 `X-Inference-Secret` header 做轻量鉴权
 
 ---
 

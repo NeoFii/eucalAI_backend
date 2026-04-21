@@ -1,4 +1,4 @@
-"""POST /v1/chat/completions — v3: always invoke upstream, no routing data in response."""
+"""POST /v1/chat/completions — async gateway with inference-service routing."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import litellm
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from router_service.dependencies import get_router_engine, get_runtime_store, require_api_key
+from router_service.dependencies import get_inference_client, get_runtime_store, require_api_key
 from router_service.logging import log_routing_decision, log_upstream_call, get_app_logger
 from router_service.schemas.requests import ChatCompletionRequest
 from router_service.services.upstream import resolve_model_provider_target, strip_think_tags
@@ -22,7 +22,7 @@ logger = get_app_logger()
 
 
 @router.post("/v1/chat/completions")
-def chat_completions(
+async def chat_completions(
     request: ChatCompletionRequest,
     _: str = Depends(require_api_key),
 ):
@@ -43,20 +43,17 @@ def chat_completions(
             input_preview = stringify_message_content(request.messages[-1].get("content", ""))
 
     config = get_runtime_store().load()
-    engine = get_router_engine()
 
-    # Routing decision
+    # Routing decision via inference-service
     route_result = None
     selected_model = requested_model
     if requested_model == config["router_alias"]:
-        route_result = engine.predict_chat_messages(
-            request.messages,
-            request_id=request_id,
-            runtime_config=config,
+        inference_client = get_inference_client()
+        route_result = await inference_client.classify(
+            request.messages, request_id=request_id,
         )
         selected_model = route_result["selected_model"]
 
-        # Log routing decision (internal only, not returned to client)
         log_routing_decision(
             request_id=request_id,
             requested_model=requested_model,
@@ -73,7 +70,7 @@ def chat_completions(
     elif requested_model not in config["model_providers"]:
         raise HTTPException(status_code=404, detail=f"unsupported model: {requested_model}")
 
-    # Upstream invocation via litellm
+    # Upstream invocation via litellm (async)
     target_info = resolve_model_provider_target(selected_model, config["model_providers"])
     upstream_model = target_info["upstream_model"]
     upstream_api_base = target_info["api_base"]
@@ -85,7 +82,7 @@ def chat_completions(
 
     t_upstream = time.monotonic()
     try:
-        litellm_response = litellm.completion(
+        litellm_response = await litellm.acompletion(
             model=upstream_model,
             messages=forward_payload.pop("messages"),
             api_key=upstream_api_key,
@@ -109,7 +106,7 @@ def chat_completions(
             is_stream=is_stream,
             error=str(exc),
         )
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail="upstream service error")
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
 
     headers = {
@@ -118,14 +115,12 @@ def chat_completions(
     }
 
     if is_stream:
-        def _stream_sse():
+        async def _stream_sse():
             collected_content = ""
             try:
-                for chunk in litellm_response:
+                async for chunk in litellm_response:
                     chunk_dict = chunk.model_dump(exclude_none=True)
-                    # v3: model field = actual selected model
                     chunk_dict["model"] = selected_model
-                    # Clean reasoning_content
                     choices = chunk_dict.get("choices") or []
                     for c in choices:
                         delta = c.get("delta") or {}
@@ -160,10 +155,8 @@ def chat_completions(
 
     # Non-streaming
     response_payload = litellm_response.model_dump(exclude_none=True)
-    # v3: model field = actual selected model, no router data injected
     response_payload["model"] = selected_model
 
-    # Strip <think> tags from content
     choices = response_payload.get("choices") or []
     for choice in choices:
         if not isinstance(choice, dict):

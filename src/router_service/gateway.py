@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from common.gateway.base import BaseGateway
@@ -33,11 +32,14 @@ class UserIdentityGateway(BaseGateway):
         model: str | None = None,
         client_ip: str | None = None,
     ) -> ValidatedApiKey:
+        from router_service.dependencies import get_settings
+
+        settings = get_settings()
         payload = await post_internal_json(
-            base_url=os.getenv("USER_SERVICE_URL", "http://127.0.0.1:8001"),
+            base_url=settings.user_service_url,
             target_service="user-service",
             path="/api/v1/internal/api-keys/validate",
-            secret=os.getenv("INTERNAL_SECRET", ""),
+            secret=settings.internal_secret,
             caller_service="router-service",
             timeout=IDENTITY_TIMEOUT_SECONDS,
             json_body={
@@ -45,12 +47,10 @@ class UserIdentityGateway(BaseGateway):
                 "model": model,
                 "client_ip": client_ip,
             },
-            max_retries=int(os.getenv("INTERNAL_HTTP_MAX_RETRIES", "1")),
-            retry_backoff_seconds=float(os.getenv("INTERNAL_HTTP_RETRY_BACKOFF_SECONDS", "0.2")),
-            circuit_breaker_threshold=int(os.getenv("INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD", "3")),
-            circuit_breaker_cooldown_seconds=float(
-                os.getenv("INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS", "30.0")
-            ),
+            max_retries=settings.internal_http_max_retries,
+            retry_backoff_seconds=settings.internal_http_retry_backoff_seconds,
+            circuit_breaker_threshold=settings.internal_http_circuit_breaker_threshold,
+            circuit_breaker_cooldown_seconds=settings.internal_http_circuit_breaker_cooldown_seconds,
         )
         return ValidatedApiKey(
             id=int(payload["id"]),

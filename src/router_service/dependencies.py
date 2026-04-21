@@ -1,41 +1,46 @@
-"""FastAPI dependency injection: global singletons + API key auth."""
+"""FastAPI dependency injection: global singletons + API key auth with cache."""
 
 from __future__ import annotations
 
+import hashlib
 import json
-from typing import TYPE_CHECKING, Any, Dict, Optional
+import time
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from fastapi import Header, HTTPException, Request
 
 from common.core.exceptions import ServiceUnavailableException
 from common.internal import InternalServiceError, InternalServiceResponseError
-from router_service.config import ModelPathsConfig
 from router_service.gateway import UserIdentityGateway, ValidatedApiKey
 
 if TYPE_CHECKING:
-    from router_service.services.router_engine import HybridIntegratedDifficultyRouter
+    from router_service.services.inference_client import InferenceClient
+    from router_service.settings import RouterSettings
     from router_service.utils.runtime_config import RuntimeConfigStore
 
 # Global singletons — initialized in lifespan
-_router_engine: Optional["HybridIntegratedDifficultyRouter"] = None
+_inference_client: Optional["InferenceClient"] = None
 _runtime_store: Optional["RuntimeConfigStore"] = None
+_settings: Optional["RouterSettings"] = None
+
+# API key cache: sha256(raw_key) -> (ValidatedApiKey, expire_monotonic)
+_API_KEY_CACHE_TTL = 60.0
+_api_key_cache: Dict[str, Tuple[ValidatedApiKey, float]] = {}
 
 
 def init_globals(
     *,
     runtime_config_path: str,
-    model_paths: ModelPathsConfig,
+    settings: "RouterSettings",
+    inference_client: "InferenceClient",
 ) -> None:
-    global _router_engine, _runtime_store
-    from router_service.services.router_engine import HybridIntegratedDifficultyRouter
+    global _inference_client, _runtime_store, _settings
     from router_service.utils.runtime_config import RuntimeConfigStore
 
+    _settings = settings
+    _inference_client = inference_client
     _runtime_store = RuntimeConfigStore(runtime_config_path)
     _runtime_store.ensure_exists()
-    _router_engine = HybridIntegratedDifficultyRouter(
-        model_paths,
-        runtime_config=_runtime_store.load(),
-    )
 
 
 def get_runtime_store() -> "RuntimeConfigStore":
@@ -44,10 +49,16 @@ def get_runtime_store() -> "RuntimeConfigStore":
     return _runtime_store
 
 
-def get_router_engine() -> "HybridIntegratedDifficultyRouter":
-    if _router_engine is None:
-        raise RuntimeError("router engine not initialized")
-    return _router_engine
+def get_inference_client() -> "InferenceClient":
+    if _inference_client is None:
+        raise RuntimeError("inference client not initialized")
+    return _inference_client
+
+
+def get_settings() -> "RouterSettings":
+    if _settings is None:
+        raise RuntimeError("settings not initialized")
+    return _settings
 
 
 def _extract_client_ip(request: Request) -> str | None:
@@ -93,6 +104,17 @@ async def require_api_key(
     if not raw_key:
         raise HTTPException(status_code=401, detail="missing api key")
 
+    # Check cache first
+    cache_key = hashlib.sha256(raw_key.encode()).hexdigest()
+    now = time.monotonic()
+    cached = _api_key_cache.get(cache_key)
+    if cached is not None:
+        principal, expires_at = cached
+        if now < expires_at:
+            request.state.api_key_principal = principal
+            return principal
+        del _api_key_cache[cache_key]
+
     try:
         principal = await UserIdentityGateway.validate_api_key(
             api_key=raw_key,
@@ -108,6 +130,9 @@ async def require_api_key(
         ) from exc
     except (InternalServiceError, ServiceUnavailableException) as exc:
         raise HTTPException(status_code=503, detail="user-service unavailable") from exc
+
+    # Cache successful validation
+    _api_key_cache[cache_key] = (principal, now + _API_KEY_CACHE_TTL)
 
     request.state.api_key_principal = principal
     return principal
