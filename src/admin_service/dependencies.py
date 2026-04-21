@@ -5,17 +5,16 @@
 
 from typing import Optional
 
-from fastapi import Cookie, Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Cookie, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.core.exceptions import AuthenticationException, InvalidTokenException
-from admin_service.exceptions import AdminPermissionDeniedException
-from admin_service.db import get_db
-from common.utils.jwt import decode_token
 from admin_service.config import settings
+from admin_service.db import get_db
 from admin_service.models import AdminUser
 from admin_service.services.auth_service import AdminAuthService
+from common.core.exceptions import AuthenticationException, InvalidTokenException
+from common.utils.jwt import decode_token
 
 # HTTP Bearer 安全方案
 security = HTTPBearer(auto_error=False)
@@ -79,9 +78,6 @@ async def get_current_admin(
     if not admin:
         raise AuthenticationException(detail="管理员不存在")
 
-    if admin.status == 0:
-        raise AuthenticationException(detail="账户已被禁用")
-
     return admin
 
 
@@ -102,8 +98,27 @@ async def get_optional_current_admin(
     except (AuthenticationException, InvalidTokenException):
         return None
 
-async def require_super_admin(current_admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
-    if current_admin.role != "super_admin":
-        raise AdminPermissionDeniedException("Super admin required")
-    return current_admin
 
+async def require_active_admin(current_admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
+    """Compatibility wrapper for the policy guard."""
+
+    from admin_service.policies import require_active_admin as policy
+
+    return await policy(current_admin)
+
+
+async def require_super_admin(current_admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
+    """Compatibility wrapper for the policy guard."""
+
+    from admin_service.policies import require_super_admin as policy
+
+    return await policy(current_admin)
+
+
+__all__ = [
+    "get_current_admin",
+    "get_db_session",
+    "get_optional_current_admin",
+    "require_active_admin",
+    "require_super_admin",
+]

@@ -6,11 +6,11 @@ import logging
 from datetime import timedelta
 from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.config import settings
 from admin_service.models import AdminUser
+from admin_service.repositories import AdminUserRepository
 from admin_service.services.audit_service import AdminAuditService
 from common.core.exceptions import (
     InvalidCredentialsException,
@@ -46,8 +46,8 @@ class AdminAuthService:
     ) -> tuple[AdminUser, str]:
         """Authenticate an admin and issue an access token."""
         logger.info("Admin login attempt: %s", email)
-        result = await db.execute(select(AdminUser).where(AdminUser.email == email))
-        admin = result.scalar_one_or_none()
+        user_repo = AdminUserRepository(db)
+        admin = await user_repo.get_by_email(email)
 
         if not admin:
             raise InvalidCredentialsException()
@@ -172,8 +172,7 @@ class AdminAuthService:
     @staticmethod
     async def get_current_admin(db: AsyncSession, uid: int) -> Optional[AdminUser]:
         """Return the admin identified by public UID."""
-        result = await db.execute(select(AdminUser).where(AdminUser.uid == uid))
-        return result.scalar_one_or_none()
+        return await AdminUserRepository(db).get_by_uid(uid)
 
     @staticmethod
     async def change_password(

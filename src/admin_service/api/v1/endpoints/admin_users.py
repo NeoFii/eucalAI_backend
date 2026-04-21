@@ -3,8 +3,11 @@
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_service.dependencies import get_db_session, require_super_admin
+from admin_service.dependencies import get_db_session
+from admin_service.models import AdminUser
+from admin_service.policies import require_super_admin
 from admin_service.schemas import (
+    AdminBaseResponse,
     AdminListItem,
     AdminListResponse,
     AdminListResponseData,
@@ -14,8 +17,6 @@ from admin_service.schemas import (
     ResetAdminPasswordRequest,
     UpdateAdminStatusRequest,
 )
-from admin_service.models import AdminUser
-from admin_service.schemas import AdminBaseResponse
 from admin_service.services.management_service import AdminManagementService
 
 router = APIRouter(prefix="/admin-users", tags=["admin-users"])
@@ -112,7 +113,9 @@ async def update_admin_user_status(
     return AdminBaseResponse(code=200, message="success")
 
 
-@router.post("/{uid}/reset-password", response_model=AdminBaseResponse, summary="Reset admin password")
+@router.post(
+    "/{uid}/reset-password", response_model=AdminBaseResponse, summary="Reset admin password"
+)
 async def reset_admin_user_password(
     uid: int,
     payload: ResetAdminPasswordRequest,

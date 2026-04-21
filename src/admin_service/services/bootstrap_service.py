@@ -7,10 +7,10 @@ import logging
 from sqlalchemy import func, select, text
 
 from admin_service.config import settings
+from admin_service.db import get_db_context
 from admin_service.models import AdminUser
 from admin_service.services.audit_service import AdminAuditService
 from admin_service.utils.password import check_password_strength
-from admin_service.db import get_db_context
 from common.utils import generate_snowflake_id, hash_password
 from common.utils.timezone import now
 
@@ -41,7 +41,9 @@ class AdminBootstrapService:
 
             lock_acquired = await cls._acquire_lock(db)
             if not lock_acquired:
-                raise RuntimeError("Failed to acquire bootstrap lock for super admin initialization")
+                raise RuntimeError(
+                    "Failed to acquire bootstrap lock for super admin initialization"
+                )
 
             try:
                 active_count = await cls._count_active_super_admins(db)
@@ -58,7 +60,9 @@ class AdminBootstrapService:
     @classmethod
     async def _count_active_super_admins(cls, db) -> int:
         result = await db.execute(
-            select(func.count()).select_from(AdminUser).where(
+            select(func.count())
+            .select_from(AdminUser)
+            .where(
                 AdminUser.role == "super_admin",
                 AdminUser.status == 1,
             )
@@ -87,11 +91,17 @@ class AdminBootstrapService:
             return False
 
         changed = False
-        if settings.BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS and settings.BOOTSTRAP_SUPERADMIN_NAME:
+        if (
+            settings.BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS
+            and settings.BOOTSTRAP_SUPERADMIN_NAME
+        ):
             if admin.name != settings.BOOTSTRAP_SUPERADMIN_NAME:
                 admin.name = settings.BOOTSTRAP_SUPERADMIN_NAME
                 changed = True
-        if settings.BOOTSTRAP_SUPERADMIN_RESET_PASSWORD_IF_EXISTS and settings.BOOTSTRAP_SUPERADMIN_PASSWORD:
+        if (
+            settings.BOOTSTRAP_SUPERADMIN_RESET_PASSWORD_IF_EXISTS
+            and settings.BOOTSTRAP_SUPERADMIN_PASSWORD
+        ):
             ok, message = check_password_strength(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
             if not ok:
                 raise RuntimeError(f"Invalid bootstrap password: {message}")
@@ -181,7 +191,9 @@ class AdminBootstrapService:
                 "role": admin.role,
                 "status": admin.status,
             },
-            reason="bootstrap create super admin" if created else "bootstrap reused existing super admin",
+            reason="bootstrap create super admin"
+            if created
+            else "bootstrap reused existing super admin",
         )
 
     @classmethod
