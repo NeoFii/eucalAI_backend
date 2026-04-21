@@ -19,10 +19,22 @@
   Purpose: focused fail-fast tests for runtime schema version checks and “no runtime init_db” enforcement.
 
 **Modify**
+- `.env.example`
+  Purpose: remove `AUTO_INIT_DB` from advertised env surface.
+- `README.md`
+  Purpose: remove `AUTO_INIT_DB` / `--skip-init-db` documentation and rewrite startup flow as Alembic-only.
+- `deploy/docker-compose.yml`
+  Purpose: remove `AUTO_INIT_DB` from deployment surface.
 - `src/common/db/runtime.py`
   Purpose: remove runtime schema-creation entrypoint if unused after cutover.
 - `src/common/db/__init__.py`
   Purpose: export the new schema-version helper if it becomes part of the shared runtime surface.
+- `src/admin_service/db.py`
+  Purpose: remove stale `init_db` re-export after runtime schema creation is deleted.
+- `src/user_service/db.py`
+  Purpose: remove stale `init_db` re-export after runtime schema creation is deleted.
+- `src/testing_service/db.py`
+  Purpose: remove stale `init_db` re-export after runtime schema creation is deleted.
 - `src/backend_app/lifecycle.py`
   Purpose: replace `AUTO_INIT_DB`/`init_db()` behavior with Alembic head checks.
 - `src/backend_app/main.py`
@@ -53,6 +65,8 @@
   Purpose: align runtime assertions with Alembic-only startup.
 - `tests/test_internal_contracts.py`
   Purpose: remove any assumptions about `AUTO_INIT_DB`-driven startup.
+- `tests/test_admin_management.py`
+  Purpose: remove `skip_init_db` / `--skip-init-db` assumptions from bootstrap CLI tests.
 - `tests/test_migration_structure.py`
   Purpose: assert Alembic is the only schema-management path.
 - `tests/test_refactor_cleanup.py`
@@ -87,6 +101,37 @@ def test_standalone_services_do_not_call_init_db():
     assert "init_db(" not in testing_main
 
 
+@pytest.mark.asyncio
+async def test_backend_app_revision_mismatch_stops_before_admin_bootstrap(monkeypatch):
+    calls = []
+
+    async def fake_check(*_args, **_kwargs):
+        calls.append("check")
+        raise RuntimeError("revision mismatch")
+
+    async def fake_bootstrap():
+        calls.append("bootstrap")
+
+    monkeypatch.setattr("backend_app.lifecycle.ensure_database_at_head", fake_check)
+    monkeypatch.setattr(
+        "backend_app.lifecycle.AdminBootstrapService.ensure_super_admin",
+        fake_bootstrap,
+    )
+
+    with pytest.raises(RuntimeError):
+        ...
+
+    assert calls == ["check"]
+
+
+def test_bootstrap_super_admin_cli_no_longer_accepts_skip_init_db():
+    from admin_service.bootstrap_superadmin import build_parser
+
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--skip-init-db"])
+
+
 def test_runtime_schema_version_check_fails_when_current_revision_is_not_head(monkeypatch):
     from common.db.schema_version import ensure_database_at_head
 
@@ -107,14 +152,22 @@ uv --cache-dir /tmp/uv-cache run pytest tests/test_alembic_runtime.py tests/test
 Expected:
 - FAIL because `schema_version.py` does not exist yet
 - FAIL because runtime files still contain `init_db(` / `AUTO_INIT_DB` references
+- FAIL because startup-short-circuit tests reference missing fail-fast helpers / old CLI flags
 
 - [ ] **Step 3: Add a cleanup assertion for docs/tooling**
 
 ```python
 def test_docs_and_scripts_describe_alembic_as_only_schema_path():
     readme = (ROOT / "migrations" / "README.md").read_text(encoding="utf-8")
+    root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    compose = (ROOT / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     assert "唯一 schema 真理" in readme
     assert "create_all" not in readme
+    assert "AUTO_INIT_DB" not in root_readme
+    assert "skip-init-db" not in root_readme
+    assert "AUTO_INIT_DB" not in compose
+    assert "AUTO_INIT_DB" not in env_example
 ```
 
 - [ ] **Step 4: Re-run the focused tests and capture the failing list**
@@ -130,7 +183,7 @@ Expected:
 - [ ] **Step 5: Commit the red test baseline**
 
 ```bash
-git add tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_migration_structure.py tests/test_refactor_cleanup.py
+git add tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_migration_structure.py tests/test_refactor_cleanup.py tests/test_admin_management.py
 git commit -m "test: lock alembic-only runtime behavior"
 ```
 
@@ -140,6 +193,9 @@ git commit -m "test: lock alembic-only runtime behavior"
 - Create: `src/common/db/schema_version.py`
 - Modify: `src/common/db/runtime.py`
 - Modify: `src/common/db/__init__.py`
+- Modify: `src/admin_service/db.py`
+- Modify: `src/user_service/db.py`
+- Modify: `src/testing_service/db.py`
 - Modify: `src/backend_app/lifecycle.py`
 - Modify: `src/admin_service/main.py`
 - Modify: `src/testing_service/main.py`
@@ -182,6 +238,7 @@ async def init_db(...):
 
 Expected code change:
 - no runtime code path should still call `metadata.create_all`
+- no service-local DB facade should still export `init_db`
 
 - [ ] **Step 3: Replace `init_db()` startup behavior with Alembic checks in each entrypoint**
 
@@ -194,12 +251,15 @@ Apply to:
 - `admin_service/main.py`
 - `testing_service/main.py`
 - `admin_service/bootstrap_superadmin.py`
+- `src/admin_service/db.py`
+- `src/user_service/db.py`
+- `src/testing_service/db.py`
 
 - [ ] **Step 4: Run focused tests to verify the new startup path**
 
 Run:
 ```bash
-uv --cache-dir /tmp/uv-cache run pytest tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_internal_contracts.py -q
+uv --cache-dir /tmp/uv-cache run pytest tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_internal_contracts.py tests/test_admin_management.py -q
 ```
 
 Expected:
@@ -209,7 +269,7 @@ Expected:
 - [ ] **Step 5: Commit the runtime cutover**
 
 ```bash
-git add src/common/db/schema_version.py src/common/db/runtime.py src/common/db/__init__.py src/backend_app/lifecycle.py src/admin_service/main.py src/testing_service/main.py src/admin_service/bootstrap_superadmin.py tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_internal_contracts.py
+git add src/common/db/schema_version.py src/common/db/runtime.py src/common/db/__init__.py src/admin_service/db.py src/user_service/db.py src/testing_service/db.py src/backend_app/lifecycle.py src/admin_service/main.py src/testing_service/main.py src/admin_service/bootstrap_superadmin.py tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_internal_contracts.py tests/test_admin_management.py
 git commit -m "refactor: enforce alembic-only runtime startup"
 ```
 
@@ -220,8 +280,12 @@ git commit -m "refactor: enforce alembic-only runtime startup"
 - Modify: `src/testing_service/config.py`
 - Modify: `scripts/migrate.py`
 - Modify: `scripts/bootstrap_service_databases.py`
+- Modify: `.env.example`
+- Modify: `README.md`
+- Modify: `deploy/docker-compose.yml`
 - Modify: `tests/test_migration_structure.py`
 - Modify: `tests/test_refactor_cleanup.py`
+- Modify: `tests/test_admin_management.py`
 
 - [ ] **Step 1: Remove dead `AUTO_INIT_DB` configuration from runtime settings**
 
@@ -250,7 +314,13 @@ Expected:
 ```python
 def test_runtime_configs_do_not_expose_auto_init_db():
     common_config = (ROOT / "src" / "common" / "config.py").read_text(encoding="utf-8")
+    compose = (ROOT / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "AUTO_INIT_DB" not in common_config
+    assert "AUTO_INIT_DB" not in compose
+    assert "AUTO_INIT_DB" not in env_example
+    assert "skip-init-db" not in readme
 ```
 
 - [ ] **Step 4: Run the focused migration/config tests**
@@ -266,7 +336,7 @@ Expected:
 - [ ] **Step 5: Commit the config/tooling cleanup**
 
 ```bash
-git add src/common/config.py src/testing_service/config.py scripts/migrate.py scripts/bootstrap_service_databases.py tests/test_migration_structure.py tests/test_refactor_cleanup.py tests/test_phase4_runtime.py
+git add src/common/config.py src/testing_service/config.py scripts/migrate.py scripts/bootstrap_service_databases.py .env.example README.md deploy/docker-compose.yml tests/test_migration_structure.py tests/test_refactor_cleanup.py tests/test_phase4_runtime.py tests/test_admin_management.py
 git commit -m "refactor: remove runtime auto-init configuration"
 ```
 
@@ -337,7 +407,18 @@ Expected:
 - No active runtime startup path remains
 - Remaining hits, if any, should only be intentional migration/documentation context that clearly states removal
 
-- [ ] **Step 3: Commit the final verification checkpoint**
+- [ ] **Step 3: Verify removed flags are gone from the external surface**
+
+Run:
+```bash
+rg -n "AUTO_INIT_DB|skip-init-db|skip_init_db|init_db\\(" .env.example README.md deploy/docker-compose.yml src tests
+```
+
+Expected:
+- no live startup/config/docs path still advertises runtime schema creation
+- any remaining `init_db(` hits must not be in service startup/runtime paths
+
+- [ ] **Step 4: Commit the final verification checkpoint**
 
 ```bash
 git add -A
