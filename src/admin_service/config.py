@@ -33,7 +33,6 @@ class Settings(BaseServiceSettings):
 
     INTERNAL_API_PREFIX: str = "/internal"
     USER_SERVICE_URL: str = "http://127.0.0.1:8001"
-    CONTENT_SERVICE_URL: str = "http://127.0.0.1:8001"
 
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
