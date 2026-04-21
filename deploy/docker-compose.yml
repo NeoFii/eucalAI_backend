@@ -36,11 +36,10 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
       INTERNAL_SECRET: ${INTERNAL_SECRET}
-      # Self-referential HMAC: the embedded admin/user/content clients still
+      # Self-referential HMAC: the embedded admin/user clients still
       # make signed HTTP calls, but they now hit the same process over loopback.
       ADMIN_SERVICE_URL: "http://backend-app:8001"
       USER_SERVICE_URL: "http://backend-app:8001"
-      CONTENT_SERVICE_URL: "http://backend-app:8001"
       ROUTER_SERVICE_URL: "http://router-service:8003"
       BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
       TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
