@@ -142,7 +142,6 @@ Copy-Item .env.example .env
 | `DATABASE_POOL_SIZE` | 建议填 | 全局 | 数据库连接池基础连接数 |
 | `DATABASE_MAX_OVERFLOW` | 建议填 | 全局 | 连接池允许的额外溢出连接数 |
 | `DATABASE_ECHO` | 否 | 全局 | 是否打印 SQL 日志 | 调试时可设 `true` |
-| `AUTO_INIT_DB` | 生产不建议开启 | 全局 | 是否在服务启动时尝试自动初始化 schema | 正式环境建议保持 `false` |
 
 ### 服务地址配置
 
@@ -349,23 +348,16 @@ BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS=false
 先执行 `admin-service` 的迁移，再执行：
 
 ```bash
-uv run bootstrap-super-admin --skip-init-db
+uv run bootstrap-super-admin
 ```
 
 然后做存在性检查：
 
 ```bash
-uv run bootstrap-super-admin --check-only --skip-init-db
+uv run bootstrap-super-admin --check-only
 ```
 
-### `--skip-init-db` 的含义
-
-表示：
-
-- 你已经通过 Alembic 准备好了 schema
-- 该命令不再依赖运行时自动初始化数据库
-
-正式部署建议始终这样用。
+`bootstrap-super-admin` 不再承担 schema 初始化职责。必须先执行 Alembic 迁移，再运行该命令。
 
 ### 初始化成功后应该做什么
 
@@ -539,8 +531,8 @@ uv run python scripts/runtime_probe.py worker-ready --database-url-env TESTING_D
 
 ```bash
 uv run migrate --service admin-service upgrade head
-uv run bootstrap-super-admin --skip-init-db
-uv run bootstrap-super-admin --check-only --skip-init-db
+uv run bootstrap-super-admin
+uv run bootstrap-super-admin --check-only
 ```
 
 ### 4. `testing-worker` 或 `testing-scheduler` 起不来
@@ -586,4 +578,3 @@ uv run bootstrap-super-admin --check-only --skip-init-db
 - 服务间调用是 signed internal HMAC（`common/internal.py`），带断路器与重试
 - 数据库快照在 `scripts/sql/` 下（`admin_schema.sql`、`user_schema.sql` 等），由 `mysqldump` 重新生成；**Alembic 是 schema 真理**，见 `migrations/README.md`
 - phase2 切换工具：`docs/phase2-cutover.md`
-

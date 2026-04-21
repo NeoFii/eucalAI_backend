@@ -431,8 +431,8 @@ async def test_bootstrap_cli_runs_bootstrap_flow(monkeypatch):
         BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP=True,
     )
 
-    async def fake_setup_runtime(*, skip_init_db):
-        calls.append(("setup", skip_init_db))
+    async def fake_setup_runtime():
+        calls.append("setup")
 
     async def fake_ensure_super_admin():
         calls.append("ensure")
@@ -452,7 +452,7 @@ async def test_bootstrap_cli_runs_bootstrap_flow(monkeypatch):
     exit_code = await async_main([])
 
     assert exit_code == 0
-    assert calls == [("setup", False), "ensure", "close"]
+    assert calls == ["setup", "ensure", "close"]
 
 
 @pytest.mark.asyncio
@@ -466,8 +466,8 @@ async def test_bootstrap_cli_check_only_returns_nonzero_when_missing(monkeypatch
         BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP=True,
     )
 
-    async def fake_setup_runtime(*, skip_init_db):
-        calls.append(("setup", skip_init_db))
+    async def fake_setup_runtime():
+        calls.append("setup")
 
     async def fake_run_check_only():
         calls.append("check")
@@ -481,10 +481,59 @@ async def test_bootstrap_cli_check_only_returns_nonzero_when_missing(monkeypatch
     monkeypatch.setattr("admin_service.bootstrap_superadmin._run_check_only", fake_run_check_only)
     monkeypatch.setattr("admin_service.bootstrap_superadmin.close_db", fake_close_db)
 
-    exit_code = await async_main(["--check-only", "--skip-init-db"])
+    exit_code = await async_main(["--check-only"])
 
     assert exit_code == 1
-    assert calls == [("setup", True), "check", "close"]
+    assert calls == ["setup", "check", "close"]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_cli_revision_mismatch_stops_before_followup_work(monkeypatch):
+    from admin_service.bootstrap_superadmin import async_main
+
+    calls = []
+    fake_settings = SimpleNamespace(
+        LOG_LEVEL="INFO",
+        BOOTSTRAP_SUPERADMIN_ENABLED=True,
+        BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP=True,
+    )
+
+    async def fake_setup_runtime():
+        calls.append("setup")
+        raise RuntimeError("revision mismatch")
+
+    async def fake_ensure_super_admin():
+        calls.append("ensure")
+        return True
+
+    async def fake_run_check_only():
+        calls.append("check")
+        return 0
+
+    async def fake_close_db():
+        calls.append("close")
+
+    monkeypatch.setattr("admin_service.bootstrap_superadmin.settings", fake_settings)
+    monkeypatch.setattr("admin_service.bootstrap_superadmin._setup_runtime", fake_setup_runtime)
+    monkeypatch.setattr(
+        "admin_service.bootstrap_superadmin.AdminBootstrapService.ensure_super_admin",
+        fake_ensure_super_admin,
+    )
+    monkeypatch.setattr("admin_service.bootstrap_superadmin._run_check_only", fake_run_check_only)
+    monkeypatch.setattr("admin_service.bootstrap_superadmin.close_db", fake_close_db)
+
+    exit_code = await async_main(["--check-only"])
+
+    assert exit_code == 1
+    assert calls == ["setup", "close"]
+
+
+def test_bootstrap_cli_parser_does_not_accept_skip_init_db_flag():
+    from admin_service.bootstrap_superadmin import build_parser
+
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--skip-init-db"])
 
 
 class _FakeScalarResult:
@@ -652,4 +701,3 @@ async def test_auth_login_after_lock_expired_records_unlock_audit(monkeypatch):
     assert audit_actions == ["admin_login_success", "admin_login_unlocked"]
     assert admin.login_fail_count == 0
     assert admin.login_locked_until is None
-

@@ -12,7 +12,6 @@ get_engine = _runtime.get_engine
 init_session_factory = _runtime.init_session_factory
 get_db = _runtime.get_db
 get_db_context = _runtime.get_db_context
-init_db = _runtime.init_db
 close_db = _runtime.close_db
 
 __all__ = [
@@ -22,6 +21,5 @@ __all__ = [
     "get_db",
     "get_db_context",
     "get_engine",
-    "init_db",
     "init_session_factory",
 ]

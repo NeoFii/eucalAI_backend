@@ -210,10 +210,6 @@ class Settings(BaseServiceSettings):
     def benchmark_enable_scheduler_enqueue(self) -> bool:
         return self.BENCHMARK_ENABLE_SCHEDULER_ENQUEUE
 
-    @property
-    def auto_init_db(self) -> bool:
-        return self.AUTO_INIT_DB
-
 @lru_cache
 def get_settings() -> Settings:
     """Return cached testing settings."""

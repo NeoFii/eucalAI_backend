@@ -7,14 +7,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from common.db import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability, log_event
 from common.utils.snowflake import configure_snowflake
-from testing_service.db import close_db, create_engine, get_engine, init_db, init_session_factory
+from testing_service.db import close_db, create_engine, get_engine, init_session_factory
 from testing_service.api.v1.router import api_router
 from testing_service.config import get_settings
-from testing_service.models import SERVICE_MODELS
 
 settings = get_settings()
 configure_logging(settings.LOG_LEVEL)
@@ -38,11 +38,8 @@ async def lifespan(app: FastAPI):
         echo=settings.DATABASE_ECHO,
     )
     init_session_factory()
-    if settings.auto_init_db:
-        await init_db(SERVICE_MODELS)
-        log_event(logger, logging.INFO, "schema_auto_init_enabled", service=settings.SERVICE_NAME)
-    else:
-        log_event(logger, logging.INFO, "schema_auto_init_skipped", service=settings.SERVICE_NAME)
+    await ensure_database_at_head(service_name="testing-service", url=settings.DATABASE_URL)
+    log_event(logger, logging.INFO, "schema_revision_verified", service=settings.SERVICE_NAME)
 
     instance_role = "scheduler" if settings.probe_scheduler_enabled else "api"
     log_event(

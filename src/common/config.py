@@ -44,7 +44,6 @@ class BaseServiceSettings(BaseSettings):
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_ECHO: bool = False
-    AUTO_INIT_DB: bool = False
 
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"

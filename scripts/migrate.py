@@ -4,42 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import dataclass
-from pathlib import Path
 
+from common.db.schema_version import (
+    SERVICE_CONFIGS,
+    ServiceMigrationConfig,
+    build_service_alembic_config,
+)
 from scripts.check_service_environment import load_project_dotenv
-
-ROOT = Path(__file__).resolve().parent.parent
-
-
-@dataclass(frozen=True)
-class ServiceMigrationConfig:
-    service: str
-    package: str
-    script_location: Path
-    database_env: str
-
-
-SERVICE_CONFIGS = {
-    "admin-service": ServiceMigrationConfig(
-        service="admin-service",
-        package="admin_service",
-        script_location=ROOT / "migrations" / "admin_service",
-        database_env="ADMIN_DATABASE_URL",
-    ),
-    "user-service": ServiceMigrationConfig(
-        service="user-service",
-        package="user_service",
-        script_location=ROOT / "migrations" / "user_service",
-        database_env="USER_DATABASE_URL",
-    ),
-    "testing-service": ServiceMigrationConfig(
-        service="testing-service",
-        package="testing_service",
-        script_location=ROOT / "migrations" / "testing_service",
-        database_env="TESTING_DATABASE_URL",
-    ),
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,19 +72,7 @@ def load_alembic():
 
 
 def build_alembic_config(service: ServiceMigrationConfig, url: str | None):
-    _, Config = load_alembic()
-    config = Config()
-    config.set_main_option("script_location", str(service.script_location))
-    config.set_main_option(
-        "prepend_sys_path",
-        os.pathsep.join([str(ROOT), str(ROOT / "src")]),
-    )
-    config.set_main_option("service_name", service.service)
-    config.set_main_option("service_package", service.package)
-    config.set_main_option("database_env", service.database_env)
-    if url:
-        config.set_main_option("sqlalchemy.url", url)
-    return config
+    return build_service_alembic_config(service.service, url=url)
 
 
 def command_requires_database_url(command_name: str, autogenerate: bool = False) -> bool:

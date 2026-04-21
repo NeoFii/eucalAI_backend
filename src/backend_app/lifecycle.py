@@ -13,17 +13,15 @@ from fastapi import FastAPI
 
 from admin_service import db as admin_db
 from admin_service.config import settings as admin_settings
-from admin_service.models import SERVICE_MODELS as ADMIN_MODELS
 from admin_service.services.bootstrap_service import AdminBootstrapService
 from backend_app.config import settings
+from common.db import ensure_database_at_head
 from common.observability import log_event
 from common.utils.snowflake import configure_snowflake
 from testing_service import db as testing_db
 from testing_service.config import get_settings as get_testing_settings
-from testing_service.models import SERVICE_MODELS as TESTING_MODELS
 from user_service import db as user_db
 from user_service.config import settings as user_settings
-from user_service.models import SERVICE_MODELS as USER_MODELS
 
 testing_settings = get_testing_settings()
 
@@ -110,13 +108,10 @@ async def _initialize_database(
     service_name: str,
     create_engine: Callable[..., Any],
     init_session_factory: Callable[[], Any],
-    init_db: Callable[[list[type]], Awaitable[None]],
     database_url: str,
     pool_size: int,
     max_overflow: int,
     echo: bool,
-    auto_init: bool,
-    models: list[type],
     logger: logging.Logger,
 ) -> None:
     create_engine(
@@ -126,11 +121,8 @@ async def _initialize_database(
         echo=echo,
     )
     init_session_factory()
-    if auto_init:
-        await init_db(models)
-        log_event(logger, logging.INFO, "schema_auto_init_enabled", service=service_name)
-    else:
-        log_event(logger, logging.INFO, "schema_auto_init_skipped", service=service_name)
+    await ensure_database_at_head(service_name=service_name, url=database_url)
+    log_event(logger, logging.INFO, "schema_revision_verified", service=service_name)
 
 
 def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
@@ -157,16 +149,13 @@ def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
     manager.register(
         "admin-database",
         startup=lambda: _initialize_database(
-            service_name=admin_settings.SERVICE_NAME,
+            service_name="admin-service",
             create_engine=admin_db.create_engine,
             init_session_factory=admin_db.init_session_factory,
-            init_db=admin_db.init_db,
             database_url=admin_settings.DATABASE_URL,
             pool_size=admin_settings.DATABASE_POOL_SIZE,
             max_overflow=admin_settings.DATABASE_MAX_OVERFLOW,
             echo=admin_settings.DATABASE_ECHO,
-            auto_init=admin_settings.AUTO_INIT_DB,
-            models=list(ADMIN_MODELS),
             logger=logger,
         ),
         shutdown=admin_db.close_db,
@@ -174,16 +163,13 @@ def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
     manager.register(
         "user-database",
         startup=lambda: _initialize_database(
-            service_name=user_settings.SERVICE_NAME,
+            service_name="user-service",
             create_engine=user_db.create_engine,
             init_session_factory=user_db.init_session_factory,
-            init_db=user_db.init_db,
             database_url=user_settings.DATABASE_URL,
             pool_size=user_settings.DATABASE_POOL_SIZE,
             max_overflow=user_settings.DATABASE_MAX_OVERFLOW,
             echo=user_settings.DATABASE_ECHO,
-            auto_init=user_settings.AUTO_INIT_DB,
-            models=list(USER_MODELS),
             logger=logger,
         ),
         shutdown=user_db.close_db,
@@ -191,16 +177,13 @@ def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
     manager.register(
         "testing-database",
         startup=lambda: _initialize_database(
-            service_name=testing_settings.SERVICE_NAME,
+            service_name="testing-service",
             create_engine=testing_db.create_engine,
             init_session_factory=testing_db.init_session_factory,
-            init_db=testing_db.init_db,
             database_url=testing_settings.DATABASE_URL,
             pool_size=testing_settings.DATABASE_POOL_SIZE,
             max_overflow=testing_settings.DATABASE_MAX_OVERFLOW,
             echo=testing_settings.DATABASE_ECHO,
-            auto_init=testing_settings.auto_init_db,
-            models=list(TESTING_MODELS),
             logger=logger,
         ),
         shutdown=testing_db.close_db,

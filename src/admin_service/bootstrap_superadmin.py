@@ -8,9 +8,9 @@ import logging
 from collections.abc import Sequence
 
 from admin_service.config import settings
-from admin_service.db import close_db, create_engine, get_db_context, init_db, init_session_factory
-from admin_service.models import SERVICE_MODELS
+from admin_service.db import close_db, create_engine, get_db_context, init_session_factory
 from admin_service.services.bootstrap_service import AdminBootstrapService
+from common.db import ensure_database_at_head
 from common.utils.snowflake import configure_snowflake
 
 logger = logging.getLogger(__name__)
@@ -26,15 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only verify whether an active super_admin exists; do not create one.",
     )
-    parser.add_argument(
-        "--skip-init-db",
-        action="store_true",
-        help="Skip init_db() and assume the schema is already initialized.",
-    )
     return parser
 
 
-async def _setup_runtime(*, skip_init_db: bool) -> None:
+async def _setup_runtime() -> None:
     configure_snowflake(
         worker_id=settings.SNOWFLAKE_WORKER_ID,
         datacenter_id=settings.SNOWFLAKE_DATACENTER_ID,
@@ -46,8 +41,7 @@ async def _setup_runtime(*, skip_init_db: bool) -> None:
         echo=settings.DATABASE_ECHO,
     )
     init_session_factory()
-    if not skip_init_db and settings.AUTO_INIT_DB:
-        await init_db(SERVICE_MODELS)
+    await ensure_database_at_head(service_name="admin-service", url=settings.DATABASE_URL)
 
 
 async def _run_check_only() -> int:
@@ -70,7 +64,7 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
     )
 
     try:
-        await _setup_runtime(skip_init_db=args.skip_init_db)
+        await _setup_runtime()
         if args.check_only:
             return await _run_check_only()
 

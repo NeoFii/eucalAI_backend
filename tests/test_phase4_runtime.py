@@ -25,6 +25,21 @@ def test_service_entrypoints_install_observability_and_readiness_routes():
         assert "install_observability(app, service_name=settings.SERVICE_NAME)" in source
         assert '@app.get("/ready"' in source
         assert "build_readiness_response(" in source
+        assert "ensure_database_at_head(" in source
+        assert "init_db(" not in source
+        assert "AUTO_INIT_DB" not in source
+
+
+def test_service_entrypoints_check_schema_before_later_startup_work():
+    admin_main = (ROOT / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
+    testing_main = (ROOT / "src" / "testing_service" / "main.py").read_text(encoding="utf-8")
+
+    assert admin_main.index("ensure_database_at_head(") < admin_main.index(
+        "AdminBootstrapService.ensure_super_admin"
+    )
+    assert testing_main.index("ensure_database_at_head(") < testing_main.index(
+        "scheduler = AsyncIOScheduler()"
+    )
 
 
 def test_observability_middleware_propagates_request_id():
