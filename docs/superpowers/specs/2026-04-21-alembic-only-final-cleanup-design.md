@@ -4,7 +4,7 @@
 
 **Goal**
 
-把当前项目的数据库 schema 管理彻底收敛到 Alembic：删除运行时建表路径，服务启动前显式校验数据库 revision 是否达到目标版本，并顺手清理这轮重构后仍残留的历史测试/文档/入口杂质。
+把当前项目的数据库 schema 管理彻底收敛到 Alembic：删除运行时建表路径，为每个服务提供独立的 `alembic.ini`，服务启动前显式校验数据库 revision 是否达到目标版本，并顺手清理这轮重构后仍残留的历史测试/文档/入口杂质。
 
 **Non-Goals**
 
@@ -19,8 +19,10 @@
 
 1. Alembic revision 是唯一 schema 真理
 2. 运行时代码不允许再创建/补齐表结构
-3. 服务启动前必须检查数据库当前 revision 是否满足 `head`
-4. 不满足时直接 fail fast，并给出清晰错误和迁移命令
+3. 每个服务拥有自己的 `alembic.ini`
+4. `scripts/migrate.py` 只能包装/调度服务级 `alembic.ini`，不能再动态构造第二套配置路径
+5. 服务启动前必须检查数据库当前 revision 是否满足 `head`
+6. 不满足时直接 fail fast，并给出清晰错误和迁移命令
 
 ## Current Problems
 
@@ -35,6 +37,8 @@
 
 - 正式路径：`uv run migrate ...`
 - 隐式兜底路径：服务启动时 `create_all`
+
+另外，当前 Alembic 配置仍主要依赖 `scripts/migrate.py` 在运行时动态构造 `Config`。如果后续再引入服务级 `alembic.ini` 却不删这条动态路径，就会把迁移入口变成双轨。
 
 这和当前重构目标冲突，也会让数据库版本状态不可推断。
 
@@ -53,7 +57,7 @@
 
 ### 2. Startup Revision Check
 
-新增统一的 Alembic revision 检查能力，放在共享脚本/运行时入口可复用的位置。
+新增统一的 Alembic revision 检查能力，放在共享脚本/运行时入口可复用的位置。该检查基于服务自己的 `alembic.ini` 和 migration script location 执行，而不是重新拼装第二套动态 Config。
 
 每个服务启动时：
 
@@ -89,7 +93,33 @@
 - `bootstrap_service_databases.py`
   - 成为唯一“一次性把数据库推进到目标版本”的运维入口
 
-### 4. Configuration Cleanup
+### 4. Alembic Configuration Ownership
+
+每个服务都拥有自己独立的 `alembic.ini`，建议位置：
+
+- `migrations/admin_service/alembic.ini`
+- `migrations/user_service/alembic.ini`
+- `migrations/testing_service/alembic.ini`
+
+这些 ini 文件负责：
+
+- `script_location`
+- `prepend_sys_path`
+- Alembic logging/config 基础项
+
+`scripts/migrate.py` 的职责收敛为：
+
+- 选择目标服务
+- 加载对应 `alembic.ini`
+- 在必要时注入数据库 URL 覆盖
+- 分发 `upgrade/current/history/heads/revision` 命令
+
+不再允许：
+
+- 在代码里重新手写一整套 Alembic `Config` 作为平行入口
+- 让 `scripts/migrate.py` 和服务级 `alembic.ini` 各自描述不同 script_location / sys.path / env 约定
+
+### 5. Configuration Cleanup
 
 `AUTO_INIT_DB` 会变成死配置，最终应删除其运行时含义。
 
@@ -100,7 +130,7 @@
 
 本次倾向于前者：**直接删除 `AUTO_INIT_DB` 的配置和引用**，避免看起来像“还能自动建表”。
 
-### 5. Final Repository Cleanup
+### 6. Final Repository Cleanup
 
 结合前一轮重构中已经发现的遗留问题，这次一起清掉：
 
@@ -121,15 +151,24 @@
 - `src/common/db/runtime.py`
 - `src/common/config.py`
 - `src/testing_service/config.py`
+- `src/admin_service/db.py`
+- `src/user_service/db.py`
+- `src/testing_service/db.py`
 
 迁移/脚本：
 
+- `migrations/admin_service/alembic.ini`
+- `migrations/user_service/alembic.ini`
+- `migrations/testing_service/alembic.ini`
 - `scripts/migrate.py`
 - `scripts/bootstrap_service_databases.py`
 - 可能新增一个共享 revision-check helper
 
 文档：
 
+- `README.md`
+- `.env.example`
+- `deploy/docker-compose.yml`
 - `migrations/README.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DATABASE.md`
@@ -137,10 +176,12 @@
 
 测试：
 
+- `tests/test_alembic_runtime.py`
 - `tests/test_internal_contracts.py`
 - `tests/test_phase4_runtime.py`
 - `tests/test_migration_structure.py`
 - `tests/test_refactor_cleanup.py`
+- `tests/test_admin_management.py`
 - `tests/test_review_fixes.py`
 - 可能补新的 runtime/alembic fail-fast 测试
 
@@ -164,9 +205,10 @@
 
 1. 入口文件不再调用 `init_db()` / `create_all`
 2. `bootstrap-super-admin` 不再承担 schema 初始化
-3. 启动时会读取并校验 Alembic head
-4. revision 不匹配时会 fail fast 且报清晰信息
-5. 文档和迁移脚本都把 Alembic 作为唯一 schema 入口
+3. 服务级 `alembic.ini` 是唯一 Alembic 配置入口
+4. 启动时会读取并校验 Alembic head
+5. revision 不匹配时会 fail fast 且报清晰信息，并阻断后续 bootstrap/scheduler 启动动作
+6. 文档和迁移脚本都把 Alembic 作为唯一 schema 入口
 
 回归验证：
 
@@ -191,7 +233,10 @@
 满足以下条件才算完成：
 
 1. 仓库内不再存在运行时 `init_db()` / `create_all` 调用链
-2. 服务启动前会校验 Alembic revision，不满足即失败
-3. 文档明确说明：数据库版本只能通过 Alembic 管理
-4. 全量测试通过
-5. 不通过兼容层维持旧行为
+2. `src/*/db.py` 不再导出 `init_db`
+3. 每个服务都有自己的 `alembic.ini`
+4. `scripts/migrate.py` 不再构造平行 Alembic 配置路径
+5. 服务启动前会校验 Alembic revision，不满足即失败
+6. 文档明确说明：数据库版本只能通过 Alembic 管理
+7. 全量测试通过
+8. 不通过兼容层维持旧行为

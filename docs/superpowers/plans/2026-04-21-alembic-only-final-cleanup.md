@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove runtime schema creation entirely, enforce Alembic-head fail-fast at service startup, and finish the last repository cleanup around tests/docs/runtime entrypoints.
+**Goal:** Remove runtime schema creation entirely, move migrations to per-service `alembic.ini` ownership, enforce Alembic-head fail-fast at service startup, and finish the last repository cleanup around tests/docs/runtime entrypoints.
 
-**Architecture:** Introduce one shared schema-version check path for runtime startup, delete `init_db()` / `create_all` execution from service entrypoints, and make `bootstrap-databases` plus `uv run migrate ...` the only schema advancement flow. Keep the implementation single-path: no compatibility flags, no bypass envs, no fallback auto-init.
+**Architecture:** Introduce one shared schema-version check path for runtime startup, delete `init_db()` / `create_all` execution from service entrypoints, and make per-service `alembic.ini` plus `bootstrap-databases` / `uv run migrate ...` the only schema advancement flow. Keep the implementation single-path: no compatibility flags, no bypass envs, no fallback auto-init, and no second programmatic Alembic config path.
 
 **Tech Stack:** FastAPI, SQLAlchemy, Alembic, pytest, existing service-local migration CLI in `scripts/migrate.py`
 
@@ -13,6 +13,12 @@
 ## File Structure
 
 **Create**
+- `migrations/admin_service/alembic.ini`
+  Purpose: canonical Alembic config for admin-service migrations.
+- `migrations/user_service/alembic.ini`
+  Purpose: canonical Alembic config for user-service migrations.
+- `migrations/testing_service/alembic.ini`
+  Purpose: canonical Alembic config for testing-service migrations.
 - `src/common/db/schema_version.py`
   Purpose: shared Alembic revision inspection/check helpers for runtime startup.
 - `tests/test_alembic_runtime.py`
@@ -50,7 +56,7 @@
 - `src/testing_service/config.py`
   Purpose: remove `auto_init_db` property / dead config path if it only wraps removed behavior.
 - `scripts/migrate.py`
-  Purpose: reuse or expose the minimum migration metadata needed by runtime head checks without pulling runtime into script-only patterns.
+  Purpose: stop dynamically building a parallel Alembic `Config`; load each service's committed `alembic.ini` instead.
 - `scripts/bootstrap_service_databases.py`
   Purpose: keep this as the canonical “upgrade databases” operational entrypoint and align help text/messages.
 - `migrations/README.md`
@@ -140,6 +146,11 @@ def test_runtime_schema_version_check_fails_when_current_revision_is_not_head(mo
 
     with pytest.raises(RuntimeError):
         ensure_database_at_head(...)
+
+
+def test_each_service_has_committed_alembic_ini():
+    for service_dir in ("admin_service", "user_service", "testing_service"):
+        assert (ROOT / "migrations" / service_dir / "alembic.ini").exists()
 ```
 
 - [ ] **Step 2: Run the focused tests to verify they fail on current code**
@@ -153,6 +164,7 @@ Expected:
 - FAIL because `schema_version.py` does not exist yet
 - FAIL because runtime files still contain `init_db(` / `AUTO_INIT_DB` references
 - FAIL because startup-short-circuit tests reference missing fail-fast helpers / old CLI flags
+- FAIL because service-local `alembic.ini` files do not exist yet
 
 - [ ] **Step 3: Add a cleanup assertion for docs/tooling**
 
@@ -190,6 +202,9 @@ git commit -m "test: lock alembic-only runtime behavior"
 ### Task 2: Add Shared Alembic Head Check And Remove Runtime Schema Creation
 
 **Files:**
+- Create: `migrations/admin_service/alembic.ini`
+- Create: `migrations/user_service/alembic.ini`
+- Create: `migrations/testing_service/alembic.ini`
 - Create: `src/common/db/schema_version.py`
 - Modify: `src/common/db/runtime.py`
 - Modify: `src/common/db/__init__.py`
@@ -228,7 +243,19 @@ def ensure_database_at_head(*, service_name: str, url: str) -> None:
         )
 ```
 
-- [ ] **Step 2: Delete runtime schema-creation execution from the shared runtime layer**
+- [ ] **Step 2: Add per-service `alembic.ini` files as the only Alembic config surface**
+
+```ini
+[alembic]
+script_location = migrations/admin_service
+prepend_sys_path = .
+```
+
+Expected:
+- each service has one committed Alembic config
+- `scripts/migrate.py` can load these files directly instead of rebuilding config by hand
+
+- [ ] **Step 3: Delete runtime schema-creation execution from the shared runtime layer**
 
 ```python
 # remove this path entirely
@@ -240,7 +267,7 @@ Expected code change:
 - no runtime code path should still call `metadata.create_all`
 - no service-local DB facade should still export `init_db`
 
-- [ ] **Step 3: Replace `init_db()` startup behavior with Alembic checks in each entrypoint**
+- [ ] **Step 4: Replace `init_db()` startup behavior with Alembic checks in each entrypoint**
 
 ```python
 await ensure_database_at_head(service_name="admin-service", url=settings.DATABASE_URL)
@@ -255,7 +282,19 @@ Apply to:
 - `src/user_service/db.py`
 - `src/testing_service/db.py`
 
-- [ ] **Step 4: Run focused tests to verify the new startup path**
+- [ ] **Step 5: Rework `scripts/migrate.py` to load committed service ini files only**
+
+```python
+config = Config(str(service.alembic_ini))
+if url:
+    config.set_main_option("sqlalchemy.url", url)
+```
+
+Expected:
+- no second dynamic Alembic config path remains
+- `scripts/migrate.py` becomes a thin wrapper around service-owned config
+
+- [ ] **Step 6: Run focused tests to verify the new startup path**
 
 Run:
 ```bash
@@ -266,10 +305,10 @@ Expected:
 - PASS for new fail-fast checks
 - PASS for “no init_db” assertions
 
-- [ ] **Step 5: Commit the runtime cutover**
+- [ ] **Step 7: Commit the runtime cutover**
 
 ```bash
-git add src/common/db/schema_version.py src/common/db/runtime.py src/common/db/__init__.py src/admin_service/db.py src/user_service/db.py src/testing_service/db.py src/backend_app/lifecycle.py src/admin_service/main.py src/testing_service/main.py src/admin_service/bootstrap_superadmin.py tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_internal_contracts.py tests/test_admin_management.py
+git add migrations/admin_service/alembic.ini migrations/user_service/alembic.ini migrations/testing_service/alembic.ini src/common/db/schema_version.py src/common/db/runtime.py src/common/db/__init__.py src/admin_service/db.py src/user_service/db.py src/testing_service/db.py src/backend_app/lifecycle.py src/admin_service/main.py src/testing_service/main.py src/admin_service/bootstrap_superadmin.py scripts/migrate.py tests/test_alembic_runtime.py tests/test_phase4_runtime.py tests/test_internal_contracts.py tests/test_admin_management.py
 git commit -m "refactor: enforce alembic-only runtime startup"
 ```
 
@@ -321,6 +360,12 @@ def test_runtime_configs_do_not_expose_auto_init_db():
     assert "AUTO_INIT_DB" not in compose
     assert "AUTO_INIT_DB" not in env_example
     assert "skip-init-db" not in readme
+
+
+def test_migration_cli_uses_service_local_alembic_ini_files():
+    source = (ROOT / "scripts" / "migrate.py").read_text(encoding="utf-8")
+    assert "alembic.ini" in source
+    assert "Config()" not in source or "Config(str(" in source
 ```
 
 - [ ] **Step 4: Run the focused migration/config tests**
