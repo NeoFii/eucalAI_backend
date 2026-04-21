@@ -71,9 +71,12 @@ class LifecycleManager:
             for registration in self._registrations:
                 await _run_callback(registration.startup)
                 self._started.append(registration)
-        except Exception:
-            await self._shutdown_registrations(self._started)
-            raise
+        except Exception as exc:
+            try:
+                await self._shutdown_registrations(self._started)
+            except Exception:  # pragma: no cover - preserve startup failure context
+                pass
+            raise exc
 
     async def shutdown(self) -> None:
         await self._shutdown_registrations(self._started)

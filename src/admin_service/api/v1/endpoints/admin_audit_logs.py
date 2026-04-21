@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from admin_service.dependencies import get_db_session
 from admin_service.models import AdminAuditLog, AdminUser
 from admin_service.policies import require_super_admin
@@ -10,7 +11,6 @@ from admin_service.schemas import (
     AdminAuditActor,
     AdminAuditCategory,
     AdminAuditLogItem,
-    AdminAuditLogListData,
     AdminAuditLogListResponse,
 )
 from admin_service.services.audit_service import AdminAuditService
@@ -70,7 +70,7 @@ async def list_admin_audit_logs(
     return AdminAuditLogListResponse(
         code=200,
         message="success",
-        data=AdminAuditLogListData(
+        data=PaginatedResponse[AdminAuditLogItem](
             items=[_build_item(log) for log in logs],
             total=total,
             page=page,

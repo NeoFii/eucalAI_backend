@@ -7,6 +7,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
+from common.api import PaginatedResponse
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
 from admin_service.utils.password import check_password_strength
 
@@ -28,19 +29,10 @@ class AdminListItem(DateTimeModel):
         return str(value)
 
 
-class AdminListResponseData(BaseModel):
-    """Admin list response payload."""
-
-    items: list[AdminListItem] = Field(..., description="Admin list")
-    total: int = Field(..., description="Total count")
-    page: int = Field(..., description="Current page")
-    page_size: int = Field(..., description="Page size")
-
-
 class AdminListResponse(AdminBaseResponse):
     """Admin list response."""
 
-    data: Optional[AdminListResponseData] = None
+    data: Optional[PaginatedResponse[AdminListItem]] = None
 
 
 class CreateAdminRequest(BaseModel):

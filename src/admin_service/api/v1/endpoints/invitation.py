@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from admin_service.dependencies import get_db_session
 from admin_service.gateway import UserStatsGateway
 from admin_service.models import AdminUser
@@ -19,7 +20,6 @@ from admin_service.schemas import (
     InvitationCodeData,
     InvitationCodeListItem,
     InvitationCodeListResponse,
-    InvitationCodeListResponseData,
     InvitationCodeOperationResponse,
     UpdateInvitationCodeRequest,
 )
@@ -108,7 +108,7 @@ async def list_invitation_codes(
     return InvitationCodeListResponse(
         code=200,
         message="success",
-        data=InvitationCodeListResponseData(
+        data=PaginatedResponse[InvitationCodeListItem](
             items=[
                 InvitationCodeListItem(
                     id=code.id,

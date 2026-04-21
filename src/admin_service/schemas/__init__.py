@@ -3,7 +3,6 @@
 from admin_service.schemas.admin_user import (
     AdminListItem,
     AdminListResponse,
-    AdminListResponseData,
     CreateAdminRequest,
     CreateAdminResponse,
     CreateAdminResponseData,
@@ -14,7 +13,6 @@ from admin_service.schemas.audit_log import (
     AdminAuditActor,
     AdminAuditCategory,
     AdminAuditLogItem,
-    AdminAuditLogListData,
     AdminAuditLogListResponse,
 )
 from admin_service.schemas.auth import (
@@ -42,7 +40,6 @@ from admin_service.schemas.invitation import (
     InvitationCodeData,
     InvitationCodeListItem,
     InvitationCodeListResponse,
-    InvitationCodeListResponseData,
     InvitationCodeOperationResponse,
     UpdateInvitationCodeRequest,
 )
@@ -51,7 +48,6 @@ __all__ = [
     "AdminAuditActor",
     "AdminAuditCategory",
     "AdminAuditLogItem",
-    "AdminAuditLogListData",
     "AdminAuditLogListResponse",
     "AdminBaseResponse",
     "AdminChangePasswordRequest",
@@ -61,7 +57,6 @@ __all__ = [
     "AdminInfoResponseData",
     "AdminListItem",
     "AdminListResponse",
-    "AdminListResponseData",
     "AdminLoginRequest",
     "AdminLoginResponse",
     "AdminLoginResponseData",
@@ -83,7 +78,6 @@ __all__ = [
     "InvitationCodeData",
     "InvitationCodeListItem",
     "InvitationCodeListResponse",
-    "InvitationCodeListResponseData",
     "InvitationCodeOperationResponse",
     "ResetAdminPasswordRequest",
     "UpdateAdminStatusRequest",

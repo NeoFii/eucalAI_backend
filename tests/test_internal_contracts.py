@@ -541,6 +541,7 @@ def test_admin_internal_invitation_consume_maps_domain_errors(monkeypatch, excep
 
 def test_testing_internal_router_rejects_untrusted_caller():
     from common.internal import build_internal_headers
+    from testing_service.api.v1.endpoints import internal_router
 
     app = _build_testing_internal_router_app()
     client = TestClient(app)
@@ -548,7 +549,7 @@ def test_testing_internal_router_rejects_untrusted_caller():
     response = client.get(
         "/api/v1/internal/router/models",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=internal_router.settings.internal_secret,
             caller_service="testing-service",
             method="GET",
             path="/api/v1/internal/router/models",
@@ -561,6 +562,7 @@ def test_testing_internal_router_rejects_untrusted_caller():
 
 def test_testing_internal_router_offering_returns_404_when_missing():
     from common.internal import build_internal_headers
+    from testing_service.api.v1.endpoints import internal_router
 
     app = _build_testing_internal_router_app(first_row=None)
     client = TestClient(app)
@@ -568,7 +570,7 @@ def test_testing_internal_router_offering_returns_404_when_missing():
     response = client.get(
         "/api/v1/internal/router/offerings/1",
         headers=build_internal_headers(
-            secret="test_secret",
+            secret=internal_router.settings.internal_secret,
             caller_service="router-service",
             method="GET",
             path="/api/v1/internal/router/offerings/1",
@@ -1108,9 +1110,13 @@ def test_user_and_admin_services_do_not_auto_init_schema_by_default():
     repo_root = Path(__file__).resolve().parent.parent
     common_config = (repo_root / "src" / "common" / "config.py").read_text(encoding="utf-8")
     backend_main = (repo_root / "src" / "backend_app" / "main.py").read_text(encoding="utf-8")
+    backend_lifecycle = (repo_root / "src" / "backend_app" / "lifecycle.py").read_text(
+        encoding="utf-8"
+    )
     admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
 
     assert "AUTO_INIT_DB: bool = False" in common_config
     # user-service no longer has a standalone main; backend_app owns the gate.
-    assert "if user_settings.AUTO_INIT_DB:" in backend_main
+    assert "lifespan=lifecycle_manager.lifespan" in backend_main
+    assert "auto_init=user_settings.AUTO_INIT_DB" in backend_lifecycle
     assert "if settings.AUTO_INIT_DB:" in admin_main

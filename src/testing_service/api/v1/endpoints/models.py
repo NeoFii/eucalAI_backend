@@ -8,12 +8,12 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from testing_service.dependencies import AdminPrincipal, get_current_admin, get_db_session
 from testing_service.catalog import CategoryService, ModelService
 from testing_service.provider_config import OfferingService
 from testing_service.schemas import (
     ApiResponse,
-    ListResponse,
     ModelCategoryResponse,
     ModelCreate,
     ModelDetailResponse,
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/models", tags=["models"])
 
 @router.get(
     "/categories",
-    response_model=ApiResponse[ListResponse[ModelCategoryResponse]],
+    response_model=ApiResponse[PaginatedResponse[ModelCategoryResponse]],
     summary="List model categories",
 )
 async def list_categories(
@@ -56,10 +56,10 @@ async def list_categories(
 
 @router.get(
     "/",
-    response_model=ApiResponse[ListResponse[ModelListItem]],
+    response_model=ApiResponse[PaginatedResponse[ModelListItem]],
     include_in_schema=False,
 )
-@router.get("", response_model=ApiResponse[ListResponse[ModelListItem]], summary="List models")
+@router.get("", response_model=ApiResponse[PaginatedResponse[ModelListItem]], summary="List models")
 async def list_models(
     category: Optional[str] = Query(None, description="Category key"),
     vendors: Optional[str] = Query(None, description="Comma-separated vendor slugs"),

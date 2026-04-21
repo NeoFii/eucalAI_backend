@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from admin_service.dependencies import get_db_session
 from admin_service.models import AdminUser
 from admin_service.policies import require_super_admin
@@ -10,7 +11,6 @@ from admin_service.schemas import (
     AdminBaseResponse,
     AdminListItem,
     AdminListResponse,
-    AdminListResponseData,
     CreateAdminRequest,
     CreateAdminResponse,
     CreateAdminResponseData,
@@ -40,7 +40,7 @@ async def list_admin_users(
     return AdminListResponse(
         code=200,
         message="success",
-        data=AdminListResponseData(
+        data=PaginatedResponse[AdminListItem](
             items=[
                 AdminListItem(
                     uid=str(admin.uid),

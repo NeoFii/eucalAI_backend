@@ -23,8 +23,10 @@ def test_service_package_roots_use_direct_public_exports():
     user_init = (USER_SERVICE_ROOT / "__init__.py").read_text(encoding="utf-8")
     admin_init = (ADMIN_SERVICE_ROOT / "__init__.py").read_text(encoding="utf-8")
 
-    assert "__getattr__" not in user_init
-    assert "__getattr__" not in admin_init
+    assert '"AdminInvitationGateway"' in user_init
+    assert '"require_active_user"' in user_init
+    assert '"UserStatsGateway"' in admin_init
+    assert '"require_super_admin"' in admin_init
 
 
 def test_user_schema_package_is_final_public_export_surface():

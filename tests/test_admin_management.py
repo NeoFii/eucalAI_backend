@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_require_super_admin_allows_super_admin():
-    from admin_service.dependencies import require_super_admin
+    from admin_service.policies import require_super_admin
     from admin_service.models import AdminUser
 
     admin = AdminUser(
@@ -26,7 +26,7 @@ async def test_require_super_admin_allows_super_admin():
 
 @pytest.mark.asyncio
 async def test_require_super_admin_rejects_normal_admin():
-    from admin_service.dependencies import require_super_admin
+    from admin_service.policies import require_super_admin
     from admin_service.exceptions import AdminPermissionDeniedException
     from admin_service.models import AdminUser
 
@@ -652,5 +652,4 @@ async def test_auth_login_after_lock_expired_records_unlock_audit(monkeypatch):
     assert audit_actions == ["admin_login_success", "admin_login_unlocked"]
     assert admin.login_fail_count == 0
     assert admin.login_locked_until is None
-
 

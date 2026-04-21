@@ -4,6 +4,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api import PaginatedResponse
 from testing_service.dependencies import (
     AdminPrincipal,
     get_current_admin,
@@ -12,7 +13,6 @@ from testing_service.dependencies import (
 from testing_service.provider_config import ProviderService
 from testing_service.schemas import (
     ApiResponse,
-    ListResponse,
     ProviderCreate,
     ProviderResponse,
     ProviderUpdate,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 
 @router.get(
     "",
-    response_model=ApiResponse[ListResponse[ProviderResponse]],
+    response_model=ApiResponse[PaginatedResponse[ProviderResponse]],
     summary="List providers",
 )
 async def list_providers(
