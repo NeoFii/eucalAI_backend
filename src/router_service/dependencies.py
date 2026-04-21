@@ -10,7 +10,7 @@ from fastapi import Header, HTTPException, Request
 from common.core.exceptions import ServiceUnavailableException
 from common.internal import InternalServiceError, InternalServiceResponseError
 from router_service.config import ModelPathsConfig
-from router_service.services.identity_client import IdentityClientService, ValidatedApiKey
+from router_service.gateway import UserIdentityGateway, ValidatedApiKey
 
 if TYPE_CHECKING:
     from router_service.services.router_engine import HybridIntegratedDifficultyRouter
@@ -94,7 +94,7 @@ async def require_api_key(
         raise HTTPException(status_code=401, detail="missing api key")
 
     try:
-        principal = await IdentityClientService.validate_api_key(
+        principal = await UserIdentityGateway.validate_api_key(
             api_key=raw_key,
             model=await _extract_requested_model(request),
             client_ip=_extract_client_ip(request),

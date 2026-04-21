@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 
 from router_service.dependencies import get_router_engine, get_runtime_store, require_api_key
 from router_service.logging import log_routing_decision, log_upstream_call
-from router_service.schemas import CompletionRequest
+from router_service.schemas.requests import CompletionRequest
 from router_service.services.upstream import resolve_model_provider_target, strip_think_tags
 
 router = APIRouter()
