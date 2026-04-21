@@ -4,13 +4,12 @@ import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.internal import build_internal_auth_dependency
 from user_service.config import settings
 from user_service.dependencies import get_db_session
-from user_service.models import User
+from user_service.repositories.user_repository import UserRepository
 from user_service.services.api_key_service import ApiKeyService
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -50,7 +49,7 @@ async def get_user_by_uid(
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserResponse:
-    user = (await db.execute(select(User).where(User.uid == uid))).scalar_one_or_none()
+    user = await UserRepository(db).get_by_uid(uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -91,5 +90,5 @@ async def get_user_stats(
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserStatsResponse:
-    total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
-    return InternalUserStatsResponse(total_users=int(total_users))
+    total_users = await UserRepository(db).count_all()
+    return InternalUserStatsResponse(total_users=total_users)

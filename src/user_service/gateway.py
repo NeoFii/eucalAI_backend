@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+from abc import ABC, abstractmethod
 
 from common.core.exceptions import (
     InvalidInvitationCodeException,
@@ -18,7 +19,19 @@ from user_service.config import settings
 ADMIN_TIMEOUT_SECONDS = 3.0
 
 
-class AdminInvitationGateway(BaseGateway):
+class AdminInvitationGatewayInterface(ABC):
+    """Contract for admin-service invitation code operations."""
+
+    @abstractmethod
+    async def consume_invitation_code(self, code: str, used_by_uid: int) -> None:
+        """Consume an invitation code for a user uid."""
+
+    @abstractmethod
+    async def release_invitation_code(self, code: str, used_by_uid: int) -> bool:
+        """Release a previously consumed invitation code."""
+
+
+class AdminInvitationGateway(BaseGateway, AdminInvitationGatewayInterface):
     """Gateway for admin-service invitation code operations."""
 
     def __init__(self) -> None:
@@ -94,3 +107,6 @@ class AdminInvitationGateway(BaseGateway):
         if status_code >= 500:
             return ServiceUnavailableException("Admin invitation service unavailable")
         return ServiceUnavailableException(detail)
+
+
+__all__ = ["AdminInvitationGateway", "AdminInvitationGatewayInterface"]

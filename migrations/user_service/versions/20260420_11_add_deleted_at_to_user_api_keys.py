@@ -18,9 +18,16 @@ def upgrade() -> None:
         AFTER `last_used_at`
         """
     )
+    op.execute(
+        """
+        CREATE INDEX `ix_user_api_keys_deleted_at`
+        ON `user_api_keys` (`deleted_at`)
+        """
+    )
 
 
 def downgrade() -> None:
+    op.execute("DROP INDEX `ix_user_api_keys_deleted_at` ON `user_api_keys`")
     op.execute(
         """
         ALTER TABLE `user_api_keys`

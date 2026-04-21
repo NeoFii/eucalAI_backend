@@ -2,12 +2,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.config import settings
 from admin_service.dependencies import get_db_session
-from admin_service.models import AdminUser
+from admin_service.repositories.admin_user_repository import AdminUserRepository
 from admin_service.services.invitation_service import InvitationCodeService
 from common.core.exceptions import (
     InvalidInvitationCodeException,
@@ -58,7 +57,7 @@ async def get_admin_by_uid(
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalAdminResponse:
-    admin = (await db.execute(select(AdminUser).where(AdminUser.uid == uid))).scalar_one_or_none()
+    admin = await AdminUserRepository(db).get_by_uid(uid)
     if admin is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found")
 

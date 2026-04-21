@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from common.core.exceptions import ServiceUnavailableException
+from common.gateway.base import BaseGateway
 from common.internal import InternalServiceError, get_internal_json
 from testing_service.config import get_settings
 
@@ -23,8 +24,11 @@ class AdminIdentity:
     status: int
 
 
-class AdminIdentityGateway:
+class AdminIdentityGateway(BaseGateway):
     """Gateway for the admin identity contract exposed by admin-service."""
+
+    def __init__(self) -> None:
+        super().__init__(service_name="admin-service")
 
     @staticmethod
     async def fetch_admin_by_uid(uid: int) -> AdminIdentity | None:

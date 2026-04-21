@@ -160,3 +160,17 @@ def test_runtime_schema_management_is_alembic_only():
     assert "skip-init-db" not in root_readme
     assert "AUTO_INIT_DB" not in root_readme
     assert "唯一 schema 真理" in migration_readme
+
+
+def test_user_api_key_soft_delete_migration_creates_deleted_at_index():
+    source = (
+        ROOT
+        / "migrations"
+        / "user_service"
+        / "versions"
+        / "20260420_11_add_deleted_at_to_user_api_keys.py"
+    ).read_text(encoding="utf-8")
+
+    assert "deleted_at" in source
+    assert "CREATE INDEX" in source or "op.create_index" in source
+    assert "DROP INDEX" in source or "op.drop_index" in source

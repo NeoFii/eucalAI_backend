@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from common.db import BaseRepository
 from user_service.models import User
@@ -17,6 +17,10 @@ class UserRepository(BaseRepository[User]):
 
     async def get_by_uid(self, uid: int) -> User | None:
         return (await self.session.execute(select(User).where(User.uid == uid))).scalar_one_or_none()
+
+    async def count_all(self) -> int:
+        result = await self.session.execute(select(func.count(User.id)))
+        return int(result.scalar() or 0)
 
     async def get_by_id(self, user_id: int, *, for_update: bool = False) -> User | None:
         statement = select(User).where(User.id == user_id)

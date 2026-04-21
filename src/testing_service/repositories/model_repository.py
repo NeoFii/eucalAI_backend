@@ -73,6 +73,11 @@ class VendorRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_any_by_slug(db: AsyncSession, slug: str) -> Optional[ModelVendor]:
+        result = await db.execute(select(ModelVendor).where(ModelVendor.slug == slug))
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def get_by_id(db: AsyncSession, vendor_id: int) -> Optional[ModelVendor]:
         result = await db.execute(
             select(ModelVendor).where(
@@ -80,6 +85,20 @@ class VendorRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_any_by_id(db: AsyncSession, vendor_id: int) -> Optional[ModelVendor]:
+        result = await db.execute(select(ModelVendor).where(ModelVendor.id == vendor_id))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def count_active_models(db: AsyncSession, vendor_id: int) -> int:
+        result = await db.execute(
+            select(func.count()).select_from(Model).where(
+                and_(Model.vendor_id == vendor_id, Model.is_active == True)
+            )
+        )
+        return int(result.scalar() or 0)
 
 
 class CategoryRepository:
@@ -137,11 +156,34 @@ class ProviderRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_any_by_id(db: AsyncSession, provider_id: int) -> Optional[Provider]:
+        result = await db.execute(select(Provider).where(Provider.id == provider_id))
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def get_by_slug(db: AsyncSession, slug: str) -> Optional[Provider]:
         result = await db.execute(
             select(Provider).where(and_(Provider.slug == slug, Provider.deleted_at.is_(None)))
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_any_by_slug(db: AsyncSession, slug: str) -> Optional[Provider]:
+        result = await db.execute(select(Provider).where(Provider.slug == slug))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def count_active_offerings(db: AsyncSession, provider_id: int) -> int:
+        result = await db.execute(
+            select(func.count()).select_from(ModelProviderOffering).where(
+                and_(
+                    ModelProviderOffering.provider_id == provider_id,
+                    ModelProviderOffering.deleted_at.is_(None),
+                    ModelProviderOffering.is_active == True,
+                )
+            )
+        )
+        return int(result.scalar() or 0)
 
 
 class ModelRepository:
@@ -203,6 +245,12 @@ class ModelRepository:
     async def get_by_id(db: AsyncSession, model_id: int) -> Optional[Model]:
         result = await db.execute(select(Model).where(Model.id == model_id))
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def delete_category_maps(db: AsyncSession, model_id: int) -> None:
+        await db.execute(
+            ModelCategoryMap.__table__.delete().where(ModelCategoryMap.model_id == model_id)
+        )
 
     @staticmethod
     async def get_category_briefs(db: AsyncSession, model_id: int) -> List[ModelCategoryBrief]:
@@ -297,6 +345,22 @@ class OfferingRepository:
                 and_(
                     ModelProviderOffering.id == offering_id,
                     ModelProviderOffering.deleted_at.is_(None),
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_any_by_model_provider(
+        db: AsyncSession,
+        model_id: int,
+        provider_id: int,
+    ) -> Optional[ModelProviderOffering]:
+        result = await db.execute(
+            select(ModelProviderOffering).where(
+                and_(
+                    ModelProviderOffering.model_id == model_id,
+                    ModelProviderOffering.provider_id == provider_id,
                 )
             )
         )
