@@ -1,4 +1,4 @@
-"""Internal client for user-service API-key validation contracts."""
+"""Gateway contracts for router-service cross-service calls."""
 
 from __future__ import annotations
 
@@ -12,15 +12,15 @@ IDENTITY_TIMEOUT_SECONDS = 3.0
 
 @dataclass(slots=True)
 class ValidatedApiKey:
-    """Minimal API-key principal shared from user-service."""
+    """Minimal API-key principal returned by user-service."""
 
     id: int
     user_id: int
     name: str
 
 
-class IdentityClientService:
-    """Internal client for user-service identity contracts."""
+class UserIdentityGateway:
+    """Gateway for user-service API-key validation."""
 
     @staticmethod
     async def validate_api_key(
@@ -53,3 +53,6 @@ class IdentityClientService:
             user_id=int(payload["user_id"]),
             name=payload["name"],
         )
+
+
+__all__ = ["UserIdentityGateway", "ValidatedApiKey"]
