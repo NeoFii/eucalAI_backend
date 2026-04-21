@@ -19,6 +19,20 @@ def test_user_service_package_exposes_current_public_contract():
     assert require_active_user.__module__ == "user_service.policies"
 
 
+def test_service_package_roots_use_direct_public_exports():
+    user_init = (USER_SERVICE_ROOT / "__init__.py").read_text(encoding="utf-8")
+    admin_init = (ADMIN_SERVICE_ROOT / "__init__.py").read_text(encoding="utf-8")
+
+    assert "__getattr__" not in user_init
+    assert "__getattr__" not in admin_init
+
+
+def test_user_schema_package_is_final_public_export_surface():
+    source = (USER_SERVICE_ROOT / "schemas" / "__init__.py").read_text(encoding="utf-8")
+
+    assert "Compatibility schema package" not in source
+
+
 def test_user_service_tree_no_longer_references_legacy_schema_shim():
     assert not (USER_SERVICE_ROOT / "schemas_legacy.py").exists()
 

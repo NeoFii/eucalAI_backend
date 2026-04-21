@@ -9,10 +9,7 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.config import settings
-from admin_service.dependencies import (
-    get_current_admin,
-    get_db_session,
-)
+from admin_service.dependencies import get_db_session
 from admin_service.models import AdminUser
 from admin_service.policies import require_active_admin
 from admin_service.schemas import (
@@ -188,7 +185,7 @@ async def get_me(
 async def change_password(
     request: Request,
     response: Response,
-    current_admin: AdminUser = Depends(get_current_admin),
+    current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminChangePasswordResponse:
     """Change the current admin password and clear cookies."""

@@ -35,7 +35,11 @@ from common.utils.timezone import now
 from user_service.config import settings
 from user_service.gateway import AdminInvitationGateway
 from user_service.models import InvitationReleaseOutbox, User, UserSession
-from user_service.repositories import SessionRepository, UserRepository
+from user_service.repositories import (
+    InvitationReleaseOutboxRepository,
+    SessionRepository,
+    UserRepository,
+)
 from user_service.schemas import RegisterRequest
 from user_service.services.email_service import email_service
 from user_service.utils.email import normalize_email
@@ -105,21 +109,19 @@ class AuthService:
                     data.invitation_code, uid
                 )
                 if not released:
-                    db.add(
-                        InvitationReleaseOutbox(
-                            code=data.invitation_code,
-                            used_by_uid=uid,
-                            last_error="release_invitation_code returned false",
-                        )
+                    AuthService._queue_invitation_release(
+                        db,
+                        code=data.invitation_code,
+                        used_by_uid=uid,
+                        last_error="release_invitation_code returned false",
                     )
                     await db.commit()
             except Exception as release_exc:
-                db.add(
-                    InvitationReleaseOutbox(
-                        code=data.invitation_code,
-                        used_by_uid=uid,
-                        last_error=str(release_exc),
-                    )
+                AuthService._queue_invitation_release(
+                    db,
+                    code=data.invitation_code,
+                    used_by_uid=uid,
+                    last_error=str(release_exc),
                 )
                 await db.commit()
             raise exc
@@ -332,6 +334,22 @@ class AuthService:
         sessions = await session_repo.list_active_for_user(user_id)
         for session in sessions:
             session_repo.revoke(session)
+
+    @staticmethod
+    def _queue_invitation_release(
+        db: AsyncSession,
+        *,
+        code: str,
+        used_by_uid: int,
+        last_error: str,
+    ) -> None:
+        InvitationReleaseOutboxRepository(db).add(
+            InvitationReleaseOutbox(
+                code=code,
+                used_by_uid=used_by_uid,
+                last_error=last_error,
+            )
+        )
 
     @staticmethod
     async def login_with_code(
