@@ -20,19 +20,18 @@ def test_service_local_migration_directories_exist():
 
 
 def test_migration_cli_declares_all_services():
-    source = (ROOT / "scripts" / "migrate.py").read_text(encoding="utf-8")
+    from scripts.migrate import SERVICE_CONFIGS
 
     for service in (
         "admin-service",
         "user-service",
         "testing-service",
     ):
-        assert service in source
+        assert service in SERVICE_CONFIGS
 
+    source = (ROOT / "scripts" / "migrate.py").read_text(encoding="utf-8")
     assert "command.upgrade" in source
     assert "command.revision" in source
-    assert "ADMIN_DATABASE_URL" in source
-    assert "TESTING_DATABASE_URL" in source
     assert "load_project_dotenv()" in source
 
 
@@ -65,13 +64,14 @@ def test_migration_envs_require_service_specific_database_urls():
     assert 'os.getenv(database_env' in shared_env
     assert 'os.getenv("DATABASE_URL"' not in shared_env
 
-    migrate_source = (ROOT / "scripts" / "migrate.py").read_text(encoding="utf-8")
+    from scripts.migrate import SERVICE_CONFIGS
+
     for env_name in (
         "ADMIN_DATABASE_URL",
         "USER_DATABASE_URL",
         "TESTING_DATABASE_URL",
     ):
-        assert env_name in migrate_source, env_name
+        assert any(config.database_env == env_name for config in SERVICE_CONFIGS.values()), env_name
 
     for service_dir in SERVICE_DIRS:
         env_source = (ROOT / "migrations" / service_dir / "env.py").read_text(encoding="utf-8")
