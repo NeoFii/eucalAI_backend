@@ -1,12 +1,9 @@
-# Backend compose topology: 3 main services + redis + scheduler/worker.
+# Backend compose topology: backend app + router + inference.
 #
 # Topology:
-#   - backend-app :8001  (admin + user + content + testing merged)
+#   - backend-app :8001  (admin + user merged)
 #   - router-service :8003  (CPU gateway, scalable via `deploy.replicas`)
 #   - inference-svc :8004  (GPU inference, Qwen + CG-TabM)
-#   - testing-worker  (arq consumer; no HTTP)
-#   - testing-scheduler :8012 (apscheduler; activate via `--profile scheduler`)
-#   - redis (shared by testing-worker + testing-scheduler)
 #
 # MySQL lives outside compose (managed separately).
 
@@ -22,8 +19,6 @@ services:
     environment:
       ADMIN_DATABASE_URL: "${ADMIN_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_admin}"
       USER_DATABASE_URL: "${USER_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_user}"
-      CONTENT_DATABASE_URL: "${CONTENT_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_content}"
-      TESTING_DATABASE_URL: "${TESTING_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_testing}"
       DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       DATABASE_ECHO: "false"
@@ -40,11 +35,6 @@ services:
       ADMIN_SERVICE_URL: "http://backend-app:8001"
       USER_SERVICE_URL: "http://backend-app:8001"
       ROUTER_SERVICE_URL: "http://router-service:8003"
-      BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
-      TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
-      # Scheduler MUST run in the separate testing-scheduler container; disable here.
-      PROBE_SCHEDULER_ENABLED: "false"
-      PROBE_ENABLED: ${PROBE_ENABLED:-true}
       BACKEND_APP_PORT: "8001"
       BACKEND_APP_SNOWFLAKE_WORKER_ID: ${BACKEND_APP_SNOWFLAKE_WORKER_ID:-1}
       SNOWFLAKE_DATACENTER_ID: ${SNOWFLAKE_DATACENTER_ID:-1}
@@ -134,91 +124,6 @@ services:
     networks:
       - eucal_network
 
-  redis:
-    image: redis:7-alpine
-    container_name: testing-redis
-    restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - eucal_network
-
-  testing-worker:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    container_name: testing-worker
-    env_file:
-      - ../.env
-    restart: unless-stopped
-    environment:
-      TESTING_DATABASE_URL: "${TESTING_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_testing}"
-      INTERNAL_SECRET: ${INTERNAL_SECRET}
-      ADMIN_SERVICE_URL: "http://backend-app:8001"
-      BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
-      TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
-      PROBE_ENABLED: ${PROBE_ENABLED:-true}
-      PROBE_SCHEDULER_ENABLED: "false"
-      PROBE_CRON_HOURS: ${PROBE_CRON_HOURS:-0,6,12,18}
-    command: ["/app/.venv/bin/python", "-m", "arq", "testing_service.worker.WorkerSettings"]
-    volumes:
-      - backend_logs:/app/logs
-    healthcheck:
-      test: ["CMD", "python", "scripts/runtime_probe.py", "worker-ready", "--database-url-env", "TESTING_DATABASE_URL", "--redis-url-env", "BENCHMARK_QUEUE_REDIS_URL"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    depends_on:
-      backend-app:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - eucal_network
-
-  testing-scheduler:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    container_name: testing-scheduler
-    profiles: ["scheduler"]
-    env_file:
-      - ../.env
-    restart: unless-stopped
-    environment:
-      TESTING_DATABASE_URL: "${TESTING_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_testing}"
-      INTERNAL_SECRET: ${INTERNAL_SECRET}
-      ADMIN_SERVICE_URL: "http://backend-app:8001"
-      BENCHMARK_QUEUE_REDIS_URL: "${BENCHMARK_QUEUE_REDIS_URL:-redis://redis:6379/0}"
-      TESTING_SECRET_MASTER_KEY: "${TESTING_SECRET_MASTER_KEY:-}"
-      DEBUG: ${DEBUG:-false}
-      PROBE_ENABLED: ${PROBE_ENABLED:-true}
-      PROBE_SCHEDULER_ENABLED: "true"
-      PROBE_CRON_HOURS: ${PROBE_CRON_HOURS:-0,6,12,18}
-    command: ["/app/.venv/bin/uvicorn", "testing_service.main:app", "--host", "0.0.0.0", "--port", "8012", "--workers", "1"]
-    volumes:
-      - backend_logs:/app/logs
-    healthcheck:
-      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8012"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    depends_on:
-      backend-app:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - eucal_network
-
 networks:
   eucal_network:
     name: eucal_network
@@ -227,7 +132,5 @@ networks:
 volumes:
   backend_logs:
     name: eucal_backend_logs
-  redis_data:
-    name: eucal_redis_data
   model_weights:
     name: eucal_model_weights

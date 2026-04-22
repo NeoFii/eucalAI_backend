@@ -1,12 +1,11 @@
-"""Backend-app entrypoint: aggregates admin / user / testing into one FastAPI process.
+"""Backend-app entrypoint: aggregates admin / user into one FastAPI process.
 
 Design notes:
 
 - Each sub-service module keeps its own config + db + models + api, unchanged.
-- We import the three api_routers and merge them.
-- Lifespan sequentially initializes three database engines and runs the admin
-  super-admin bootstrap. The testing-service apscheduler is intentionally NOT
-  started here; ``testing-scheduler`` (a separate process) owns it.
+- We import the admin and user API routers and merge them.
+- Lifespan sequentially initializes two database engines and runs the admin
+  super-admin bootstrap.
 - HMAC inter-service calls (admin<->user, etc.) still go over
   ``http://localhost:<PORT>`` to themselves. They remain wire-compatible with
   ``common/internal.py`` so rollback (deploying the three separate services
@@ -46,8 +45,6 @@ from user_service.api.v1.endpoints import billing as user_billing_endpoint
 from user_service.api.v1.endpoints import internal as user_internal_endpoint
 from user_service.api.v1.endpoints import keys as user_keys_endpoint
 from user_service import db as user_db
-from testing_service import db as testing_db
-from testing_service.api import api_router as testing_api_router
 
 from backend_app.config import settings
 from backend_app.lifecycle import build_lifecycle_manager
@@ -72,7 +69,7 @@ def _build_admin_public_api_router() -> APIRouter:
     """Admin public routes are mounted under ``/api/v1/admin`` to avoid colliding
     with user-service's ``/api/v1/auth/*``. This only shifts admin UI client
     URLs (admin/auth/login etc.); internal HMAC endpoints stay unmoved so that
-    content/testing/user clients keep working without changes.
+    user clients keep working without changes.
 
     ``dashboard.py`` is intentionally omitted: it is legacy and ``/dashboard/
     stats`` is canonically served by ``invitation.py`` (which admin_service's
@@ -89,8 +86,8 @@ def _build_admin_public_api_router() -> APIRouter:
 
 def _build_admin_internal_api_router() -> APIRouter:
     """Admin internal HMAC endpoints remain at ``/api/v1/internal/admins`` and
-    ``/api/v1/internal/invitation-codes`` so that HMAC callers in content/
-    testing/user services keep working without code changes.
+    ``/api/v1/internal/invitation-codes`` so that HMAC callers in user
+    services keep working without code changes.
     """
     router = APIRouter(prefix="/api/v1")
     router.include_router(admin_internal_endpoint.router)
@@ -124,24 +121,22 @@ install_observability(app, service_name=settings.SERVICE_NAME)
 register_exception_handlers(app)
 
 # Order: admin (public under /api/v1/admin + internal at /api/v1/internal) ->
-# testing -> user. user is last so any residual collision with user's
+# user. user is last so any residual collision with user's
 # /api/v1/auth/* is surfaced by the route-uniqueness test instead of silently
 # shadowed.
 app.include_router(admin_public_router)
 app.include_router(admin_internal_router)
-app.include_router(testing_api_router)
 app.include_router(user_api_router)
 
 
 async def _check_all_databases() -> tuple[bool, dict[str, Any]]:
-    """Run readiness probes for all three engines concurrently."""
+    """Run readiness probes for the active data-owning engines concurrently."""
 
     probes: list[Callable[[], Awaitable[tuple[bool, str | None]]]] = [
         lambda: check_database_ready(admin_db.get_engine),
         lambda: check_database_ready(user_db.get_engine),
-        lambda: check_database_ready(testing_db.get_engine),
     ]
-    names = ["admin", "user", "testing"]
+    names = ["admin", "user"]
 
     results = await asyncio.gather(
         *(probe() for probe in probes),
@@ -177,7 +172,7 @@ async def readiness_check():
 @app.get("/", tags=["root"])
 async def root():
     return {
-        "message": "Eucal AI Backend (admin + user + testing)",
+        "message": "Eucal AI Backend (admin + user)",
         "version": settings.VERSION,
         "docs": "/docs" if settings.DEBUG else None,
     }

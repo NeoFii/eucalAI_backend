@@ -20,13 +20,13 @@ def validate_master_key(master_key_hex: str) -> bytes:
     """
     if not master_key_hex or len(master_key_hex) != 64:
         raise ValueError(
-            "TESTING_SECRET_MASTER_KEY 必须为 64 位十六进制字符串（32 字节）"
+            "master_key_hex 必须为 64 位十六进制字符串（32 字节）"
         )
     try:
         return bytes.fromhex(master_key_hex)
     except ValueError:
         raise ValueError(
-            "TESTING_SECRET_MASTER_KEY 包含非法十六进制字符"
+            "master_key_hex 包含非法十六进制字符"
         )
 
 

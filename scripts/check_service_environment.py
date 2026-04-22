@@ -19,21 +19,17 @@ COMMON_REQUIRED_ENV = ("JWT_SECRET_KEY", "INTERNAL_SECRET")
 SERVICE_DATABASE_ENV = {
     "admin-service": "ADMIN_DATABASE_URL",
     "user-service": "USER_DATABASE_URL",
-    "router-service": "ROUTER_DATABASE_URL",
-    "testing-service": "TESTING_DATABASE_URL",
-    "testing-scheduler": "TESTING_DATABASE_URL",
-    "testing-worker": "TESTING_DATABASE_URL",
 }
-# backend-app is a single process that hosts admin/user/testing domains,
-# so it needs all three database URLs rather than a single one.
+# backend-app is a single process that hosts admin/user domains,
+# so it needs both database URLs rather than a single one.
 BACKEND_APP_DATABASE_ENVS = (
     "ADMIN_DATABASE_URL",
     "USER_DATABASE_URL",
-    "TESTING_DATABASE_URL",
 )
+DB_LESS_SERVICES = {"router-service", "inference-service"}
+DEFAULT_RUNTIME_SERVICES = ("backend-app", "router-service", "inference-service")
+KNOWN_SERVICES = set(SERVICE_DATABASE_ENV) | DB_LESS_SERVICES | {"backend-app"}
 AUTH_COOKIE_SERVICES = {"admin-service", "user-service", "backend-app"}
-TESTING_RUNTIME_SERVICES = {"testing-service", "testing-worker", "testing-scheduler", "backend-app"}
-TESTING_QUEUE_SERVICES = {"testing-worker", "testing-scheduler"}
 VALID_COOKIE_SAMESITE = {"lax", "strict", "none"}
 PLACEHOLDER_VALUES = {
     "JWT_SECRET_KEY": {"", "your-secret-key", "your-secret-key-change-in-production", "change-me"},
@@ -121,7 +117,9 @@ def validate_environment(
                     continue
                 database_urls[f"backend-app:{db_env}"] = (db_env, value)
             continue
-        db_env = SERVICE_DATABASE_ENV[service]
+        db_env = SERVICE_DATABASE_ENV.get(service)
+        if db_env is None:
+            continue
         value = _get_env(env, db_env)
         if not value:
             result.errors.append(f"Missing required database URL: {db_env} for {service}")
@@ -156,32 +154,6 @@ def validate_environment(
                 "COOKIE_SAMESITE must be one of: lax, strict, none"
             )
 
-    if set(selected_services) & TESTING_RUNTIME_SERVICES:
-        probe_enabled = _parse_bool(
-            _get_first_env(env, "TESTING_PROBE_ENABLED", "PROBE_ENABLED"),
-            True,
-        )
-        redis_url = _get_first_env(
-            env,
-            "TESTING_BENCHMARK_QUEUE_REDIS_URL",
-            "BENCHMARK_QUEUE_REDIS_URL",
-        )
-        testing_secret = _get_first_env(env, "TESTING_SECRET_MASTER_KEY")
-
-        for service in selected_services:
-            if service in TESTING_QUEUE_SERVICES and not redis_url:
-                result.errors.append(
-                    f"Missing BENCHMARK_QUEUE_REDIS_URL for {service}"
-                )
-        if probe_enabled and "testing-service" in selected_services and not redis_url:
-            result.errors.append(
-                "Missing BENCHMARK_QUEUE_REDIS_URL for testing-service while probes are enabled"
-            )
-        if probe_enabled and not testing_secret:
-            result.warnings.append(
-                "TESTING_SECRET_MASTER_KEY is empty; encrypted provider probe keys cannot be decrypted"
-            )
-
     if "router-service" in selected_services:
         router_secret = _get_first_env(env, "ROUTER_SECRET_MASTER_KEY")
         provider_secret = _get_first_env(env, "PROVIDER_SECRET_MASTER_KEY")
@@ -191,7 +163,7 @@ def validate_environment(
             )
         if not provider_secret:
             result.warnings.append(
-                "PROVIDER_SECRET_MASTER_KEY is empty; router-service will fall back to TESTING_SECRET_MASTER_KEY or JWT-derived key"
+                "PROVIDER_SECRET_MASTER_KEY is empty; router-service will derive provider keys from JWT_SECRET_KEY"
             )
 
     return result
@@ -239,7 +211,7 @@ def main() -> None:
 
     unknown = sorted(
         service for service in args.services
-        if service not in SERVICE_DATABASE_ENV and service != "backend-app"
+        if service not in KNOWN_SERVICES
     )
     if unknown:
         parser.error(
@@ -249,7 +221,7 @@ def main() -> None:
     if args.services:
         selected_services = args.services
     else:
-        selected_services = list(SERVICE_DATABASE_ENV.keys())
+        selected_services = list(DEFAULT_RUNTIME_SERVICES)
     result = validate_environment(selected_services)
     print(format_validation_result(result))
     if not result.ok:

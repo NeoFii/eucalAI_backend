@@ -16,16 +16,13 @@ def test_backend_app_runtime_does_not_call_init_db():
 
 def test_standalone_services_do_not_call_init_db():
     admin_main = (ROOT / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
-    testing_main = (ROOT / "src" / "testing_service" / "main.py").read_text(encoding="utf-8")
     assert "init_db(" not in admin_main
-    assert "init_db(" not in testing_main
 
 
 def test_service_db_facades_do_not_export_init_db():
     for relative_path in (
         "src/admin_service/db.py",
         "src/user_service/db.py",
-        "src/testing_service/db.py",
     ):
         source = (ROOT / relative_path).read_text(encoding="utf-8")
         assert "init_db =" not in source
@@ -76,15 +73,6 @@ def test_docker_image_includes_migrations_for_runtime_revision_checks():
     dockerfile = (ROOT / "deploy" / "Dockerfile").read_text(encoding="utf-8")
 
     assert "COPY --chown=appuser:appuser migrations/ /app/migrations/" in dockerfile
-
-
-def test_testing_worker_checks_alembic_head_before_starting_jobs():
-    worker_jobs = (ROOT / "src" / "testing_service" / "benchmark" / "jobs.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert 'ensure_database_at_head(service_name="testing-service"' in worker_jobs
-    assert worker_jobs.index("ensure_database_at_head") < worker_jobs.index("create_engine")
 
 
 @pytest.mark.asyncio
@@ -142,10 +130,8 @@ async def test_backend_app_revision_mismatch_stops_before_admin_bootstrap(monkey
     monkeypatch.setattr("backend_app.lifecycle.configure_snowflake", lambda **_kwargs: None)
     monkeypatch.setattr("backend_app.lifecycle.admin_db.create_engine", lambda **_kwargs: None)
     monkeypatch.setattr("backend_app.lifecycle.user_db.create_engine", lambda **_kwargs: None)
-    monkeypatch.setattr("backend_app.lifecycle.testing_db.create_engine", lambda **_kwargs: None)
     monkeypatch.setattr("backend_app.lifecycle.admin_db.init_session_factory", lambda: None)
     monkeypatch.setattr("backend_app.lifecycle.user_db.init_session_factory", lambda: None)
-    monkeypatch.setattr("backend_app.lifecycle.testing_db.init_session_factory", lambda: None)
 
     manager = lifecycle.build_lifecycle_manager(logger=logging.getLogger("test"))
 

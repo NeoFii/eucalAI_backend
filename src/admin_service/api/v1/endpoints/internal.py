@@ -20,7 +20,7 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 verify_internal_secret = build_internal_auth_dependency(
     settings.INTERNAL_SECRET,
     request_ttl_seconds=settings.INTERNAL_REQUEST_TTL_SECONDS,
-    allowed_callers={"testing-service", "user-service"},
+    allowed_callers={"user-service"},
 )
 
 

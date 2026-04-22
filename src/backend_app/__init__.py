@@ -1,6 +1,5 @@
-"""Backend-app: consolidated FastAPI process for admin + user + content + testing domains.
+"""Backend-app: consolidated FastAPI process for admin + user domains.
 
-router-service stays independent for horizontal scaling; testing-scheduler and
-testing-worker remain separate background processes. This module is the single
-entrypoint for all low-QPS management traffic.
+router-service stays independent for horizontal scaling. This module is the
+single entrypoint for all low-QPS management traffic.
 """

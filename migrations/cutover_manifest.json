@@ -1,60 +1,14 @@
 {
   "version": 1,
   "execution_order": [
-    "testing-service",
     "admin-service",
     "user-service"
   ],
   "services": [
     {
-      "service": "testing-service",
-      "package": "testing_service",
-      "order": 1,
-      "database_env": "TESTING_DATABASE_URL",
-      "migration_namespace": "migrations/testing_service",
-      "schema_snapshot": "scripts/sql/testing_schema.sql",
-      "owned_tables": [
-        "model_categories",
-        "model_vendors",
-        "models",
-        "model_category_map",
-        "providers",
-        "provider_probe_configs",
-        "model_provider_offerings",
-        "provider_performance_metrics",
-        "provider_performance_daily_stats",
-        "benchmark_jobs",
-        "admin_probe_audit_logs"
-      ],
-      "owned_views": [
-        "provider_metrics_ranked"
-      ],
-      "internal_dependencies": [
-        "admin-service"
-      ],
-      "external_reference_columns": {
-        "benchmark_jobs": [
-          "requested_by_admin_id"
-        ],
-        "admin_probe_audit_logs": [
-          "triggered_by_admin_id"
-        ]
-      },
-      "preconditions": [
-        "TESTING_DATABASE_URL points to a testing-owned schema or database",
-        "admin-service internal identity endpoint is reachable",
-        "Redis benchmark queue remains available for testing-worker"
-      ],
-      "post_cutover_checks": [
-        "internal router catalog endpoints return offerings and route candidates",
-        "benchmark worker can enqueue and persist probe jobs",
-        "provider_metrics_ranked view is queryable"
-      ]
-    },
-    {
       "service": "admin-service",
       "package": "admin_service",
-      "order": 2,
+      "order": 1,
       "database_env": "ADMIN_DATABASE_URL",
       "migration_namespace": "migrations/admin_service",
       "schema_snapshot": "scripts/sql/admin_schema.sql",
@@ -84,7 +38,7 @@
     {
       "service": "user-service",
       "package": "user_service",
-      "order": 3,
+      "order": 2,
       "database_env": "USER_DATABASE_URL",
       "migration_namespace": "migrations/user_service",
       "schema_snapshot": "scripts/sql/user_schema.sql",

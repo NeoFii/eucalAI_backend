@@ -4,11 +4,9 @@ from pathlib import Path
 import pytest
 
 import admin_service.db as admin_db
-import testing_service.db as testing_db
 import user_service.db as user_db
 
 import admin_service.models  # noqa: F401
-import testing_service.models  # noqa: F401
 import user_service.models  # noqa: F401
 
 
@@ -44,24 +42,6 @@ OWNED_SCHEMAS = {
         ],
         "views": [],
         "base": user_db.Base,
-    },
-    "testing": {
-        "schema": ROOT / "scripts" / "sql" / "testing_schema.sql",
-        "tables": [
-            "model_categories",
-            "model_vendors",
-            "models",
-            "model_category_map",
-            "providers",
-            "provider_probe_configs",
-            "model_provider_offerings",
-            "provider_performance_metrics",
-            "provider_performance_daily_stats",
-            "benchmark_jobs",
-            "admin_probe_audit_logs",
-        ],
-        "views": ["provider_metrics_ranked"],
-        "base": testing_db.Base,
     },
 }
 

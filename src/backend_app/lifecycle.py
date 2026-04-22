@@ -18,12 +18,8 @@ from backend_app.config import settings
 from common.db import ensure_database_at_head
 from common.observability import log_event
 from common.utils.snowflake import configure_snowflake
-from testing_service import db as testing_db
-from testing_service.config import get_settings as get_testing_settings
 from user_service import db as user_db
 from user_service.config import settings as user_settings
-
-testing_settings = get_testing_settings()
 
 LifecycleCallback = Callable[[], Awaitable[None] | None]
 
@@ -175,26 +171,8 @@ def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
         shutdown=user_db.close_db,
     )
     manager.register(
-        "testing-database",
-        startup=lambda: _initialize_database(
-            service_name="testing-service",
-            create_engine=testing_db.create_engine,
-            init_session_factory=testing_db.init_session_factory,
-            database_url=testing_settings.DATABASE_URL,
-            pool_size=testing_settings.DATABASE_POOL_SIZE,
-            max_overflow=testing_settings.DATABASE_MAX_OVERFLOW,
-            echo=testing_settings.DATABASE_ECHO,
-            logger=logger,
-        ),
-        shutdown=testing_db.close_db,
-    )
-    manager.register(
         "admin-bootstrap",
         startup=_bootstrap_super_admin(logger),
-    )
-    manager.register(
-        "testing-probe-scheduler-warning",
-        startup=_warn_probe_scheduler_flag(logger),
     )
     manager.register(
         "service-started-log",
@@ -204,7 +182,7 @@ def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
             "service_started",
             service=settings.SERVICE_NAME,
             port=settings.PORT,
-            domains=["admin", "user", "testing"],
+            domains=["admin", "user"],
         ),
     )
     manager.register(
@@ -231,19 +209,5 @@ def _bootstrap_super_admin(logger: logging.Logger) -> LifecycleCallback:
             enabled=admin_settings.BOOTSTRAP_SUPERADMIN_ENABLED,
             required=admin_settings.BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP,
         )
-
-    return run
-
-
-def _warn_probe_scheduler_flag(logger: logging.Logger) -> LifecycleCallback:
-    def run() -> None:
-        if testing_settings.probe_scheduler_enabled:
-            log_event(
-                logger,
-                logging.WARNING,
-                "probe_scheduler_flag_ignored_in_backend_app",
-                service=settings.SERVICE_NAME,
-                note="testing-scheduler must run as a separate process",
-            )
 
     return run

@@ -77,24 +77,6 @@ def _build_admin_internal_app(fake_admin):
     return app
 
 
-def _build_testing_internal_router_app(first_row=None):
-    from testing_service.api.v1.endpoints import internal_router
-    from testing_service.dependencies import get_db_session
-
-    class FakeSession:
-        async def execute(self, _statement):
-            return SimpleNamespace(first=lambda: first_row, all=lambda: [])
-
-    app = FastAPI()
-    app.include_router(internal_router.router, prefix="/api/v1")
-
-    async def _fake_db():
-        yield FakeSession()
-
-    app.dependency_overrides[get_db_session] = _fake_db
-    return app
-
-
 def test_user_internal_endpoint_requires_signed_internal_request():
     from common.internal import build_internal_headers
 
@@ -201,12 +183,12 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
 
     response = client.get(
         "/api/v1/internal/users/1001",
-        headers=build_internal_headers(
-            secret=_user_internal_secret(),
-            caller_service="testing-service",
-            method="GET",
-            path="/api/v1/internal/users/1001",
-        ),
+            headers=build_internal_headers(
+                secret=_user_internal_secret(),
+                caller_service="backend-app",
+                method="GET",
+                path="/api/v1/internal/users/1001",
+            ),
     )
 
     assert response.status_code == 403
@@ -343,7 +325,7 @@ def test_admin_internal_endpoint_requires_signed_internal_request():
         "/api/v1/internal/admins/9001",
         headers=build_internal_headers(
             secret=_admin_internal_secret(),
-            caller_service="testing-service",
+            caller_service="user-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
         ),
@@ -378,11 +360,11 @@ def test_signed_internal_request_rejects_expired_timestamp():
     response = client.get(
         "/api/v1/internal/admins/9001",
         headers={
-            "X-Internal-Service": "testing-service",
+            "X-Internal-Service": "user-service",
             "X-Internal-Timestamp": timestamp,
             "X-Internal-Signature": _build_internal_signature(
                 secret=_admin_internal_secret(),
-                caller_service="testing-service",
+                caller_service="user-service",
                 method="GET",
                 request_target="/api/v1/internal/admins/9001",
                 timestamp=timestamp,
@@ -483,7 +465,7 @@ def test_internal_request_signature_covers_query_string():
         "/api/v1/internal/admins/9001?verbose=true",
         headers=build_internal_headers(
             secret=_admin_internal_secret(),
-            caller_service="testing-service",
+            caller_service="user-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
             query_params={"verbose": "true"},
@@ -495,7 +477,7 @@ def test_internal_request_signature_covers_query_string():
         "/api/v1/internal/admins/9001?verbose=false",
         headers=build_internal_headers(
             secret=_admin_internal_secret(),
-            caller_service="testing-service",
+            caller_service="user-service",
             method="GET",
             path="/api/v1/internal/admins/9001",
             query_params={"verbose": "true"},
@@ -549,48 +531,6 @@ def test_admin_internal_invitation_consume_maps_domain_errors(monkeypatch, excep
 
     assert response.status_code == expected_status
     assert response.json()["detail"] == expected_detail
-
-
-def test_testing_internal_router_rejects_untrusted_caller():
-    from common.internal import build_internal_headers
-    from testing_service.api.v1.endpoints import internal_router
-
-    app = _build_testing_internal_router_app()
-    client = TestClient(app)
-
-    response = client.get(
-        "/api/v1/internal/router/models",
-        headers=build_internal_headers(
-            secret=internal_router.settings.internal_secret,
-            caller_service="testing-service",
-            method="GET",
-            path="/api/v1/internal/router/models",
-        ),
-    )
-
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Invalid internal caller"
-
-
-def test_testing_internal_router_offering_returns_404_when_missing():
-    from common.internal import build_internal_headers
-    from testing_service.api.v1.endpoints import internal_router
-
-    app = _build_testing_internal_router_app(first_row=None)
-    client = TestClient(app)
-
-    response = client.get(
-        "/api/v1/internal/router/offerings/1",
-        headers=build_internal_headers(
-            secret=internal_router.settings.internal_secret,
-            caller_service="router-service",
-            method="GET",
-            path="/api/v1/internal/router/offerings/1",
-        ),
-    )
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "offering not found"
 
 
 @pytest.mark.asyncio
@@ -980,55 +920,6 @@ async def test_router_user_identity_gateway_maps_timeout(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_testing_admin_identity_client_maps_payload(monkeypatch):
-    from testing_service.gateway import AdminIdentityGateway
-
-    async def fake_get_payload(**_kwargs):
-        return {
-            "id": 3,
-            "uid": 99,
-            "email": "admin@example.com",
-            "name": "Admin",
-            "role": "admin",
-            "status": 1,
-        }
-
-    monkeypatch.setattr(
-        "testing_service.gateway.get_internal_json",
-        fake_get_payload,
-    )
-
-    identity = await AdminIdentityGateway().fetch_admin_by_uid(99)
-
-    assert identity is not None
-    assert identity.uid == 99
-    assert identity.role == "admin"
-
-
-@pytest.mark.skip(
-    reason="router_service.services.testing_catalog_client was part of the legacy "
-    "router; new ML router does not pull the testing catalog."
-)
-@pytest.mark.asyncio
-async def test_testing_catalog_client_maps_internal_failure(monkeypatch):
-    from common.core.exceptions import ServiceUnavailableException
-    from common.internal import InternalCircuitOpenError
-    from router_service.services.testing_catalog_client import TestingCatalogClientService
-
-    async def fake_get(**_kwargs):
-        raise InternalCircuitOpenError(
-            "testing-service circuit is open",
-            target_service="testing-service",
-            path="/api/v1/internal/router/models",
-        )
-
-    monkeypatch.setattr("router_service.services.testing_catalog_client.get_internal_json", fake_get)
-
-    with pytest.raises(ServiceUnavailableException):
-        await TestingCatalogClientService.list_models()
-
-
-@pytest.mark.asyncio
 async def test_admin_invitation_client_maps_invitation_errors(monkeypatch):
     from user_service.gateway import AdminInvitationGateway
 
@@ -1085,47 +976,23 @@ async def test_admin_invitation_client_release_returns_flag(monkeypatch):
     assert released is True
 
 
-@pytest.mark.asyncio
-async def test_testing_admin_identity_client_maps_unexpected_4xx_to_service_unavailable(monkeypatch):
-    from common.core.exceptions import ServiceUnavailableException
-    from common.internal import InternalServiceResponseError
-    from testing_service.gateway import AdminIdentityGateway
-
-    async def fake_get_payload(**_kwargs):
-        raise InternalServiceResponseError(
-            "admin-service returned 403",
-            target_service="admin-service",
-            path="/api/v1/internal/admins/99",
-            status_code=403,
-            detail="Invalid internal caller",
-        )
-
-    monkeypatch.setattr(
-        "testing_service.gateway.get_internal_json",
-        fake_get_payload,
-    )
-
-    with pytest.raises(ServiceUnavailableException) as exc_info:
-        await AdminIdentityGateway().fetch_admin_by_uid(99)
-
-    assert exc_info.value.status_code == 503
-
-
-def test_compose_and_dockerfile_include_router_and_testing_worker():
+def test_compose_and_dockerfile_include_router_without_removed_queue_runtime():
     repo_root = Path(__file__).resolve().parent.parent
     compose = (repo_root / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
     dockerfile = (repo_root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+    removed_worker = "testing" + "-worker"
+    removed_queue_env = "BENCHMARK" + "_QUEUE_REDIS_URL"
 
-    # Post-consolidation: admin/user/testing live under backend-app.
+    # Post-consolidation: admin/user live under backend-app.
     assert "backend-app:" in compose
     assert "router-service:" in compose
-    assert "testing-worker:" in compose
-    assert "redis:" in compose
-    assert "BENCHMARK_QUEUE_REDIS_URL" in compose
+    assert removed_worker + ":" not in compose
+    assert "redis:" not in compose
+    assert removed_queue_env not in compose
     # src/ layout: services are COPY'd from src/ into /app in the image.
     assert "src/router_service" in dockerfile
     assert "scripts" in dockerfile
-    assert "EXPOSE 8000 8001 8002 8003 8004 8012" in dockerfile
+    assert "EXPOSE 8000 8001 8003 8004" in dockerfile
 
 
 def test_runtime_entrypoints_require_alembic_head_before_followup_work():
@@ -1135,7 +1002,6 @@ def test_runtime_entrypoints_require_alembic_head_before_followup_work():
         encoding="utf-8"
     )
     admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
-    testing_main = (repo_root / "src" / "testing_service" / "main.py").read_text(encoding="utf-8")
     bootstrap_cli = (
         repo_root / "src" / "admin_service" / "bootstrap_superadmin.py"
     ).read_text(encoding="utf-8")
@@ -1144,9 +1010,7 @@ def test_runtime_entrypoints_require_alembic_head_before_followup_work():
     assert "ensure_database_at_head" in backend_lifecycle
     assert 'service_name="admin-service"' in backend_lifecycle
     assert 'service_name="user-service"' in backend_lifecycle
-    assert 'service_name="testing-service"' in backend_lifecycle
     assert "AUTO_INIT_DB" not in backend_lifecycle
     assert 'ensure_database_at_head(service_name="admin-service"' in admin_main
-    assert 'ensure_database_at_head(service_name="testing-service"' in testing_main
     assert 'ensure_database_at_head(service_name="admin-service"' in bootstrap_cli
     assert "skip-init-db" not in bootstrap_cli

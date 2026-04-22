@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVICE_DIRS = (
     "admin_service",
     "user_service",
-    "testing_service",
 )
 
 
@@ -22,12 +21,7 @@ def test_service_local_migration_directories_exist():
 def test_migration_cli_declares_all_services():
     from scripts.migrate import SERVICE_CONFIGS
 
-    for service in (
-        "admin-service",
-        "user-service",
-        "testing-service",
-    ):
-        assert service in SERVICE_CONFIGS
+    assert set(SERVICE_CONFIGS) == {"admin-service", "user-service"}
 
     source = (ROOT / "scripts" / "migrate.py").read_text(encoding="utf-8")
     assert "command.upgrade" in source
@@ -69,7 +63,6 @@ def test_migration_envs_require_service_specific_database_urls():
     for env_name in (
         "ADMIN_DATABASE_URL",
         "USER_DATABASE_URL",
-        "TESTING_DATABASE_URL",
     ):
         assert any(config.database_env == env_name for config in SERVICE_CONFIGS.values()), env_name
 
@@ -133,10 +126,13 @@ def test_deploy_and_env_examples_use_service_database_urls_only():
     for key in (
         "ADMIN_DATABASE_URL",
         "USER_DATABASE_URL",
-        "TESTING_DATABASE_URL",
     ):
         assert key in compose
         assert key in env_example
+
+    removed_database_env = "TESTING" + "_DATABASE_URL"
+    assert removed_database_env not in compose
+    assert removed_database_env not in env_example
 
     assert "\n      DATABASE_URL:" not in compose
     assert "\nDATABASE_URL=" not in env_example

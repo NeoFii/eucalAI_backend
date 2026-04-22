@@ -1,53 +1,47 @@
 # Service Runtime Contracts
 
-> 每个服务的运行时契约：lifespan、健康探针、共享 env、跨服务调用、日志约定。
+## Environment
 
-## 共享 env 要求
+Required shared variables:
 
-所有服务都要求：
 - `JWT_SECRET_KEY`
 - `INTERNAL_SECRET`
+- `ADMIN_DATABASE_URL`
+- `USER_DATABASE_URL`
 
-各服务自己的数据库 URL：
-- `ADMIN_DATABASE_URL` — admin 域
-- `USER_DATABASE_URL` — user 域
-- `ROUTER_DATABASE_URL` — router-service
-- `TESTING_DATABASE_URL` — testing 域（testing-worker 和 testing-scheduler 共用）
+Router and inference do not require database URLs.
 
-不存在通用 `DATABASE_URL` fallback。
+## Readiness
 
-## 健康探针
+HTTP services expose `/health` and `/ready`.
 
-每个 FastAPI app 暴露：
-- `GET /health` — 进程存活（不查 DB）
-- `GET /ready` — 依赖就绪检查（由 `common/health.py::build_readiness_response` 构造，经 `install_observability` 注入请求 ID）
-
-docker-compose 健康检查脚本：
 ```bash
-python scripts/runtime_probe.py http-ready --port <PORT>
+python scripts/runtime_probe.py http-ready --port 8001
+python scripts/runtime_probe.py http-ready --port 8003
+python scripts/runtime_probe.py http-ready --port 8004
 ```
 
-## testing-worker 契约
+`backend-app /ready` checks the admin and user database engines. Router and inference
+readiness checks validate their own runtime dependencies.
 
-testing-worker 是非 FastAPI 的 arq 消费者，探活使用：
-```bash
-python scripts/runtime_probe.py worker-ready --database-url-env TESTING_DATABASE_URL --redis-url-env BENCHMARK_QUEUE_REDIS_URL
-```
+## Internal Authentication
 
-运行时依赖：
-- `TESTING_DATABASE_URL`
-- `BENCHMARK_QUEUE_REDIS_URL`
-- `TESTING_SECRET_MASTER_KEY`（用于解密 provider probe key 密文）
+Internal backend calls use signed headers from `common.internal`:
 
-## HMAC 跨服务调用
+- `X-Internal-Service`
+- `X-Internal-Timestamp`
+- `X-Internal-Signature`
+- `X-Request-ID` when present
 
-所有跨服务 HTTP 调用经过 HMAC 签名（`common/internal.py`），Header：
-- `X-Internal-Service` — 调用方标识
-- `X-Internal-Timestamp` — Unix 秒
-- `X-Internal-Signature` — HMAC-SHA256
+Allowed active caller relationships:
 
-断路器在 `common/internal.py::_CIRCUIT_BREAKERS`，进程内状态，多副本各自独立。
+- user-service to admin internal endpoints
+- admin-service to user internal endpoints
+- router-service to user internal endpoints
 
-## 日志
+Router to inference uses `X-Inference-Secret`.
 
-所有服务启动时调用 `configure_logging`、`install_observability`；日志是结构化 JSON，包含 `request_id`（由 `REQUEST_ID_HEADER` 传播）。
+## Schema Revision Gate
+
+Every data-owning process verifies Alembic head before serving follow-up work. A
+revision mismatch fails startup with a command hint for `uv run migrate`.

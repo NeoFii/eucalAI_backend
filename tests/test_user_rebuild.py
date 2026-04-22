@@ -19,6 +19,11 @@ class ScalarResult:
     def scalar_one_or_none(self):
         return self.value
 
+    def scalar(self):
+        if isinstance(self.value, list):
+            return len(self.value)
+        return self.value
+
     def scalars(self):
         if isinstance(self.value, list):
             return SimpleNamespace(all=lambda: self.value)

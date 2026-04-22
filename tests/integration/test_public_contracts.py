@@ -13,18 +13,14 @@ def test_service_package_roots_expose_only_final_public_contracts():
     assert require_active_user.__module__ == "user_service.policies"
 
 
-def test_router_and_testing_gateways_expose_final_contracts_only():
-    import testing_service.gateway as testing_gateway
+def test_router_gateway_exposes_final_contracts_only():
     from router_service.gateway import UserIdentityGateway, ValidatedApiKey
     from router_service.schemas.requests import ChatCompletionRequest, CompletionRequest
-    from testing_service.gateway import AdminIdentityGateway
 
     assert UserIdentityGateway.__module__ == "router_service.gateway"
     assert ValidatedApiKey.__module__ == "router_service.gateway"
     assert ChatCompletionRequest.__module__ == "router_service.schemas.requests"
     assert CompletionRequest.__module__ == "router_service.schemas.requests"
-    assert AdminIdentityGateway.__module__ == "testing_service.gateway"
-    assert not hasattr(testing_gateway, "AdminIdentityClientService")
 
 
 def test_router_schema_package_does_not_reexport_removed_request_symbols():

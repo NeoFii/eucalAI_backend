@@ -7,12 +7,18 @@ the merged app must not ship.
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 from types import SimpleNamespace
 
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+
+os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
+os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret")
+os.environ.setdefault("ADMIN_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/admin")
+os.environ.setdefault("USER_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/user")
 
 
 def _build_app_routes_snapshot():
@@ -44,8 +50,7 @@ def test_route_uniqueness():
 
 
 def test_internal_endpoints_remain_reachable_under_backend_app():
-    """All three domains' /internal/* sub-paths should be registered for
-    inter-service HMAC calls (router -> backend-app)."""
+    """Active /internal/* sub-paths stay registered for inter-service HMAC calls."""
 
     pairs = _build_app_routes_snapshot()
     paths_by_prefix = {path for _, path in pairs}
@@ -62,8 +67,18 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     assert ("POST", "/api/v1/admin/users/{uid}/topup") in pairs
     # user internal contracts
     assert any(p.startswith("/api/v1/internal/users") for p in paths_by_prefix)
-    # testing internal contracts (consumed by router-service)
-    assert any(p.startswith("/api/v1/internal/router") for p in paths_by_prefix)
+
+
+def test_removed_management_routes_are_not_registered_under_backend_app():
+    pairs = _build_app_routes_snapshot()
+    paths_by_prefix = {path for _, path in pairs}
+
+    assert not any(p.startswith("/api/v1/benchmark") for p in paths_by_prefix)
+    assert not any(p.startswith("/api/v1/models") for p in paths_by_prefix)
+    assert not any(p.startswith("/api/v1/providers") for p in paths_by_prefix)
+    assert not any(p.startswith("/api/v1/vendors") for p in paths_by_prefix)
+    assert not any(p.startswith("/api/v1/model-providers") for p in paths_by_prefix)
+    assert not any(p.startswith("/api/v1/internal/router") for p in paths_by_prefix)
 
 
 def test_backend_app_declares_health_and_ready_endpoints():
@@ -81,7 +96,6 @@ def test_backend_app_ready_endpoint_executes_all_database_probes(monkeypatch):
     monkeypatch.setattr(main, "check_database_ready", fake_check_database_ready)
     monkeypatch.setattr(main, "admin_db", SimpleNamespace(get_engine=lambda: "admin"))
     monkeypatch.setattr(main, "user_db", SimpleNamespace(get_engine=lambda: "user"))
-    monkeypatch.setattr(main, "testing_db", SimpleNamespace(get_engine=lambda: "testing"))
 
     client = TestClient(main.app)
     response = client.get("/ready")
@@ -96,7 +110,6 @@ def test_backend_app_ready_endpoint_executes_all_database_probes(monkeypatch):
                 "detail": {
                     "admin": {"ready": True, "error": "admin"},
                     "user": {"ready": True, "error": "user"},
-                    "testing": {"ready": True, "error": "testing"},
                 },
             }
         },
