@@ -13,9 +13,9 @@ references only.
 Admin-owned objects include `admin_users`, `admin_audit_logs`, and
 `invitation_codes`.
 
-User-owned objects include `users`, `user_api_keys`, `user_vouchers`,
-`voucher_transactions`, `usage_stats`, billing ledger tables, and invitation
-outbox tables.
+User-owned objects include `users`, `user_api_keys`,
+`voucher_redemption_codes`, `usage_stats`, billing ledger tables, and
+invitation outbox tables.
 
 ## Bootstrap Order
 

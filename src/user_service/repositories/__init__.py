@@ -10,10 +10,7 @@ from user_service.repositories.session_repository import SessionRepository
 from user_service.repositories.topup_order_repository import TopupOrderRepository
 from user_service.repositories.usage_stat_repository import UsageStatRepository
 from user_service.repositories.user_repository import UserRepository
-from user_service.repositories.voucher_repository import (
-    UserVoucherRepository,
-    VoucherTransactionRepository,
-)
+from user_service.repositories.voucher_repository import VoucherRedemptionCodeRepository
 
 __all__ = [
     "ApiKeyRepository",
@@ -24,6 +21,5 @@ __all__ = [
     "TopupOrderRepository",
     "UsageStatRepository",
     "UserRepository",
-    "UserVoucherRepository",
-    "VoucherTransactionRepository",
+    "VoucherRedemptionCodeRepository",
 ]

@@ -1,297 +1,178 @@
-"""Voucher lifecycle and billing operations."""
+"""Voucher redemption-code lifecycle operations."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+import hashlib
+import secrets
+import string
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.core.exceptions import ValidationException
+from common.core.exceptions import UserNotFoundException, ValidationException
 from common.db import ListParams, PaginatedResult
 from common.utils.timezone import now
-from user_service.models import UserVoucher, VoucherTransaction
-from user_service.repositories import UserVoucherRepository, VoucherTransactionRepository
+from user_service.models import BalanceTransaction, VoucherRedemptionCode
+from user_service.repositories import (
+    BalanceTxRepository,
+    UserRepository,
+    VoucherRedemptionCodeRepository,
+)
+
+
+@dataclass(slots=True)
+class GeneratedVoucherCode:
+    code: str
+    record: VoucherRedemptionCode
 
 
 class VoucherService:
-    """Manage user vouchers and voucher billing mutations."""
+    """Manage system-generated voucher redemption codes."""
+
+    _CODE_ALPHABET = string.ascii_uppercase + string.digits
 
     @staticmethod
-    async def create(
+    def normalize_code(raw_code: str) -> str:
+        return raw_code.strip().upper()
+
+    @staticmethod
+    def hash_code(raw_code: str) -> str:
+        normalized = VoucherService.normalize_code(raw_code)
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _generate_plain_code() -> str:
+        chunks = [
+            "".join(secrets.choice(VoucherService._CODE_ALPHABET) for _ in range(4))
+            for _ in range(3)
+        ]
+        return "VC-" + "-".join(chunks)
+
+    @staticmethod
+    async def generate_codes(
         db: AsyncSession,
         *,
-        user_id: int,
         amount: int,
-        expires_at: datetime | None,
+        count: int,
+        starts_at: datetime,
+        expires_at: datetime,
         created_by_admin_uid: int | None,
         remark: str | None = None,
-    ) -> UserVoucher:
+    ) -> list[GeneratedVoucherCode]:
         if amount <= 0:
             raise ValidationException(detail="代金券金额必须大于 0")
-        if expires_at is not None and expires_at <= now():
-            raise ValidationException(detail="代金券过期时间必须晚于当前时间")
+        if count <= 0:
+            raise ValidationException(detail="生成数量必须大于 0")
+        if count > 1000:
+            raise ValidationException(detail="单次最多生成 1000 个兑换码")
+        if starts_at >= expires_at:
+            raise ValidationException(detail="开始时间必须早于过期时间")
 
-        voucher = UserVoucher(
-            user_id=user_id,
-            status=UserVoucher.STATUS_ACTIVE,
-            original_amount=amount,
-            remaining_amount=amount,
-            frozen_amount=0,
-            used_amount=0,
-            expires_at=expires_at,
-            created_by_admin_uid=created_by_admin_uid,
-            remark=remark,
-        )
-        UserVoucherRepository(db).add(voucher)
-        await db.flush()
-        VoucherTransactionRepository(db).add(
-            VoucherTransaction(
-                voucher_id=voucher.id,
-                user_id=user_id,
-                type=VoucherTransaction.TYPE_ISSUE,
+        repo = VoucherRedemptionCodeRepository(db)
+        generated: list[GeneratedVoucherCode] = []
+        seen_hashes: set[str] = set()
+        while len(generated) < count:
+            plain_code = VoucherService._generate_plain_code()
+            code_hash = VoucherService.hash_code(plain_code)
+            if code_hash in seen_hashes:
+                continue
+            seen_hashes.add(code_hash)
+            record = VoucherRedemptionCode(
+                code_hash=code_hash,
+                code_prefix=plain_code[:4],
+                code_suffix=plain_code[-4:],
                 amount=amount,
-                balance_before=0,
-                balance_after=amount,
-                ref_type="admin",
-                operator_id=created_by_admin_uid,
+                status=VoucherRedemptionCode.STATUS_ACTIVE,
+                starts_at=starts_at,
+                expires_at=expires_at,
+                created_by_admin_uid=created_by_admin_uid,
                 remark=remark,
             )
-        )
+            repo.add(record)
+            generated.append(GeneratedVoucherCode(code=plain_code, record=record))
+
+        await db.flush()
         await db.commit()
-        await db.refresh(voucher)
-        return voucher
+        return generated
 
     @staticmethod
-    async def get(db: AsyncSession, voucher_id: int) -> UserVoucher:
-        voucher = await UserVoucherRepository(db).get_by_id(voucher_id)
-        if voucher is None:
-            raise ValidationException(detail="代金券不存在")
-        return voucher
+    async def get(db: AsyncSession, code_id: int) -> VoucherRedemptionCode:
+        code = await VoucherRedemptionCodeRepository(db).get_by_id(code_id)
+        if code is None:
+            raise ValidationException(detail="代金券兑换码不存在")
+        return code
 
     @staticmethod
     async def list_for_admin(
         db: AsyncSession,
         *,
         params: ListParams,
-        user_id: int | None = None,
         status: int | None = None,
-    ) -> PaginatedResult[UserVoucher]:
-        return await UserVoucherRepository(db).list_for_admin(
-            params,
-            user_id=user_id,
-            status=status,
-        )
+    ) -> PaginatedResult[VoucherRedemptionCode]:
+        return await VoucherRedemptionCodeRepository(db).list_for_admin(params, status=status)
 
     @staticmethod
-    async def update(
+    async def disable(
         db: AsyncSession,
         *,
-        voucher_id: int,
-        status: int | None = None,
-        expires_at: datetime | None = None,
-        remark: str | None = None,
+        code_id: int,
         operator_id: int | None = None,
-    ) -> UserVoucher:
-        voucher = await VoucherService.get(db, voucher_id)
-        if status is not None:
-            if status not in {UserVoucher.STATUS_ACTIVE, UserVoucher.STATUS_DISABLED}:
-                raise ValidationException(detail="代金券状态无效")
-            voucher.status = status
-        if expires_at is not None:
-            voucher.expires_at = expires_at
-        if remark is not None:
-            voucher.remark = remark
-        VoucherTransactionRepository(db).add(
-            VoucherTransaction(
-                voucher_id=voucher.id,
-                user_id=voucher.user_id,
-                type=VoucherTransaction.TYPE_ADMIN_UPDATE,
-                amount=0,
-                balance_before=int(voucher.remaining_amount),
-                balance_after=int(voucher.remaining_amount),
-                ref_type="admin",
-                operator_id=operator_id,
-                remark=remark,
+    ) -> VoucherRedemptionCode:
+        _ = operator_id
+        code = await VoucherRedemptionCodeRepository(db).get_by_id(code_id, for_update=True)
+        if code is None:
+            raise ValidationException(detail="代金券兑换码不存在")
+        if code.status == VoucherRedemptionCode.STATUS_REDEEMED:
+            raise ValidationException(detail="已兑换的代金券兑换码不能禁用")
+        code.status = VoucherRedemptionCode.STATUS_DISABLED
+        await db.commit()
+        await db.refresh(code)
+        return code
+
+    @staticmethod
+    async def redeem_code(
+        db: AsyncSession,
+        *,
+        user_id: int,
+        raw_code: str,
+        redeemed_at: datetime | None = None,
+    ) -> VoucherRedemptionCode:
+        redeemed_at = redeemed_at or now()
+        code_hash = VoucherService.hash_code(raw_code)
+        code_repo = VoucherRedemptionCodeRepository(db)
+        code = await code_repo.get_by_hash(code_hash, for_update=True)
+        if code is None:
+            raise ValidationException(detail="代金券兑换码不存在")
+        if code.status != VoucherRedemptionCode.STATUS_ACTIVE:
+            raise ValidationException(detail="代金券兑换码不可用")
+        if redeemed_at < code.starts_at:
+            raise ValidationException(detail="代金券兑换码尚未生效")
+        if redeemed_at >= code.expires_at:
+            raise ValidationException(detail="代金券兑换码已过期")
+
+        user = await UserRepository(db).get_by_id(user_id, for_update=True)
+        if user is None:
+            raise UserNotFoundException()
+
+        balance_before = int(user.balance)
+        user.balance += int(code.amount)
+        code.status = VoucherRedemptionCode.STATUS_REDEEMED
+        code.redeemed_user_id = user_id
+        code.redeemed_at = redeemed_at
+        BalanceTxRepository(db).add(
+            BalanceTransaction(
+                user_id=user_id,
+                type=BalanceTransaction.TYPE_VOUCHER_REDEEM,
+                amount=int(code.amount),
+                balance_before=balance_before,
+                balance_after=int(user.balance),
+                ref_type="voucher_code",
+                ref_id=str(code.id),
+                operator_id=code.created_by_admin_uid,
+                remark=code.remark,
             )
         )
         await db.commit()
-        await db.refresh(voucher)
-        return voucher
-
-    @staticmethod
-    async def delete(
-        db: AsyncSession,
-        *,
-        voucher_id: int,
-        operator_id: int | None = None,
-    ) -> UserVoucher:
-        voucher = await VoucherService.get(db, voucher_id)
-        voucher.deleted_at = now()
-        voucher.status = UserVoucher.STATUS_DISABLED
-        VoucherTransactionRepository(db).add(
-            VoucherTransaction(
-                voucher_id=voucher.id,
-                user_id=voucher.user_id,
-                type=VoucherTransaction.TYPE_DELETE,
-                amount=0,
-                balance_before=int(voucher.remaining_amount),
-                balance_after=int(voucher.remaining_amount),
-                ref_type="admin",
-                operator_id=operator_id,
-            )
-        )
-        await db.commit()
-        await db.refresh(voucher)
-        return voucher
-
-    @staticmethod
-    async def freeze_available(
-        db: AsyncSession,
-        *,
-        user_id: int,
-        amount: int,
-        request_id: str,
-    ) -> int:
-        remaining_to_freeze = amount
-        frozen_total = 0
-        tx_repo = VoucherTransactionRepository(db)
-        for voucher in await UserVoucherRepository(db).list_available_for_update(user_id):
-            if not isinstance(voucher, UserVoucher):
-                continue
-            if remaining_to_freeze <= 0:
-                break
-            freeze_amount = min(int(voucher.remaining_amount), remaining_to_freeze)
-            before = int(voucher.remaining_amount)
-            voucher.remaining_amount -= freeze_amount
-            voucher.frozen_amount += freeze_amount
-            tx_repo.add(
-                VoucherTransaction(
-                    voucher_id=voucher.id,
-                    user_id=user_id,
-                    type=VoucherTransaction.TYPE_FREEZE,
-                    amount=-freeze_amount,
-                    balance_before=before,
-                    balance_after=int(voucher.remaining_amount),
-                    ref_type="api_call",
-                    ref_id=request_id,
-                )
-            )
-            remaining_to_freeze -= freeze_amount
-            frozen_total += freeze_amount
-        return frozen_total
-
-    @staticmethod
-    async def settle_frozen(
-        db: AsyncSession,
-        *,
-        user_id: int,
-        request_id: str,
-        actual_amount: int,
-    ) -> int:
-        tx_repo = VoucherTransactionRepository(db)
-        freeze_txs = await tx_repo.list_by_ref(
-            user_id=user_id,
-            tx_type=VoucherTransaction.TYPE_FREEZE,
-            ref_type="api_call",
-            ref_id=request_id,
-        )
-        remaining_to_consume = actual_amount
-        consumed_total = 0
-        voucher_repo = UserVoucherRepository(db)
-
-        for freeze_tx in freeze_txs:
-            frozen_amount = abs(int(freeze_tx.amount))
-            if frozen_amount <= 0:
-                continue
-            voucher = await voucher_repo.get_by_id(int(freeze_tx.voucher_id), for_update=True)
-            if voucher is None:
-                continue
-            consume_amount = min(frozen_amount, remaining_to_consume)
-            release_amount = frozen_amount - consume_amount
-            remaining_before = int(voucher.remaining_amount)
-
-            voucher.frozen_amount -= frozen_amount
-            voucher.used_amount += consume_amount
-            if release_amount:
-                voucher.remaining_amount += release_amount
-
-            if consume_amount:
-                tx_repo.add(
-                    VoucherTransaction(
-                        voucher_id=voucher.id,
-                        user_id=user_id,
-                        type=VoucherTransaction.TYPE_CONSUME,
-                        amount=-consume_amount,
-                        balance_before=remaining_before,
-                        balance_after=int(voucher.remaining_amount),
-                        ref_type="api_call",
-                        ref_id=request_id,
-                    )
-                )
-                consumed_total += consume_amount
-                remaining_to_consume -= consume_amount
-            if release_amount:
-                tx_repo.add(
-                    VoucherTransaction(
-                        voucher_id=voucher.id,
-                        user_id=user_id,
-                        type=VoucherTransaction.TYPE_RELEASE,
-                        amount=release_amount,
-                        balance_before=remaining_before,
-                        balance_after=int(voucher.remaining_amount),
-                        ref_type="api_call",
-                        ref_id=request_id,
-                    )
-                )
-            if remaining_to_consume <= 0:
-                remaining_to_consume = 0
-
-        return consumed_total
-
-    @staticmethod
-    async def release_frozen(
-        db: AsyncSession,
-        *,
-        user_id: int,
-        request_id: str,
-        amount: int,
-    ) -> int:
-        tx_repo = VoucherTransactionRepository(db)
-        freeze_txs = await tx_repo.list_by_ref(
-            user_id=user_id,
-            tx_type=VoucherTransaction.TYPE_FREEZE,
-            ref_type="api_call",
-            ref_id=request_id,
-        )
-        remaining_to_release = amount
-        released_total = 0
-        voucher_repo = UserVoucherRepository(db)
-
-        for freeze_tx in freeze_txs:
-            if remaining_to_release <= 0:
-                break
-            frozen_amount = abs(int(freeze_tx.amount))
-            release_amount = min(frozen_amount, remaining_to_release)
-            if release_amount <= 0:
-                continue
-            voucher = await voucher_repo.get_by_id(int(freeze_tx.voucher_id), for_update=True)
-            if voucher is None:
-                continue
-            before = int(voucher.remaining_amount)
-            voucher.frozen_amount -= release_amount
-            voucher.remaining_amount += release_amount
-            tx_repo.add(
-                VoucherTransaction(
-                    voucher_id=voucher.id,
-                    user_id=user_id,
-                    type=VoucherTransaction.TYPE_RELEASE,
-                    amount=release_amount,
-                    balance_before=before,
-                    balance_after=int(voucher.remaining_amount),
-                    ref_type="api_call",
-                    ref_id=request_id,
-                )
-            )
-            released_total += release_amount
-            remaining_to_release -= release_amount
-        return released_total
+        await db.refresh(code)
+        return code

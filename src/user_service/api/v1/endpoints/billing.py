@@ -20,10 +20,13 @@ from user_service.schemas import (
     BalanceTransactionItem,
     TopupOrderItem,
     UsageStatItem,
+    VoucherRedeemRequest,
+    VoucherRedeemResponseData,
 )
 from user_service.services.balance_service import BalanceService
 from user_service.services.topup_order_service import TopupOrderService
 from user_service.services.usage_stat_service import UsageStatService
+from user_service.services.voucher_service import VoucherService
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -99,6 +102,28 @@ async def list_transactions(
             "page": result.page,
             "page_size": result.page_size,
         },
+    }
+
+
+@router.post(
+    "/vouchers/redeem",
+    response_model=ApiResponse[VoucherRedeemResponseData],
+    summary="Redeem voucher code",
+)
+async def redeem_voucher_code(
+    payload: VoucherRedeemRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    redeemed = await VoucherService.redeem_code(
+        db,
+        user_id=int(current_user.id),
+        raw_code=payload.code,
+    )
+    return {
+        "code": 200,
+        "message": "success",
+        "data": VoucherRedeemResponseData.model_validate(redeemed),
     }
 
 

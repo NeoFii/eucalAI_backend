@@ -13,7 +13,6 @@ from user_service.repositories import (
     TopupOrderRepository,
     UserRepository,
 )
-from user_service.services.voucher_service import VoucherService
 
 
 class BalanceService:
@@ -54,27 +53,17 @@ class BalanceService:
             api_key = await BalanceService._get_api_key(db, api_key_id, user.id, for_update=True)
             BalanceService._ensure_api_key_quota(api_key, amount)
 
-        voucher_amount = await VoucherService.freeze_available(
-            db,
-            user_id=user.id,
-            amount=amount,
-            request_id=request_id,
-        )
-        balance_amount = amount - voucher_amount
-        if balance_amount <= 0:
-            await db.commit()
-            return
-        if user.balance < balance_amount:
+        if user.balance < amount:
             raise ValidationException(detail="余额不足")
 
         balance_before = int(user.balance)
-        user.balance -= balance_amount
-        user.frozen_amount += balance_amount
+        user.balance -= amount
+        user.frozen_amount += amount
         tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_FREEZE,
-                amount=-balance_amount,
+                amount=-amount,
                 balance_before=balance_before,
                 balance_after=int(user.balance),
                 ref_type="api_call",
@@ -112,19 +101,9 @@ class BalanceService:
             api_key = await BalanceService._get_api_key(db, api_key_id, user.id, for_update=True)
             BalanceService._ensure_api_key_quota(api_key, actual_amount)
 
-        voucher_amount = await VoucherService.settle_frozen(
-            db,
-            user_id=user.id,
-            request_id=request_id,
-            actual_amount=actual_amount,
-        )
-        balance_actual_amount = actual_amount - voucher_amount
-        if user.frozen_amount < balance_actual_amount:
+        if user.frozen_amount < actual_amount:
             raise ValidationException(detail="冻结余额不足，无法结算")
-        balance_estimated_amount = min(
-            int(user.frozen_amount),
-            max(estimated_amount - voucher_amount, balance_actual_amount),
-        )
+        balance_estimated_amount = min(int(user.frozen_amount), estimated_amount)
 
         unfreeze_before = int(user.balance)
         if balance_estimated_amount > 0:
@@ -143,9 +122,9 @@ class BalanceService:
             )
 
         consume_before = int(user.balance)
-        if user.balance < balance_actual_amount:
+        if user.balance < actual_amount:
             raise ValidationException(detail="余额不足，无法完成扣费")
-        user.balance -= balance_actual_amount
+        user.balance -= actual_amount
         user.used_amount += actual_amount
         user.total_requests += 1
         user.total_tokens += total_tokens
@@ -181,27 +160,17 @@ class BalanceService:
             ref_id=request_id,
         ):
             return
-        voucher_amount = await VoucherService.release_frozen(
-            db,
-            user_id=user.id,
-            request_id=request_id,
-            amount=amount,
-        )
-        balance_amount = amount - voucher_amount
-        if balance_amount <= 0:
-            await db.commit()
-            return
-        if user.frozen_amount < balance_amount:
+        if user.frozen_amount < amount:
             raise ValidationException(detail="冻结余额不足，无法退款")
 
         balance_before = int(user.balance)
-        user.frozen_amount -= balance_amount
-        user.balance += balance_amount
+        user.frozen_amount -= amount
+        user.balance += amount
         tx_repo.add(
             BalanceTransaction(
                 user_id=user.id,
                 type=BalanceTransaction.TYPE_REFUND,
-                amount=balance_amount,
+                amount=amount,
                 balance_before=balance_before,
                 balance_after=int(user.balance),
                 ref_type="api_call",

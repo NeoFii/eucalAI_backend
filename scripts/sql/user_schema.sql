@@ -87,59 +87,39 @@ CREATE TABLE IF NOT EXISTS `user_api_keys` (
     CONSTRAINT `fk_user_api_keys_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User API keys';
 
-CREATE TABLE IF NOT EXISTS `user_vouchers` (
+CREATE TABLE IF NOT EXISTS `voucher_redemption_codes` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-    `user_id` BIGINT NOT NULL COMMENT 'FK users.id',
-    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1=active 2=disabled',
-    `original_amount` INT NOT NULL COMMENT 'Initial voucher amount (fen)',
-    `remaining_amount` INT NOT NULL DEFAULT 0 COMMENT 'Unfrozen usable amount (fen)',
-    `frozen_amount` INT NOT NULL DEFAULT 0 COMMENT 'Frozen amount (fen)',
-    `used_amount` INT NOT NULL DEFAULT 0 COMMENT 'Consumed amount (fen)',
-    `expires_at` DATETIME NULL COMMENT 'NULL = never expires',
+    `code_hash` VARCHAR(64) NOT NULL COMMENT 'SHA-256 hash of normalized code',
+    `code_prefix` VARCHAR(8) NOT NULL COMMENT 'Non-secret display prefix',
+    `code_suffix` VARCHAR(8) NOT NULL COMMENT 'Non-secret display suffix',
+    `amount` INT NOT NULL COMMENT 'Redeem amount (fen)',
+    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '1=active 2=redeemed 3=disabled',
+    `starts_at` DATETIME NOT NULL COMMENT 'Code validity start',
+    `expires_at` DATETIME NOT NULL COMMENT 'Code validity end',
+    `redeemed_user_id` BIGINT NULL COMMENT 'Redeeming users.id',
+    `redeemed_at` DATETIME NULL COMMENT 'Redeemed at',
     `created_by_admin_uid` BIGINT NULL COMMENT 'Creator admin uid',
     `remark` VARCHAR(255) NULL COMMENT 'Admin note',
-    `deleted_at` DATETIME NULL COMMENT 'Soft deleted at',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
     PRIMARY KEY (`id`),
-    KEY `idx_user_vouchers_user_id` (`user_id`),
-    KEY `idx_user_vouchers_status` (`status`),
-    KEY `idx_user_vouchers_expires_at` (`expires_at`),
-    KEY `idx_user_vouchers_admin_uid` (`created_by_admin_uid`),
-    KEY `idx_user_vouchers_deleted_at` (`deleted_at`),
-    CONSTRAINT `fk_user_vouchers_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User vouchers';
-
-CREATE TABLE IF NOT EXISTS `voucher_transactions` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-    `voucher_id` BIGINT NOT NULL COMMENT 'FK user_vouchers.id',
-    `user_id` BIGINT NOT NULL COMMENT 'FK users.id',
-    `type` TINYINT NOT NULL COMMENT '1=ISSUE 2=FREEZE 3=CONSUME 4=RELEASE 5=ADMIN_UPDATE 6=DELETE',
-    `amount` INT NOT NULL COMMENT 'Voucher amount delta (fen)',
-    `balance_before` INT NOT NULL COMMENT 'Remaining amount before change (fen)',
-    `balance_after` INT NOT NULL COMMENT 'Remaining amount after change (fen)',
-    `ref_type` VARCHAR(32) NULL COMMENT 'api_call / admin',
-    `ref_id` VARCHAR(64) NULL COMMENT 'Related document id',
-    `operator_id` BIGINT NULL COMMENT 'Admin uid when applicable',
-    `remark` VARCHAR(255) NULL COMMENT 'Admin/system note',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
-    PRIMARY KEY (`id`),
-    KEY `idx_voucher_tx_voucher_id` (`voucher_id`),
-    KEY `idx_voucher_tx_user_id` (`user_id`),
-    KEY `idx_voucher_tx_ref` (`ref_type`, `ref_id`),
-    KEY `idx_voucher_tx_type_created` (`type`, `created_at`),
-    CONSTRAINT `fk_voucher_tx_voucher_id` FOREIGN KEY (`voucher_id`) REFERENCES `user_vouchers` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_voucher_tx_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Voucher mutation ledger';
+    UNIQUE KEY `uk_voucher_codes_code_hash` (`code_hash`),
+    KEY `idx_voucher_codes_status` (`status`),
+    KEY `idx_voucher_codes_starts_at` (`starts_at`),
+    KEY `idx_voucher_codes_expires_at` (`expires_at`),
+    KEY `idx_voucher_codes_redeemed_user` (`redeemed_user_id`),
+    KEY `idx_voucher_codes_admin_uid` (`created_by_admin_uid`),
+    CONSTRAINT `fk_voucher_codes_redeemed_user_id` FOREIGN KEY (`redeemed_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Voucher redemption codes';
 
 CREATE TABLE IF NOT EXISTS `balance_transactions` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
     `user_id` BIGINT NOT NULL COMMENT 'FK users.id',
-    `type` TINYINT NOT NULL COMMENT '1=TOPUP 2=CONSUME 3=REFUND 4=FREEZE 5=UNFREEZE 6=ADMIN_ADJUST',
+    `type` TINYINT NOT NULL COMMENT '1=TOPUP 2=CONSUME 3=REFUND 4=FREEZE 5=UNFREEZE 6=ADMIN_ADJUST 7=VOUCHER_REDEEM',
     `amount` INT NOT NULL COMMENT 'Positive=increase, negative=decrease (分)',
     `balance_before` INT NOT NULL COMMENT 'balance snapshot before change (分)',
     `balance_after` INT NOT NULL COMMENT 'balance snapshot after change (分)',
-    `ref_type` VARCHAR(32) NULL COMMENT 'topup_order / api_call',
+    `ref_type` VARCHAR(32) NULL COMMENT 'topup_order / api_call / voucher_code',
     `ref_id` VARCHAR(64) NULL COMMENT 'related document id',
     `remark` VARCHAR(255) NULL COMMENT 'admin/system note',
     `operator_id` BIGINT NULL COMMENT 'admin uid when type=ADMIN_ADJUST',

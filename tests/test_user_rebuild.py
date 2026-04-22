@@ -91,17 +91,19 @@ async def test_balance_service_freeze_locks_user_row_before_mutation():
 
 
 @pytest.mark.asyncio
-async def test_voucher_service_create_initializes_user_voucher():
-    from user_service.models import UserVoucher, VoucherTransaction
+async def test_voucher_service_generates_hash_only_redemption_codes(monkeypatch):
+    from user_service.models import VoucherRedemptionCode
     from user_service.services.voucher_service import VoucherService
 
-    expires_at = datetime(2026, 5, 1, 12, 0, 0)
+    starts_at = datetime(2026, 5, 1, 12, 0, 0)
+    expires_at = datetime(2026, 6, 1, 12, 0, 0)
+    generated_codes = iter(["VC-ALPHA-0001", "VC-BRAVO-0002"])
+    monkeypatch.setattr(VoucherService, "_generate_plain_code", staticmethod(lambda: next(generated_codes)))
 
     class FakeSession:
         def __init__(self):
             self.added = []
             self.commit_calls = 0
-            self.refresh_calls = 0
             self.flush_calls = 0
 
         def add(self, obj):
@@ -113,40 +115,141 @@ async def test_voucher_service_create_initializes_user_voucher():
         async def flush(self):
             self.flush_calls += 1
 
-        async def refresh(self, _obj):
-            self.refresh_calls += 1
-
     db = FakeSession()
-    voucher = await VoucherService.create(
+    generated = await VoucherService.generate_codes(
         db,
-        user_id=5,
         amount=800,
+        count=2,
+        starts_at=starts_at,
         expires_at=expires_at,
         created_by_admin_uid=99,
         remark="launch credit",
     )
 
-    assert isinstance(voucher, UserVoucher)
-    assert voucher.user_id == 5
-    assert voucher.original_amount == 800
-    assert voucher.remaining_amount == 800
-    assert voucher.frozen_amount == 0
-    assert voucher.used_amount == 0
-    assert voucher.status == UserVoucher.STATUS_ACTIVE
-    assert voucher.expires_at == expires_at
-    assert voucher.created_by_admin_uid == 99
-    assert voucher.remark == "launch credit"
-    assert db.added[0] is voucher
-    assert isinstance(db.added[1], VoucherTransaction)
-    assert db.added[1].type == VoucherTransaction.TYPE_ISSUE
-    assert db.added[1].amount == 800
+    assert [item.code for item in generated] == ["VC-ALPHA-0001", "VC-BRAVO-0002"]
+    assert len(db.added) == 2
+    assert all(isinstance(item, VoucherRedemptionCode) for item in db.added)
+    assert all(item.code_hash != generated_item.code for item, generated_item in zip(db.added, generated))
+    assert db.added[0].code_prefix == "VC-A"
+    assert db.added[0].code_suffix == "0001"
+    assert db.added[0].amount == 800
+    assert db.added[0].status == VoucherRedemptionCode.STATUS_ACTIVE
+    assert db.added[0].starts_at == starts_at
+    assert db.added[0].expires_at == expires_at
+    assert db.added[0].created_by_admin_uid == 99
+    assert db.added[0].remark == "launch credit"
     assert db.commit_calls == 1
     assert db.flush_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_voucher_service_redeem_credits_user_balance_and_writes_ledger():
+    from user_service.models import BalanceTransaction, User, VoucherRedemptionCode
+    from user_service.services.voucher_service import VoucherService
+
+    redeem_at = datetime(2026, 5, 1, 12, 0, 0)
+    user = User(id=1, uid=1001, email="user@example.com", password_hash="hash", status=1, balance=200)
+    code = VoucherRedemptionCode(
+        id=10,
+        code_hash=VoucherService.hash_code("VC-ALPHA-0001"),
+        code_prefix="VC-A",
+        code_suffix="0001",
+        amount=800,
+        status=VoucherRedemptionCode.STATUS_ACTIVE,
+        starts_at=redeem_at - timedelta(hours=1),
+        expires_at=redeem_at + timedelta(hours=1),
+        created_by_admin_uid=99,
+        remark="launch credit",
+    )
+
+    class FakeSession:
+        def __init__(self):
+            self.execute_calls = 0
+            self.added = []
+            self.commit_calls = 0
+            self.refresh_calls = 0
+
+        async def execute(self, statement):
+            self.execute_calls += 1
+            assert getattr(statement, "_for_update_arg", None) is not None
+            if self.execute_calls == 1:
+                return ScalarResult(code)
+            return ScalarResult(user)
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+        async def refresh(self, _obj):
+            self.refresh_calls += 1
+
+    db = FakeSession()
+    redeemed = await VoucherService.redeem_code(
+        db,
+        user_id=1,
+        raw_code=" vc-alpha-0001 ",
+        redeemed_at=redeem_at,
+    )
+
+    assert redeemed is code
+    assert user.balance == 1000
+    assert code.status == VoucherRedemptionCode.STATUS_REDEEMED
+    assert code.redeemed_user_id == 1
+    assert code.redeemed_at == redeem_at
+    assert len(db.added) == 1
+    assert isinstance(db.added[0], BalanceTransaction)
+    assert db.added[0].type == BalanceTransaction.TYPE_VOUCHER_REDEEM
+    assert db.added[0].amount == 800
+    assert db.added[0].balance_before == 200
+    assert db.added[0].balance_after == 1000
+    assert db.added[0].ref_type == "voucher_code"
+    assert db.added[0].ref_id == "10"
+    assert db.commit_calls == 1
     assert db.refresh_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_balance_service_freeze_uses_voucher_before_balance(monkeypatch):
+async def test_voucher_service_redeem_rejects_reused_code():
+    from common.core.exceptions import ValidationException
+    from user_service.models import VoucherRedemptionCode
+    from user_service.services.voucher_service import VoucherService
+
+    redeem_at = datetime(2026, 5, 1, 12, 0, 0)
+    code = VoucherRedemptionCode(
+        id=10,
+        code_hash=VoucherService.hash_code("VC-ALPHA-0001"),
+        code_prefix="VC-A",
+        code_suffix="0001",
+        amount=800,
+        status=VoucherRedemptionCode.STATUS_REDEEMED,
+        starts_at=redeem_at - timedelta(hours=1),
+        expires_at=redeem_at + timedelta(hours=1),
+    )
+
+    class FakeSession:
+        async def execute(self, statement):
+            assert getattr(statement, "_for_update_arg", None) is not None
+            return ScalarResult(code)
+
+        def add(self, _obj):
+            raise AssertionError("reused codes must not write balance ledger")
+
+        async def commit(self):
+            raise AssertionError("reused codes must not commit")
+
+    with pytest.raises(ValidationException, match="代金券兑换码不可用"):
+        await VoucherService.redeem_code(
+            FakeSession(),
+            user_id=1,
+            raw_code="VC-ALPHA-0001",
+            redeemed_at=redeem_at,
+        )
+
+
+@pytest.mark.asyncio
+async def test_balance_service_freeze_uses_balance_only():
     from user_service.models import User
     from user_service.services.balance_service import BalanceService
 
@@ -158,16 +261,6 @@ async def test_balance_service_freeze_uses_voucher_before_balance(monkeypatch):
         status=1,
         balance=1000,
         frozen_amount=0,
-    )
-    calls = []
-
-    async def fake_freeze_vouchers(db, *, user_id, amount, request_id):
-        calls.append(("voucher", db, user_id, amount, request_id))
-        return 700
-
-    monkeypatch.setattr(
-        "user_service.services.balance_service.VoucherService.freeze_available",
-        fake_freeze_vouchers,
     )
 
     class FakeSession:
@@ -187,14 +280,13 @@ async def test_balance_service_freeze_uses_voucher_before_balance(monkeypatch):
     db = FakeSession()
     await BalanceService.freeze(db, user_id=1, amount=900, request_id="req-voucher")
 
-    assert calls == [("voucher", db, 1, 900, "req-voucher")]
-    assert user.balance == 800
-    assert user.frozen_amount == 200
+    assert user.balance == 100
+    assert user.frozen_amount == 900
     assert db.commit_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_balance_service_freeze_rejects_api_key_quota_overrun(monkeypatch):
+async def test_balance_service_freeze_rejects_api_key_quota_overrun():
     from common.core.exceptions import ValidationException
     from user_service.models import User, UserApiKey
     from user_service.services.balance_service import BalanceService
@@ -218,17 +310,6 @@ async def test_balance_service_freeze_rejects_api_key_quota_overrun(monkeypatch)
         quota_mode=UserApiKey.MODE_LIMITED,
         quota_limit=500,
         quota_used=450,
-    )
-    voucher_called = False
-
-    async def fake_freeze_vouchers(*_args, **_kwargs):
-        nonlocal voucher_called
-        voucher_called = True
-        return 0
-
-    monkeypatch.setattr(
-        "user_service.services.balance_service.VoucherService.freeze_available",
-        fake_freeze_vouchers,
     )
 
     class FakeSession:
@@ -258,8 +339,6 @@ async def test_balance_service_freeze_rejects_api_key_quota_overrun(monkeypatch)
             request_id="req-limit",
             api_key_id=10,
         )
-
-    assert voucher_called is False
 
 
 @pytest.mark.asyncio
@@ -315,7 +394,7 @@ async def test_balance_service_topup_rejects_already_paid_order():
 
 
 @pytest.mark.asyncio
-async def test_balance_service_settle_consumes_voucher_then_balance_and_counts_quota(monkeypatch):
+async def test_balance_service_settle_consumes_balance_and_counts_quota():
     from user_service.models import User, UserApiKey
     from user_service.services.balance_service import BalanceService
 
@@ -325,8 +404,8 @@ async def test_balance_service_settle_consumes_voucher_then_balance_and_counts_q
         email="user@example.com",
         password_hash="hash",
         status=1,
-        balance=800,
-        frozen_amount=200,
+        balance=100,
+        frozen_amount=900,
         used_amount=0,
         total_requests=0,
         total_tokens=0,
@@ -342,17 +421,6 @@ async def test_balance_service_settle_consumes_voucher_then_balance_and_counts_q
         quota_limit=1150,
         quota_used=300,
     )
-    calls = []
-
-    async def fake_settle_vouchers(db, *, user_id, request_id, actual_amount):
-        calls.append(("voucher", db, user_id, request_id, actual_amount))
-        return 700
-
-    monkeypatch.setattr(
-        "user_service.services.balance_service.VoucherService.settle_frozen",
-        fake_settle_vouchers,
-    )
-
     class FakeSession:
         def __init__(self):
             self.execute_calls = 0
@@ -384,8 +452,7 @@ async def test_balance_service_settle_consumes_voucher_then_balance_and_counts_q
         total_tokens=123,
     )
 
-    assert calls == [("voucher", db, 1, "req-voucher", 850)]
-    assert user.balance == 850
+    assert user.balance == 150
     assert user.frozen_amount == 0
     assert user.used_amount == 850
     assert user.total_requests == 1
@@ -409,6 +476,48 @@ def test_balance_response_exposes_available_and_frozen_amounts():
     assert payload.available_balance == 760
     assert payload.frozen_amount == 120
     assert BalanceResponseData.__module__ == "user_service.schemas.billing"
+
+
+@pytest.mark.asyncio
+async def test_billing_redeem_voucher_endpoint_delegates_to_service(monkeypatch):
+    from user_service.api.v1.endpoints.billing import redeem_voucher_code
+    from user_service.models import User, VoucherRedemptionCode
+    from user_service.schemas.billing import VoucherRedeemRequest
+
+    current_user = User(id=1, uid=1001, email="user@example.com", password_hash="hash", status=1)
+    redeemed = VoucherRedemptionCode(
+        id=10,
+        code_hash="hash",
+        code_prefix="VC-A",
+        code_suffix="0001",
+        amount=800,
+        status=VoucherRedemptionCode.STATUS_REDEEMED,
+        starts_at=datetime(2026, 5, 1, 12, 0, 0),
+        expires_at=datetime(2026, 6, 1, 12, 0, 0),
+        redeemed_user_id=1,
+        redeemed_at=datetime(2026, 5, 2, 12, 0, 0),
+    )
+    captured = {}
+
+    async def fake_redeem_code(db, *, user_id, raw_code):
+        captured["call"] = (db, user_id, raw_code)
+        return redeemed
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.VoucherService.redeem_code",
+        fake_redeem_code,
+    )
+    db = object()
+
+    response = await redeem_voucher_code(
+        payload=VoucherRedeemRequest(code="VC-ALPHA-0001"),
+        current_user=current_user,
+        db=db,
+    )
+
+    assert captured["call"] == (db, 1, "VC-ALPHA-0001")
+    assert response["data"].amount == 800
+    assert response["data"].status == VoucherRedemptionCode.STATUS_REDEEMED
 
 
 def test_user_billing_response_schemas_do_not_expose_internal_ids():
