@@ -88,12 +88,6 @@ def test_auth_and_billing_schema_modules_export_current_types():
         TopupOrderItem,
         UsageStatItem,
     )
-    from user_service.schemas.billing_admin import (
-        AdminApiCallLogItem,
-        AdminBalanceTransactionItem,
-        AdminTopupOrderItem,
-        AdminUsageStatItem,
-    )
 
     assert RegisterRequest is not None
     assert BalanceResponseData is not None
@@ -101,20 +95,12 @@ def test_auth_and_billing_schema_modules_export_current_types():
     assert TopupOrderItem is not None
     assert UsageStatItem is not None
     assert ApiCallLogItem is not None
-    assert AdminBalanceTransactionItem is not None
-    assert AdminTopupOrderItem is not None
-    assert AdminUsageStatItem is not None
-    assert AdminApiCallLogItem is not None
     assert RegisterRequest.__module__ == "user_service.schemas.auth"
     assert BalanceResponseData.__module__ == "user_service.schemas.billing"
     assert BalanceTransactionItem.__module__ == "user_service.schemas.billing"
     assert TopupOrderItem.__module__ == "user_service.schemas.billing"
     assert UsageStatItem.__module__ == "user_service.schemas.billing"
     assert ApiCallLogItem.__module__ == "user_service.schemas.billing"
-    assert AdminBalanceTransactionItem.__module__ == "user_service.schemas.billing_admin"
-    assert AdminTopupOrderItem.__module__ == "user_service.schemas.billing_admin"
-    assert AdminUsageStatItem.__module__ == "user_service.schemas.billing_admin"
-    assert AdminApiCallLogItem.__module__ == "user_service.schemas.billing_admin"
 
 
 def test_auth_and_billing_services_use_repository_boundaries():
@@ -134,8 +120,6 @@ def test_auth_and_billing_services_use_repository_boundaries():
         assert "db.add(" not in source
 
 
-def test_admin_billing_endpoint_uses_policy_guard_import():
-    source = _source("api/v1/endpoints/admin_billing.py")
-
-    assert "from admin_service.policies import require_super_admin" in source
-    assert "from admin_service.dependencies import require_super_admin" not in source
+def test_admin_billing_endpoint_removed():
+    """admin_billing.py was deprecated and has been deleted."""
+    assert not (USER_ROOT / "api" / "v1" / "endpoints" / "admin_billing.py").exists()

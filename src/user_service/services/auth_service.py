@@ -10,7 +10,6 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import (
-    AuthenticationException,
     EmailAlreadyExistsException,
     EmailNotVerifiedException,
     InvalidCredentialsException,
@@ -48,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCK_DURATION_HOURS = 1
+_DUMMY_HASH = hash_password("dummy-timing-equalizer")
 
 
 class AuthService:
@@ -127,7 +127,7 @@ class AuthService:
             raise exc
         await db.refresh(user)
 
-        logger.info(f"用户注册成功: {user.email}")
+        logger.info("用户注册成功: uid=%s", user.uid)
         return user
 
     @staticmethod
@@ -139,13 +139,13 @@ class AuthService:
         ip_address: Optional[str] = None,
     ) -> tuple[User, str, str]:
         """用户登录"""
-        logger.info(f"尝试登录: {email}")
+        logger.info("尝试登录: uid lookup for %s", email)
         email = normalize_email(email)
         user_repo = UserRepository(db)
-        session_repo = SessionRepository(db)
         user = await user_repo.get_by_email(email)
 
         if not user:
+            verify_password("", _DUMMY_HASH)
             raise InvalidCredentialsException()
 
         if user.is_login_locked:
@@ -158,7 +158,7 @@ class AuthService:
 
             if user.login_fail_count >= LOGIN_MAX_FAILURES:
                 user.login_locked_until = now() + timedelta(hours=LOGIN_LOCK_DURATION_HOURS)
-                logger.warning(f"用户 {email} 登录失败次数过多，账户已被锁定")
+                logger.warning("用户登录失败次数过多，账户已被锁定: uid=%s", user.uid)
                 await db.commit()
                 raise InvalidCredentialsException(
                     detail=f"登录失败次数过多，账户已被锁定，请{int(LOGIN_LOCK_DURATION_HOURS * 60)}分钟后再试"
@@ -172,43 +172,16 @@ class AuthService:
         if user.status == 2:
             raise EmailNotVerifiedException()
 
-        # 登录成功
         user.login_fail_count = 0
         user.login_locked_until = None
 
         await AuthService._revoke_all_user_sessions(db, user.id)
-
-        access_token = create_access_token(
-            data={"uid": user.uid, "sub": str(user.uid)},
-            secret_key=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+        access_token, refresh_token = await AuthService._create_session_and_tokens(
+            db, user, user_agent, ip_address
         )
-
-        refresh_token = create_refresh_token(
-            data={"uid": user.uid},
-            secret_key=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
-        )
-
-        session_id = generate_snowflake_id()
-        session = UserSession(
-            session_id=session_id,
-            user_id=user.id,
-            token_jti=get_token_jti(refresh_token),
-            refresh_token_hash=hash_password(refresh_token),
-            user_agent=user_agent,
-            ip_address=ip_address,
-            expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
-        )
-
-        session_repo.add(session)
-        user.last_login_at = now()
-        user.last_login_ip = ip_address
         await db.commit()
 
-        logger.info(f"用户登录成功: {email}, IP: {ip_address}")
+        logger.info("用户登录成功: uid=%s", user.uid)
         return user, access_token, refresh_token
 
     @staticmethod
@@ -283,7 +256,7 @@ class AuthService:
         session.expires_at = now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         await db.commit()
 
-        logger.info(f"刷新 access_token 成功: uid={user.uid}")
+        logger.info("刷新 access_token 成功: uid=%s", user.uid)
         return new_access_token, new_refresh_token
 
     @staticmethod
@@ -325,7 +298,41 @@ class AuthService:
         user.password_hash = hash_password(new_password)
         await AuthService._revoke_all_user_sessions(db, user.id)
         await db.commit()
-        logger.info(f"用户修改密码成功: uid={user.uid}")
+        logger.info("用户修改密码成功: uid=%s", user.uid)
+
+    @staticmethod
+    async def _create_session_and_tokens(
+        db: AsyncSession,
+        user: User,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None,
+    ) -> tuple[str, str]:
+        access_token = create_access_token(
+            data={"uid": user.uid, "sub": str(user.uid)},
+            secret_key=settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+            expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+        )
+        refresh_token = create_refresh_token(
+            data={"uid": user.uid},
+            secret_key=settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+            expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
+        )
+        session_id = generate_snowflake_id()
+        session = UserSession(
+            session_id=session_id,
+            user_id=user.id,
+            token_jti=get_token_jti(refresh_token),
+            refresh_token_hash=hash_password(refresh_token),
+            user_agent=user_agent,
+            ip_address=ip_address,
+            expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+        SessionRepository(db).add(session)
+        user.last_login_at = now()
+        user.last_login_ip = ip_address
+        return access_token, refresh_token
 
     @staticmethod
     async def _revoke_all_user_sessions(db: AsyncSession, user_id: int) -> None:
@@ -377,39 +384,13 @@ class AuthService:
         user.login_locked_until = None
 
         await AuthService._revoke_all_user_sessions(db, user.id)
-
-        access_token = create_access_token(
-            data={"uid": user.uid, "sub": str(user.uid)},
-            secret_key=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+        access_token, refresh_token = await AuthService._create_session_and_tokens(
+            db, user, user_agent, ip_address
         )
-
-        refresh_token = create_refresh_token(
-            data={"uid": user.uid},
-            secret_key=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
-        )
-
-        session_id = generate_snowflake_id()
-        session = UserSession(
-            session_id=session_id,
-            user_id=user.id,
-            token_jti=get_token_jti(refresh_token),
-            refresh_token_hash=hash_password(refresh_token),
-            user_agent=user_agent,
-            ip_address=ip_address,
-            expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
-        )
-
-        SessionRepository(db).add(session)
-        user.last_login_at = now()
-        user.last_login_ip = ip_address
         email_service.mark_code_used(code_record)
         await db.commit()
 
-        logger.info(f"用户验证码登录成功: {email}, IP: {ip_address}")
+        logger.info("用户验证码登录成功: uid=%s", user.uid)
         return user, access_token, refresh_token
 
     @staticmethod
@@ -436,4 +417,4 @@ class AuthService:
         email_service.mark_code_used(code_record)
         await AuthService._revoke_all_user_sessions(db, user.id)
         await db.commit()
-        logger.info(f"用户重置密码成功: {email}")
+        logger.info("用户重置密码成功: uid=%s", user.uid)

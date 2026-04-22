@@ -511,10 +511,11 @@ class TestUserServices:
 
         assert success is False
         assert message == "Email send failed"
-        assert db.deleted == []
-        assert db.added == []
-        assert db.flush_calls == 0
-        assert db.commit_calls == 0
+        assert len(db.added) == 1
+        assert db.commit_calls >= 1
+        assert any(
+            isinstance(obj, type(db.added[0])) for obj in db.deleted
+        )
 
     @pytest.mark.asyncio
     async def test_change_password_commits_once_after_revoking_sessions(self, monkeypatch):

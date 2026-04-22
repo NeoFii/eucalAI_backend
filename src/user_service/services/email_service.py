@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import random
+import secrets
 import smtplib
 import ssl
 from datetime import timedelta
@@ -39,7 +40,7 @@ class EmailService:
         self.code_expire_minutes = settings.EMAIL_CODE_EXPIRE_MINUTES
 
     def generate_code(self) -> str:
-        return f"{random.randint(0, 999999):06d}"
+        return f"{secrets.randbelow(1_000_000):06d}"
 
     def _send_email(self, email: str, code: str, purpose: str) -> tuple[bool, str]:
         if not self.smtp_host or not self.smtp_user:
@@ -75,7 +76,7 @@ class EmailService:
             return True, ""
         except Exception as exc:
             logger.error("Email send failed: email=%s error=%s", email, exc)
-            return False, f"Email send failed: {exc}"
+            return False, "邮件发送失败，请稍后重试"
 
     async def send_verification_code(
         self,
@@ -97,10 +98,6 @@ class EmailService:
         code = self.generate_code()
         expires_at = now() + timedelta(minutes=self.code_expire_minutes)
 
-        result = self._send_email(email, code, purpose)
-        if not result[0]:
-            return result
-
         old_codes = await repo.list_unused_for_email(email, purpose)
         for old_code in old_codes:
             await repo.delete(old_code)
@@ -112,15 +109,20 @@ class EmailService:
             expires_at=expires_at,
         )
         repo.add(verification)
-        await db.flush()
-
         try:
             await db.commit()
-            logger.info("Verification code persisted: email=%s purpose=%s", email, purpose)
-            return result
         except Exception:
             await db.rollback()
             raise
+
+        result = await asyncio.to_thread(self._send_email, email, code, purpose)
+        if not result[0]:
+            await repo.delete(verification)
+            await db.commit()
+            return result
+
+        logger.info("Verification code sent: email=%s purpose=%s", email, purpose)
+        return result
 
     async def verify_code_or_raise(
         self,

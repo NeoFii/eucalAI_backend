@@ -57,3 +57,17 @@ class ApiKeyRepository(BaseRepository[UserApiKey]):
 
     def add(self, api_key: UserApiKey) -> None:
         self.session.add(api_key)
+
+    async def disable_all_for_user(self, user_id: int) -> int:
+        from sqlalchemy import update
+
+        result = await self.session.execute(
+            update(UserApiKey)
+            .where(
+                UserApiKey.user_id == user_id,
+                UserApiKey.deleted_at.is_(None),
+                UserApiKey.status == UserApiKey.STATUS_ACTIVE,
+            )
+            .values(status=UserApiKey.STATUS_DISABLED)
+        )
+        return result.rowcount

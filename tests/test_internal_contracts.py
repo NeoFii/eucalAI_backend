@@ -987,7 +987,6 @@ def test_compose_and_dockerfile_include_router_without_removed_queue_runtime():
     assert "backend-app:" in compose
     assert "router-service:" in compose
     assert removed_worker + ":" not in compose
-    assert "redis:" not in compose
     assert removed_queue_env not in compose
     # src/ layout: services are COPY'd from src/ into /app in the image.
     assert "src/router_service" in dockerfile

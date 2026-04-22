@@ -49,11 +49,18 @@ SERVICES = {
         "port": 8004,
         "color": "\033[35m",
     },
+    "user-worker": {
+        "name": "user-worker",
+        "cmd": [sys.executable, "-m", "arq", "user_service.worker.WorkerSettings"],
+        "color": "\033[33m",
+        "healthcheck": False,
+    },
 }
 DEFAULT_SERVICES = [
     "backend-app",
     "inference-service",
     "router-service",
+    "user-worker",
 ]
 START_ORDER = {
     service_name: index
@@ -63,6 +70,7 @@ START_ORDER = {
             "admin-service",
             "inference-service",
             "router-service",
+            "user-worker",
         ]
     )
 }

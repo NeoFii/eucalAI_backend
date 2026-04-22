@@ -17,10 +17,10 @@ class RegisterRequest(BaseModel):
 
     invitation_code: str = Field(..., min_length=1, max_length=64, description="Invitation code")
     email: EmailStr = Field(..., description="Login email")
-    password: str = Field(..., min_length=8, max_length=128, description="Password")
+    password: str = Field(..., min_length=8, max_length=72, description="Password")
     confirm_password: str = Field(..., description="Confirm password")
     verification_code: str = Field(..., min_length=6, max_length=6, description="Email verification code")
-    lang: str = Field(default="zh", description="Language code")
+    lang: Literal["zh", "en"] = Field(default="zh", description="Language code")
 
     @field_validator("email", mode="before")
     @classmethod
@@ -65,12 +65,19 @@ class LoginRequest(BaseModel):
     """User login request."""
 
     email: EmailStr = Field(..., description="Login email")
-    password: str = Field(..., description="Password")
+    password: str = Field(..., min_length=1, max_length=72, description="Password")
 
     @field_validator("email", mode="before")
     @classmethod
     def normalize_email_field(cls, value: str) -> str:
         return normalize_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_bytes(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password exceeds 72-byte bcrypt limit")
+        return value
 
 
 class UserData(DateTimeModel):
@@ -106,9 +113,9 @@ class UserInfoResponse(AuthBaseResponse):
 
 
 class ChangePasswordRequest(BaseModel):
-    old_password: str = Field(..., description="Old password")
-    new_password: str = Field(..., min_length=8, max_length=128, description="New password")
-    lang: str = Field(default="zh", description="Language code")
+    old_password: str = Field(..., max_length=72, description="Old password")
+    new_password: str = Field(..., min_length=8, max_length=72, description="New password")
+    lang: Literal["zh", "en"] = Field(default="zh", description="Language code")
 
     @model_validator(mode="after")
     def validate_new_password(self):
@@ -151,7 +158,7 @@ class SendEmailCodeRequest(BaseModel):
 
 class VerifyEmailRequest(BaseModel):
     email: EmailStr = Field(..., description="Email")
-    code: str = Field(..., min_length=6, max_length=6, description="6-digit code")
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$", description="6-digit code")
 
     @field_validator("email", mode="before")
     @classmethod
@@ -161,7 +168,7 @@ class VerifyEmailRequest(BaseModel):
 
 class LoginWithCodeRequest(BaseModel):
     email: EmailStr = Field(..., description="Login email")
-    code: str = Field(..., min_length=6, max_length=6, description="6-digit code")
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$", description="6-digit code")
 
     @field_validator("email", mode="before")
     @classmethod
@@ -171,9 +178,9 @@ class LoginWithCodeRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr = Field(..., description="Email")
-    code: str = Field(..., min_length=6, max_length=6, description="6-digit code")
-    new_password: str = Field(..., min_length=8, max_length=128, description="New password")
-    lang: str = Field(default="zh", description="Language code")
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$", description="6-digit code")
+    new_password: str = Field(..., min_length=8, max_length=72, description="New password")
+    lang: Literal["zh", "en"] = Field(default="zh", description="Language code")
 
     @field_validator("email", mode="before")
     @classmethod

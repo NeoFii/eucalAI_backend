@@ -16,12 +16,14 @@ from common.core.exceptions import (
     ApiKeyIpNotAllowedException,
     ApiKeyModelNotAllowedException,
     ApiKeyNotFoundException,
+    UserDisabledException,
     ValidationException,
 )
 from common.utils.timezone import now
 from user_service.config import settings
 from user_service.models import UserApiKey
 from user_service.repositories.api_key_repository import ApiKeyRepository
+from user_service.repositories.user_repository import UserRepository
 from user_service.utils.api_key_policy import is_ip_allowed, is_model_allowed
 
 _KEY_ALPHABET = string.ascii_letters + string.digits
@@ -133,6 +135,10 @@ class ApiKeyService:
         if api_key is None:
             raise ApiKeyNotFoundException()
 
+        user = await UserRepository(db).get_by_id(api_key.user_id)
+        if user is None or user.status != 1:
+            raise UserDisabledException()
+
         previous_status = api_key.status
         ApiKeyService._refresh_status(api_key)
         if api_key.status != previous_status:
@@ -177,3 +183,7 @@ class ApiKeyService:
         if api_key is None:
             raise ApiKeyNotFoundException()
         return api_key
+
+    @staticmethod
+    async def disable_all_for_user(db: AsyncSession, user_id: int) -> int:
+        return await ApiKeyRepository(db).disable_all_for_user(user_id)

@@ -45,7 +45,7 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
         "UserSession",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="noload",
     )
 
     def __repr__(self) -> str:

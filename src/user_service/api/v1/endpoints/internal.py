@@ -3,8 +3,10 @@
 import hashlib
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams
@@ -93,7 +95,7 @@ class InternalUserDetailResponse(BaseModel):
 
 
 class InternalUpdateStatusRequest(BaseModel):
-    status: int
+    status: Literal[0, 1]
 
 
 class InternalUpdateStatusResponse(BaseModel):
@@ -107,15 +109,15 @@ class InternalResetPasswordRequest(BaseModel):
 
 
 class InternalTopupRequest(BaseModel):
-    amount: int
+    amount: int = Field(gt=0, le=settings.MAX_TOPUP_AMOUNT)
     operator_uid: int  # admin snowflake uid, stored as operator_id in DB
-    remark: str = ""
+    remark: str = Field(default="", max_length=255)
 
 
 class InternalAdjustBalanceRequest(BaseModel):
-    amount: int
+    amount: int = Field(ge=-settings.MAX_TOPUP_AMOUNT, le=settings.MAX_TOPUP_AMOUNT)
     operator_uid: int  # admin snowflake uid, stored as operator_id in DB
-    remark: str
+    remark: str = Field(max_length=255)
 
 
 class InternalTransactionItem(BaseModel):
@@ -206,12 +208,12 @@ class InternalUsageStatItem(BaseModel):
 
 
 class InternalVoucherGenerateRequest(BaseModel):
-    amount: int
-    count: int
+    amount: int = Field(gt=0)
+    count: int = Field(ge=1, le=1000)
     starts_at: datetime
     expires_at: datetime
     operator_uid: int | None = None
-    remark: str | None = None
+    remark: str | None = Field(default=None, max_length=255)
 
 
 class InternalVoucherDisableRequest(BaseModel):
@@ -253,7 +255,7 @@ class InternalVoucherListResponse(BaseModel):
 
 @router.get("/users/{uid}", response_model=InternalUserResponse, summary="Get user by uid")
 async def get_user_by_uid(
-    uid: int,
+    uid: int = Path(gt=0),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserResponse:
@@ -351,7 +353,7 @@ async def list_vouchers(
 
 @router.get("/vouchers/{voucher_id}", response_model=InternalVoucherItem, summary="Get voucher")
 async def get_voucher(
-    voucher_id: int,
+    voucher_id: int = Path(gt=0),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalVoucherItem:
@@ -365,8 +367,8 @@ async def get_voucher(
     summary="Disable voucher code",
 )
 async def disable_voucher_code(
-    voucher_id: int,
-    payload: InternalVoucherDisableRequest,
+    voucher_id: int = Path(gt=0),
+    payload: InternalVoucherDisableRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalVoucherItem:
@@ -414,7 +416,7 @@ async def list_users(
     summary="Get user detail",
 )
 async def get_user_detail(
-    uid: int,
+    uid: int = Path(gt=0),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserDetailResponse:
@@ -428,19 +430,16 @@ async def get_user_detail(
     summary="Update user status",
 )
 async def update_user_status(
-    uid: int,
-    payload: InternalUpdateStatusRequest,
+    uid: int = Path(gt=0),
+    payload: InternalUpdateStatusRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUpdateStatusResponse:
-    if payload.status not in (0, 1):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="status must be 0 or 1",
-        )
     user = await _get_user_or_404(db, uid)
     before_status = int(user.status)
     user.status = payload.status
+    if payload.status == 0 and before_status != 0:
+        await ApiKeyService.disable_all_for_user(db, int(user.id))
     await db.commit()
     return InternalUpdateStatusResponse(
         uid=int(user.uid), before_status=before_status, after_status=payload.status,
@@ -449,8 +448,8 @@ async def update_user_status(
 
 @router.post("/users/{uid}/reset-password", summary="Reset user password")
 async def reset_user_password(
-    uid: int,
-    payload: InternalResetPasswordRequest,
+    uid: int = Path(gt=0),
+    payload: InternalResetPasswordRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
@@ -470,8 +469,8 @@ async def reset_user_password(
 
 @router.post("/users/{uid}/topup", summary="Manual topup")
 async def topup_user(
-    uid: int,
-    payload: InternalTopupRequest,
+    uid: int = Path(gt=0),
+    payload: InternalTopupRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
@@ -493,8 +492,8 @@ async def topup_user(
 
 @router.post("/users/{uid}/adjust-balance", summary="Adjust user balance")
 async def adjust_user_balance(
-    uid: int,
-    payload: InternalAdjustBalanceRequest,
+    uid: int = Path(gt=0),
+    payload: InternalAdjustBalanceRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
@@ -516,7 +515,7 @@ async def adjust_user_balance(
     summary="List user transactions",
 )
 async def list_user_transactions(
-    uid: int,
+    uid: int = Path(gt=0),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     _: None = Depends(verify_internal_secret),
@@ -538,7 +537,7 @@ async def list_user_transactions(
 
 @router.get("/users/{uid}/api-keys", summary="List user API keys")
 async def list_user_api_keys(
-    uid: int,
+    uid: int = Path(gt=0),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[InternalApiKeyItem]:
@@ -549,8 +548,8 @@ async def list_user_api_keys(
 
 @router.post("/users/{uid}/api-keys/{key_id}/disable", summary="Disable user API key")
 async def disable_user_api_key(
-    uid: int,
-    key_id: int,
+    uid: int = Path(gt=0),
+    key_id: int = Path(gt=0),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:

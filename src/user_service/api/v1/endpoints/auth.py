@@ -11,35 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import (
     AuthenticationException,
-    EmailAlreadyExistsException,
-    EmailNotVerifiedException,
-    InvalidCredentialsException,
-    InvalidInvitationCodeException,
-    InvalidTokenException,
-    InvitationCodeDisabledException,
-    InvitationCodeExpiredException,
-    InvitationCodeUsedException,
-    ServiceUnavailableException,
-    SessionExpiredException,
     SessionNotFoundException,
-    SessionRevokedException,
-    TokenExpiredException,
-    UserDisabledException,
-    UserNotFoundException,
-    WeakPasswordException,
+    ServiceUnavailableException,
 )
 from user_service.config import settings
-from user_service.dependencies import get_current_user, get_db_session
+from user_service.dependencies import get_db_session
 from user_service.models import User
 from user_service.policies import require_active_user
 from user_service.schemas import (
     AuthBaseResponse,
-    AuthErrorResponse,
     ChangePasswordRequest,
     ChangePasswordResponse,
     LoginRequest,
     LoginResponse,
     LoginResponseData,
+    LoginWithCodeRequest,
     LogoutResponse,
     RefreshResponse,
     RefreshResponseData,
@@ -52,7 +38,6 @@ from user_service.schemas import (
     UserInfoResponse,
     UserInfoResponseData,
     VerifyEmailRequest,
-    LoginWithCodeRequest,
 )
 from user_service.services.auth_service import AuthService
 from user_service.services.email_service import email_service
@@ -60,6 +45,35 @@ from user_service.services.email_service import email_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["认证"])
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    for key in ("access_token", "refresh_token"):
+        response.delete_cookie(
+            key=key,
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite=settings.COOKIE_SAMESITE,
+        )
 
 
 @router.post(
@@ -75,70 +89,31 @@ async def register(
     db: AsyncSession = Depends(get_db_session),
     request_obj: Request = None,
 ) -> RegisterResponse:
-    """
-    用户注册接口
+    user_agent = request_obj.headers.get("user-agent") if request_obj else None
+    ip_address = request_obj.client.host if request_obj and request_obj.client else None
 
-    流程：
-    1. 验证邀请码（调用管理服务）
-    2. 检查邮箱是否已存在
-    3. 验证邮箱验证码
-    4. 创建用户
-    5. 返回用户信息和 Token
-    """
     try:
-        user_agent = request_obj.headers.get("user-agent") if request_obj else None
-        ip_address = request_obj.client.host if request_obj and request_obj.client else None
-
-        # 创建用户（内部会验证邀请码和邮箱验证码）
         user = await AuthService.register(db, request)
-
-        # 自动登录：创建 Token 和会话
         user, access_token, refresh_token = await AuthService.login(
             db, user.email, request.password, user_agent, ip_address
         )
-
-        # 设置 Cookie
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-        )
-
-        return RegisterResponse(
-            code=201,
-            message="注册成功",
-            data=RegisterResponseData(
-                uid=user.uid,
-                email=user.email,
-                created_at=user.created_at,
-                access_token=access_token,
-                expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            ),
-        )
-
-    except (InvalidInvitationCodeException, InvitationCodeUsedException,
-            InvitationCodeDisabledException, InvitationCodeExpiredException) as e:
-        raise e
-    except EmailAlreadyExistsException as e:
-        raise e
-    except WeakPasswordException as e:
-        raise e
-    except ServiceUnavailableException as e:
-        raise e
-    except Exception as e:
+    except Exception:
         logger.exception("用户注册失败")
-        raise e
+        raise
+
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    return RegisterResponse(
+        code=201,
+        message="注册成功",
+        data=RegisterResponseData(
+            uid=user.uid,
+            email=user.email,
+            created_at=user.created_at,
+            access_token=access_token,
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
+    )
 
 
 @router.post(
@@ -153,70 +128,35 @@ async def login(
     db: AsyncSession = Depends(get_db_session),
     request_obj: Request = None,
 ) -> LoginResponse:
-    """
-    用户登录接口
+    user_agent = request_obj.headers.get("user-agent") if request_obj else None
+    ip_address = request_obj.client.host if request_obj and request_obj.client else None
 
-    流程：
-    1. 验证邮箱和密码
-    2. 检查账户状态
-    3. 撤销旧会话
-    4. 创建新会话和 Token
-    5. 设置 Cookie
-    """
     try:
-        # 获取请求信息
-        user_agent = request_obj.headers.get("user-agent")
-        ip_address = request_obj.client.host if request_obj.client else None
-
-        # 执行登录
         user, access_token, refresh_token = await AuthService.login(
             db, request.email, request.password, user_agent, ip_address
         )
-
-        # 设置 Cookie
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-        )
-
-        return LoginResponse(
-            code=200,
-            message="登录成功",
-            data=LoginResponseData(
-                user=UserData(
-                    uid=user.uid,
-                    email=user.email,
-                    status=user.status,
-                    email_verified_at=user.email_verified_at,
-                    last_login_at=user.last_login_at,
-                    created_at=user.created_at,
-                ),
-                access_token=access_token,
-                expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            ),
-        )
-
-    except InvalidCredentialsException as e:
-        raise e
-    except UserDisabledException as e:
-        raise e
-    except EmailNotVerifiedException as e:
-        raise e
-    except Exception as e:
+    except Exception:
         logger.exception("用户登录失败")
-        raise e
+        raise
+
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    return LoginResponse(
+        code=200,
+        message="登录成功",
+        data=LoginResponseData(
+            user=UserData(
+                uid=user.uid,
+                email=user.email,
+                status=user.status,
+                email_verified_at=user.email_verified_at,
+                last_login_at=user.last_login_at,
+                created_at=user.created_at,
+            ),
+            access_token=access_token,
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
+    )
 
 
 @router.post(
@@ -231,63 +171,35 @@ async def login_with_code(
     db: AsyncSession = Depends(get_db_session),
     request_obj: Request = None,
 ) -> LoginResponse:
-    """
-    邮箱验证码登录接口
+    user_agent = request_obj.headers.get("user-agent") if request_obj else None
+    ip_address = request_obj.client.host if request_obj and request_obj.client else None
 
-    适用于：
-    - 忘记密码时的临时登录
-    - 快捷登录场景
-    """
     try:
-        user_agent = request_obj.headers.get("user-agent")
-        ip_address = request_obj.client.host if request_obj.client else None
-
         user, access_token, refresh_token = await AuthService.login_with_code(
             db, request.email, request.code, user_agent, ip_address
         )
-
-        # 设置 Cookie
-        response.set_cookie(
-            key="access_token",
-            value=access_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-        )
-
-        return LoginResponse(
-            code=200,
-            message="登录成功",
-            data=LoginResponseData(
-                user=UserData(
-                    uid=user.uid,
-                    email=user.email,
-                    status=user.status,
-                    email_verified_at=user.email_verified_at,
-                    last_login_at=user.last_login_at,
-                    created_at=user.created_at,
-                ),
-                access_token=access_token,
-                expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            ),
-        )
-
-    except (InvalidCredentialsException, UserNotFoundException) as e:
-        raise e
-    except UserDisabledException as e:
-        raise e
-    except Exception as e:
+    except Exception:
         logger.exception("验证码登录失败")
-        raise e
+        raise
+
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    return LoginResponse(
+        code=200,
+        message="登录成功",
+        data=LoginResponseData(
+            user=UserData(
+                uid=user.uid,
+                email=user.email,
+                status=user.status,
+                email_verified_at=user.email_verified_at,
+                last_login_at=user.last_login_at,
+                created_at=user.created_at,
+            ),
+            access_token=access_token,
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
+    )
 
 
 @router.post(
@@ -301,34 +213,17 @@ async def logout(
     refresh_token: Optional[str] = Cookie(None, alias="refresh_token"),
     db: AsyncSession = Depends(get_db_session),
 ) -> LogoutResponse:
-    """
-    用户登出接口
-
-    流程：
-    1. 从 Cookie 获取刷新令牌
-    2. 在数据库中标记会话为已撤销
-    3. 清除 Cookie
-    """
     try:
         if refresh_token:
             try:
                 await AuthService.logout(db, refresh_token)
             except SessionNotFoundException:
-                # 会话已不存在，忽略错误继续清除 Cookie
                 pass
-
-        # 清除 Cookie
-        response.delete_cookie(key="access_token")
-        response.delete_cookie(key="refresh_token")
-
-        return LogoutResponse(code=200, message="登出成功")
-
-    except Exception as e:
+    except Exception:
         logger.exception("用户登出失败")
-        # 即使失败也清除 Cookie
-        response.delete_cookie(key="access_token")
-        response.delete_cookie(key="refresh_token")
-        return LogoutResponse(code=200, message="登出成功")
+
+    _clear_auth_cookies(response)
+    return LogoutResponse(code=200, message="登出成功")
 
 
 @router.post(
@@ -342,15 +237,6 @@ async def refresh_token(
     refresh_token: Optional[str] = Cookie(None, alias="refresh_token"),
     db: AsyncSession = Depends(get_db_session),
 ) -> RefreshResponse:
-    """
-    刷新访问令牌接口
-
-    流程：
-    1. 从 Cookie 获取刷新令牌
-    2. 验证刷新令牌有效性
-    3. 生成新的访问令牌（和新的刷新令牌）
-    4. 更新 Cookie
-    """
     if not refresh_token:
         raise AuthenticationException(detail="未提供刷新令牌")
 
@@ -358,49 +244,21 @@ async def refresh_token(
         new_access_token, new_refresh_token = await AuthService.refresh_access_token(
             db, refresh_token
         )
+    except Exception:
+        _clear_auth_cookies(response)
+        raise
 
-        # 更新 Cookie
-        response.set_cookie(
-            key="access_token",
-            value=new_access_token,
-            httponly=True,
-            secure=settings.COOKIE_SECURE,
-            samesite=settings.COOKIE_SAMESITE,
-            max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-        if new_refresh_token:
-            response.set_cookie(
-                key="refresh_token",
-                value=new_refresh_token,
-                httponly=True,
-                secure=settings.COOKIE_SECURE,
-                samesite=settings.COOKIE_SAMESITE,
-                max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-            )
+    _set_auth_cookies(response, new_access_token, new_refresh_token)
 
-        return RefreshResponse(
-            code=200,
-            message="刷新成功",
-            data=RefreshResponseData(
-                access_token=new_access_token,
-                refresh_token=new_refresh_token,
-                expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            ),
-        )
-
-    except (InvalidTokenException, TokenExpiredException) as e:
-        # Token 无效或过期，清除 Cookie
-        response.delete_cookie(key="access_token")
-        response.delete_cookie(key="refresh_token")
-        raise e
-    except (SessionNotFoundException, SessionRevokedException, SessionExpiredException) as e:
-        # 会话问题，清除 Cookie
-        response.delete_cookie(key="access_token")
-        response.delete_cookie(key="refresh_token")
-        raise e
-    except Exception as e:
-        logger.exception("刷新令牌失败")
-        raise e
+    return RefreshResponse(
+        code=200,
+        message="刷新成功",
+        data=RefreshResponseData(
+            access_token=new_access_token,
+            refresh_token=new_refresh_token,
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        ),
+    )
 
 
 @router.get(
@@ -412,9 +270,6 @@ async def refresh_token(
 async def get_me(
     current_user: User = Depends(require_active_user),
 ) -> UserInfoResponse:
-    """
-    获取当前登录用户信息
-    """
     return UserInfoResponse(
         code=200,
         message="获取成功",
@@ -441,29 +296,16 @@ async def change_password(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> ChangePasswordResponse:
-    """
-    修改密码接口
-
-    修改成功后会使所有现有会话失效，需要重新登录。
-    """
     try:
         await AuthService.change_password(
             db, current_user, request.old_password, request.new_password, request.lang
         )
-
-        # 清除 Cookie（需要重新登录）
-        response.delete_cookie(key="access_token")
-        response.delete_cookie(key="refresh_token")
-
-        return ChangePasswordResponse(code=200, message="密码修改成功，请重新登录")
-
-    except InvalidCredentialsException as e:
-        raise e
-    except WeakPasswordException as e:
-        raise e
-    except Exception as e:
+    except Exception:
         logger.exception("修改密码失败")
-        raise e
+        raise
+
+    _clear_auth_cookies(response)
+    return ChangePasswordResponse(code=200, message="密码修改成功，请重新登录")
 
 
 @router.post(
@@ -476,28 +318,15 @@ async def reset_password(
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthBaseResponse:
-    """
-    重置密码接口
-
-    流程：
-    1. 验证邮箱验证码
-    2. 更新密码
-    3. 使所有会话失效
-    """
     try:
         await AuthService.reset_password(
             db, request.email, request.code, request.new_password, request.lang
         )
-
-        return AuthBaseResponse(code=200, message="密码重置成功")
-
-    except UserNotFoundException as e:
-        raise e
-    except WeakPasswordException as e:
-        raise e
-    except Exception as e:
+    except Exception:
         logger.exception("重置密码失败")
-        raise e
+        raise
+
+    return AuthBaseResponse(code=200, message="密码重置成功")
 
 
 @router.post(
@@ -510,25 +339,16 @@ async def send_email_code(
     request: SendEmailCodeRequest,
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthBaseResponse:
-    """
-    发送邮箱验证码接口
-
-    用途：
-    - register: 用户注册
-    - reset_password: 重置密码
-    - login: 验证码登录
-    - verify: 邮箱验证
-    """
     try:
         sent, message = await email_service.send_verification_code(db, request.email, request.purpose)
-        if not sent:
-            raise ServiceUnavailableException(detail=message)
-
-        return AuthBaseResponse(code=200, message="验证码已发送")
-
-    except Exception as e:
+    except Exception:
         logger.exception("发送验证码失败")
-        raise e
+        raise
+
+    if not sent:
+        raise ServiceUnavailableException(detail=message)
+
+    return AuthBaseResponse(code=200, message="验证码已发送")
 
 
 @router.post(
@@ -541,18 +361,10 @@ async def verify_email(
     request: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthBaseResponse:
-    """
-    验证邮箱接口
-
-    验证成功后标记用户邮箱为已验证。
-    """
     try:
         await AuthService.verify_email(db, request.email, request.code)
-
-        return AuthBaseResponse(code=200, message="邮箱验证成功")
-
-    except (InvalidCredentialsException, Exception) as e:
-        if isinstance(e, InvalidCredentialsException):
-            raise
+    except Exception:
         logger.exception("验证邮箱失败")
-        raise e
+        raise
+
+    return AuthBaseResponse(code=200, message="邮箱验证成功")

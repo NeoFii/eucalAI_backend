@@ -155,7 +155,13 @@ async def list_topup_orders(
     }
 
 
-@router.get("/usage", response_model=ApiResponse[list[UsageStatItem]], summary="List usage stats")
+@router.get(
+    "/usage",
+    response_model=ApiResponse[list[UsageStatItem]],
+    summary="List usage stats",
+    description="NOT YET WIRED: router-service does not produce usage data yet. Returns empty results.",
+    deprecated=True,
+)
 async def list_usage_stats(
     start: datetime | None = None,
     end: datetime | None = None,
@@ -184,6 +190,8 @@ async def list_usage_stats(
     "/usage/logs",
     response_model=ApiResponse[PaginatedResponse[ApiCallLogItem]],
     summary="List usage logs",
+    description="NOT YET WIRED: router-service does not produce call logs yet. Returns empty results.",
+    deprecated=True,
 )
 async def list_usage_logs(
     page: int = Query(1, ge=1),

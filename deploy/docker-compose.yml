@@ -1,9 +1,10 @@
-# Backend compose topology: backend app + router + inference.
+# Backend compose topology: backend app + router + inference + user worker.
 #
 # Topology:
 #   - backend-app :8001  (admin + user merged)
 #   - router-service :8003  (CPU gateway, scalable via `deploy.replicas`)
 #   - inference-svc :8004  (GPU inference, Qwen + CG-TabM)
+#   - user-worker          (arq: usage aggregation, invitation release, code cleanup)
 #
 # MySQL lives outside compose (managed separately).
 
@@ -121,6 +122,30 @@ services:
       timeout: 15s
       retries: 3
       start_period: 120s
+    networks:
+      - eucal_network
+
+  user-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: user-worker
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    environment:
+      USER_DATABASE_URL: "${USER_DATABASE_URL:-mysql+aiomysql://root:${DB_PASSWORD}@eucal_mysql:3306/eucal_ai_user}"
+      USER_QUEUE_REDIS_URL: "${USER_QUEUE_REDIS_URL:-redis://redis:6379/1}"
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      ADMIN_SERVICE_URL: "http://backend-app:8001"
+      SNOWFLAKE_DATACENTER_ID: ${SNOWFLAKE_DATACENTER_ID:-1}
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/arq", "user_service.worker.WorkerSettings"]
+    volumes:
+      - backend_logs:/app/logs
+    depends_on:
+      backend-app:
+        condition: service_healthy
     networks:
       - eucal_network
 
