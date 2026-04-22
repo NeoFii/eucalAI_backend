@@ -9,6 +9,8 @@ from user_service.models.topup_order import TopupOrder
 from user_service.models.api_call_log import ApiCallLog
 from user_service.models.usage_stat import UsageStat
 from user_service.models.invitation_release_outbox import InvitationReleaseOutbox
+from user_service.models.user_voucher import UserVoucher
+from user_service.models.voucher_transaction import VoucherTransaction
 
 SERVICE_MODELS = [
     User,
@@ -20,6 +22,8 @@ SERVICE_MODELS = [
     ApiCallLog,
     UsageStat,
     InvitationReleaseOutbox,
+    UserVoucher,
+    VoucherTransaction,
 ]
 
 __all__ = [
@@ -32,4 +36,6 @@ __all__ = [
     "ApiCallLog",
     "UsageStat",
     "InvitationReleaseOutbox",
+    "UserVoucher",
+    "VoucherTransaction",
 ]

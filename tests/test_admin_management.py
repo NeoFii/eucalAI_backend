@@ -189,6 +189,88 @@ def test_admin_snapshot_excludes_password_hash():
 
 
 @pytest.mark.asyncio
+async def test_create_user_voucher_endpoint_delegates_and_records_audit(monkeypatch):
+    from admin_service.api.v1.endpoints.vouchers import create_user_voucher
+    from admin_service.models import AdminUser
+    from admin_service.schemas.voucher import CreateVoucherRequest
+
+    current_admin = AdminUser(
+        id=1,
+        uid=99,
+        email="super@example.com",
+        password_hash="hash",
+        name="Super",
+        role="super_admin",
+        status=1,
+    )
+    expires_at = datetime(2026, 5, 1, 12, 0, 0)
+    captured = {}
+
+    async def fake_create_voucher(**kwargs):
+        captured["gateway"] = kwargs
+        return {
+            "id": 10,
+            "user_id": 5,
+            "status": 1,
+            "original_amount": 800,
+            "remaining_amount": 800,
+            "frozen_amount": 0,
+            "used_amount": 0,
+            "expires_at": expires_at,
+            "created_by_admin_uid": 99,
+            "remark": "launch credit",
+            "created_at": expires_at,
+            "updated_at": expires_at,
+        }
+
+    async def fake_record(db, **kwargs):
+        captured["audit"] = {"db": db, **kwargs}
+
+    monkeypatch.setattr(
+        "admin_service.api.v1.endpoints.vouchers._gateway.create_voucher",
+        fake_create_voucher,
+    )
+    monkeypatch.setattr(
+        "admin_service.api.v1.endpoints.vouchers.AdminAuditService.record",
+        fake_record,
+    )
+
+    fake_db = SimpleNamespace(commit_calls=0)
+
+    async def fake_commit():
+        fake_db.commit_calls += 1
+
+    fake_db.commit = fake_commit
+    response = await create_user_voucher(
+        payload=CreateVoucherRequest(
+            uid=1001,
+            amount=800,
+            expires_at=expires_at,
+            remark="launch credit",
+        ),
+        request=SimpleNamespace(
+            client=SimpleNamespace(host="127.0.0.1"),
+            headers={"user-agent": "pytest"},
+        ),
+        current_admin=current_admin,
+        db=fake_db,
+    )
+
+    assert response.data.id == 10
+    assert captured["gateway"] == {
+        "uid": 1001,
+        "amount": 800,
+        "expires_at": expires_at,
+        "operator_uid": 99,
+        "remark": "launch credit",
+    }
+    assert captured["audit"]["action"] == "create_voucher"
+    assert captured["audit"]["resource_type"] == "voucher"
+    assert captured["audit"]["resource_id"] == "10"
+    assert fake_db.commit_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_create_admin_user_endpoint_returns_created_admin(monkeypatch):
     from admin_service.api.v1.endpoints.admin_users import create_admin_user
     from admin_service.schemas import CreateAdminRequest

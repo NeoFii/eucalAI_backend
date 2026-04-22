@@ -16,6 +16,7 @@ from common.internal import (
     InternalServiceResponseError,
     get_internal_json,
     post_internal_json,
+    request_internal_json,
 )
 
 IDENTITY_TIMEOUT_SECONDS = 3.0
@@ -251,6 +252,96 @@ class UserManagementGateway(BaseGateway):
             return await get_internal_json(
                 path="/api/v1/internal/usage/stats",
                 query_params=qp,
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def create_voucher(
+        self,
+        *,
+        uid: int,
+        amount: int,
+        expires_at,
+        operator_uid: int,
+        remark: str | None,
+    ) -> dict:
+        try:
+            return await post_internal_json(
+                path="/api/v1/internal/vouchers",
+                json_body={
+                    "uid": uid,
+                    "amount": amount,
+                    "expires_at": expires_at.isoformat() if expires_at else None,
+                    "operator_uid": operator_uid,
+                    "remark": remark,
+                },
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def list_vouchers(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        user_id: int | None = None,
+        status: int | None = None,
+    ) -> dict:
+        try:
+            qp: dict = {"page": page, "page_size": page_size}
+            if user_id is not None:
+                qp["user_id"] = user_id
+            if status is not None:
+                qp["status"] = status
+            return await get_internal_json(
+                path="/api/v1/internal/vouchers",
+                query_params=qp,
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def get_voucher(self, voucher_id: int) -> dict:
+        try:
+            return await get_internal_json(
+                path=f"/api/v1/internal/vouchers/{voucher_id}",
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def update_voucher(
+        self,
+        voucher_id: int,
+        *,
+        status: int | None,
+        expires_at,
+        operator_uid: int,
+        remark: str | None,
+    ) -> dict:
+        try:
+            return await request_internal_json(
+                method="PATCH",
+                path=f"/api/v1/internal/vouchers/{voucher_id}",
+                json_body={
+                    "status": status,
+                    "expires_at": expires_at.isoformat() if expires_at else None,
+                    "operator_uid": operator_uid,
+                    "remark": remark,
+                },
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def delete_voucher(self, voucher_id: int, *, operator_uid: int) -> dict:
+        try:
+            return await request_internal_json(
+                method="DELETE",
+                path=f"/api/v1/internal/vouchers/{voucher_id}",
+                json_body={"operator_uid": operator_uid},
                 **self._common_kwargs(),
             )
         except InternalServiceError as exc:

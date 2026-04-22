@@ -19,6 +19,7 @@ from user_service.services.auth_service import AuthService
 from user_service.services.balance_service import BalanceService
 from user_service.services.topup_order_service import TopupOrderService
 from user_service.services.usage_stat_service import UsageStatService
+from user_service.services.voucher_service import VoucherService
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 verify_internal_secret = build_internal_auth_dependency(
@@ -204,6 +205,49 @@ class InternalUsageStatItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InternalVoucherCreateRequest(BaseModel):
+    uid: int
+    amount: int
+    expires_at: datetime | None = None
+    operator_uid: int | None = None
+    remark: str | None = None
+
+
+class InternalVoucherUpdateRequest(BaseModel):
+    status: int | None = None
+    expires_at: datetime | None = None
+    operator_uid: int | None = None
+    remark: str | None = None
+
+
+class InternalVoucherDeleteRequest(BaseModel):
+    operator_uid: int | None = None
+
+
+class InternalVoucherItem(BaseModel):
+    id: int
+    user_id: int
+    status: int
+    original_amount: int
+    remaining_amount: int
+    frozen_amount: int
+    used_amount: int
+    expires_at: datetime | None = None
+    created_by_admin_uid: int | None = None
+    remark: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InternalVoucherListResponse(BaseModel):
+    items: list[InternalVoucherItem]
+    total: int
+    page: int
+    page_size: int
+
+
 @router.get("/users/{uid}", response_model=InternalUserResponse, summary="Get user by uid")
 async def get_user_by_uid(
     uid: int,
@@ -253,6 +297,98 @@ async def get_user_stats(
 ) -> InternalUserStatsResponse:
     total_users = await UserRepository(db).count_all()
     return InternalUserStatsResponse(total_users=total_users)
+
+
+@router.post("/vouchers", response_model=InternalVoucherItem, summary="Create voucher")
+async def create_voucher(
+    payload: InternalVoucherCreateRequest,
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> InternalVoucherItem:
+    user = await _get_user_or_404(db, payload.uid)
+    voucher = await VoucherService.create(
+        db,
+        user_id=int(user.id),
+        amount=payload.amount,
+        expires_at=payload.expires_at,
+        created_by_admin_uid=payload.operator_uid,
+        remark=payload.remark,
+    )
+    return InternalVoucherItem.model_validate(voucher)
+
+
+@router.get("/vouchers", response_model=InternalVoucherListResponse, summary="List vouchers")
+async def list_vouchers(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user_id: int | None = None,
+    status_filter: int | None = Query(None, alias="status"),
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> InternalVoucherListResponse:
+    result = await VoucherService.list_for_admin(
+        db,
+        params=ListParams(page=page, page_size=page_size, order_by="created_at"),
+        user_id=user_id,
+        status=status_filter,
+    )
+    return InternalVoucherListResponse(
+        items=[InternalVoucherItem.model_validate(voucher) for voucher in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
+
+
+@router.get("/vouchers/{voucher_id}", response_model=InternalVoucherItem, summary="Get voucher")
+async def get_voucher(
+    voucher_id: int,
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> InternalVoucherItem:
+    voucher = await VoucherService.get(db, voucher_id)
+    return InternalVoucherItem.model_validate(voucher)
+
+
+@router.patch(
+    "/vouchers/{voucher_id}",
+    response_model=InternalVoucherItem,
+    summary="Update voucher",
+)
+async def update_voucher(
+    voucher_id: int,
+    payload: InternalVoucherUpdateRequest,
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> InternalVoucherItem:
+    voucher = await VoucherService.update(
+        db,
+        voucher_id=voucher_id,
+        status=payload.status,
+        expires_at=payload.expires_at,
+        operator_id=payload.operator_uid,
+        remark=payload.remark,
+    )
+    return InternalVoucherItem.model_validate(voucher)
+
+
+@router.delete(
+    "/vouchers/{voucher_id}",
+    response_model=InternalVoucherItem,
+    summary="Delete voucher",
+)
+async def delete_voucher(
+    voucher_id: int,
+    payload: InternalVoucherDeleteRequest,
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> InternalVoucherItem:
+    voucher = await VoucherService.delete(
+        db,
+        voucher_id=voucher_id,
+        operator_id=payload.operator_uid,
+    )
+    return InternalVoucherItem.model_validate(voucher)
 
 
 # --- Admin user-management endpoints ---

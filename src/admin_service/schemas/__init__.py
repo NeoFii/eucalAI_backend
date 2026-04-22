@@ -62,6 +62,14 @@ from admin_service.schemas.user_management import (
     UserUsageStatItem,
     UserUsageStatListResponse,
 )
+from admin_service.schemas.voucher import (
+    CreateVoucherRequest,
+    UpdateVoucherRequest,
+    VoucherItem,
+    VoucherListResponse,
+    VoucherOperationResponse,
+    VoucherResponse,
+)
 
 __all__ = [
     "AdminAuditActor",
@@ -87,6 +95,7 @@ __all__ = [
     "CreateAdminRequest",
     "CreateAdminResponse",
     "CreateAdminResponseData",
+    "CreateVoucherRequest",
     "DashboardStatsResponse",
     "DashboardStatsResponseData",
     "DateTimeModel",
@@ -105,6 +114,7 @@ __all__ = [
     "UpdateAdminStatusRequest",
     "UpdateInvitationCodeRequest",
     "UpdateUserStatusRequest",
+    "UpdateVoucherRequest",
     "UserApiKeyItem",
     "UserApiKeyListResponse",
     "UserDetailData",
@@ -118,4 +128,8 @@ __all__ = [
     "UserUsageLogListResponse",
     "UserUsageStatItem",
     "UserUsageStatListResponse",
+    "VoucherItem",
+    "VoucherListResponse",
+    "VoucherOperationResponse",
+    "VoucherResponse",
 ]
