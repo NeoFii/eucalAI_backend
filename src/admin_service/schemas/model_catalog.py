@@ -1,0 +1,156 @@
+"""Model catalog API schemas."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
+from common.api import PaginatedResponse
+
+
+class ModelVendorItem(DateTimeModel):
+    id: int
+    slug: str
+    name: str
+    logo_url: str | None = None
+    is_active: bool
+    sort_order: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ModelVendorBrief(BaseModel):
+    id: int
+    slug: str
+    name: str
+    logo_url: str | None = None
+
+
+class ModelCategoryItem(DateTimeModel):
+    id: int
+    key: str
+    name: str
+    sort_order: int
+    is_active: bool
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ModelCategoryBrief(BaseModel):
+    key: str
+    name: str
+    sort_order: int
+
+
+class ModelOfferingItem(BaseModel):
+    id: int
+    provider: dict
+    price_input_per_m: float | None = None
+    price_output_per_m: float | None = None
+    price_updated_at: datetime | None = None
+    is_active: bool = True
+    metrics: dict | None = None
+
+
+class SupportedModelItem(DateTimeModel):
+    id: int
+    slug: str
+    name: str
+    description: str | None = None
+    capability_tags: list[str] = Field(default_factory=list)
+    context_window: int | None = None
+    max_output_tokens: int | None = None
+    is_reasoning_model: bool
+    sort_order: int
+    vendor: ModelVendorBrief
+    categories: list[ModelCategoryBrief] = Field(default_factory=list)
+
+
+class SupportedModelDetail(SupportedModelItem):
+    is_active: bool
+    offerings: list[ModelOfferingItem] = Field(default_factory=list)
+
+
+class ModelVendorCreate(BaseModel):
+    slug: str = Field(..., min_length=1, max_length=80)
+    name: str = Field(..., min_length=1, max_length=120)
+    logo_url: str | None = Field(default=None, max_length=512)
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class ModelVendorUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    logo_url: str | None = Field(default=None, max_length=512)
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
+class ModelCategoryCreate(BaseModel):
+    key: str = Field(..., min_length=1, max_length=80)
+    name: str = Field(..., min_length=1, max_length=120)
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ModelCategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class SupportedModelCreate(BaseModel):
+    slug: str = Field(..., min_length=1, max_length=120)
+    name: str = Field(..., min_length=1, max_length=160)
+    vendor_slug: str = Field(..., min_length=1, max_length=80)
+    description: str | None = None
+    capability_tags: list[str] = Field(default_factory=list)
+    context_window: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
+    is_reasoning_model: bool = False
+    is_active: bool = True
+    sort_order: int = 0
+    category_keys: list[str] = Field(default_factory=list)
+
+
+class SupportedModelUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    vendor_slug: str | None = Field(default=None, min_length=1, max_length=80)
+    description: str | None = None
+    capability_tags: list[str] | None = None
+    context_window: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
+    is_reasoning_model: bool | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
+    category_keys: list[str] | None = None
+
+
+class ModelVendorListResponse(AdminBaseResponse):
+    data: PaginatedResponse[ModelVendorItem] | None = None
+
+
+class ModelVendorResponse(AdminBaseResponse):
+    data: ModelVendorItem | None = None
+
+
+class ModelCategoryListResponse(AdminBaseResponse):
+    data: PaginatedResponse[ModelCategoryItem] | None = None
+
+
+class ModelCategoryResponse(AdminBaseResponse):
+    data: ModelCategoryItem | None = None
+
+
+class SupportedModelListResponse(AdminBaseResponse):
+    data: PaginatedResponse[SupportedModelItem] | None = None
+
+
+class SupportedModelResponse(AdminBaseResponse):
+    data: SupportedModelDetail | None = None
+
+
+class ModelCatalogOperationResponse(AdminBaseResponse):
+    pass

@@ -5,7 +5,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REFERENCE_PATTERN = re.compile(r"REFERENCES `(?P<table>[^`]+)`")
 SERVICE_OWNED_OBJECTS = {
-    "admin": {"admin_users", "admin_audit_logs", "invitation_codes"},
+    "admin": {
+        "admin_users",
+        "admin_audit_logs",
+        "invitation_codes",
+        "model_vendors",
+        "model_categories",
+        "supported_models",
+        "supported_model_category_map",
+    },
     "user": {
         "users",
         "user_sessions",

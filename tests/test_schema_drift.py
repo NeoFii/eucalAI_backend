@@ -23,7 +23,15 @@ CREATE_VIEW_PATTERN = re.compile(
 OWNED_SCHEMAS = {
     "admin": {
         "schema": ROOT / "scripts" / "sql" / "admin_schema.sql",
-        "tables": ["admin_users", "admin_audit_logs", "invitation_codes"],
+        "tables": [
+            "admin_users",
+            "admin_audit_logs",
+            "invitation_codes",
+            "model_vendors",
+            "model_categories",
+            "supported_models",
+            "supported_model_category_map",
+        ],
         "views": [],
         "base": admin_db.Base,
     },

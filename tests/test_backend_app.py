@@ -67,6 +67,11 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     assert ("GET", "/api/v1/keys") in pairs
     assert ("POST", "/api/v1/admin/users/{uid}/topup") in pairs
     assert ("POST", "/api/v1/admin/vouchers") in pairs
+    assert ("GET", "/api/v1/model-vendors") in pairs
+    assert ("GET", "/api/v1/models/categories") in pairs
+    assert ("GET", "/api/v1/models") in pairs
+    assert ("GET", "/api/v1/models/{slug}") in pairs
+    assert ("POST", "/api/v1/admin/model-catalog/models") in pairs
     # user internal contracts
     assert any(p.startswith("/api/v1/internal/users") for p in paths_by_prefix)
 
@@ -76,10 +81,9 @@ def test_removed_management_routes_are_not_registered_under_backend_app():
     paths_by_prefix = {path for _, path in pairs}
 
     assert not any(p.startswith("/api/v1/benchmark") for p in paths_by_prefix)
-    assert not any(p.startswith("/api/v1/models") for p in paths_by_prefix)
+    assert not any(p.startswith("/api/v1/model-providers") for p in paths_by_prefix)
     assert not any(p.startswith("/api/v1/providers") for p in paths_by_prefix)
     assert not any(p.startswith("/api/v1/vendors") for p in paths_by_prefix)
-    assert not any(p.startswith("/api/v1/model-providers") for p in paths_by_prefix)
     assert not any(p.startswith("/api/v1/internal/router") for p in paths_by_prefix)
 
 
