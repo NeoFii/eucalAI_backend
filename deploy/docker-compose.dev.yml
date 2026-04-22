@@ -1,0 +1,48 @@
+# Local development: MySQL + Redis infrastructure (ports offset to avoid Windows conflicts)
+# Usage: docker compose -f deploy/docker-compose.dev.yml up -d
+#
+# Then run services directly on host:
+#   uv run migrate --service user-service upgrade head
+#   uv run uvicorn user_service.main:app --host 0.0.0.0 --port 8000 --reload
+#
+# Ports: MySQL 3307, Redis 6380 (Windows uses 3306/6379)
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: eucal-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: abc123
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pabc123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: eucal-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+    name: eucal_dev_mysql
