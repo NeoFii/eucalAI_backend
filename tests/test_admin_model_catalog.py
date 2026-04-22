@@ -45,7 +45,10 @@ def test_catalog_service_serializes_supported_model_with_vendor_and_categories()
         slug="deepseek-v3-2",
         name="DeepSeek-V3.2",
         vendor=vendor,
+        summary="General-purpose flagship for coding workflows",
         description="DeepSeek latest general-purpose chat model",
+        price_input_per_m_fen=120,
+        price_output_per_m_fen=240,
         capability_tags=["chat", "coding", "reasoning"],
         context_window=128000,
         max_output_tokens=8192,
@@ -63,6 +66,10 @@ def test_catalog_service_serializes_supported_model_with_vendor_and_categories()
     assert item.slug == "deepseek-v3-2"
     assert item.name == "DeepSeek-V3.2"
     assert item.vendor.slug == "deepseek"
+    assert item.summary == "General-purpose flagship for coding workflows"
+    assert item.description == "DeepSeek latest general-purpose chat model"
+    assert item.price_input_per_m_fen == 120
+    assert item.price_output_per_m_fen == 240
     assert item.capability_tags == ["chat", "coding", "reasoning"]
     assert [category.key for category in item.categories] == ["reasoning", "coding"]
     assert item.offerings == []
@@ -122,7 +129,10 @@ async def _fake_list_models(db, **kwargs):
             id=1,
             slug="deepseek-v3-2",
             name="DeepSeek-V3.2",
+            summary="General-purpose flagship for coding workflows",
             description=None,
+            price_input_per_m_fen=120,
+            price_output_per_m_fen=240,
             capability_tags=["chat"],
             context_window=128000,
             max_output_tokens=8192,
@@ -147,13 +157,45 @@ async def _fake_create_model(db, payload):
         id=2,
         slug=payload.slug,
         name=payload.name,
+        summary=payload.summary,
         description=payload.description,
+        price_input_per_m_fen=payload.price_input_per_m_fen,
+        price_output_per_m_fen=payload.price_output_per_m_fen,
         capability_tags=payload.capability_tags,
         context_window=payload.context_window,
         max_output_tokens=payload.max_output_tokens,
         is_reasoning_model=payload.is_reasoning_model,
         is_active=payload.is_active,
         sort_order=payload.sort_order,
+        vendor=ModelVendorBrief(id=1, slug="deepseek", name="DeepSeek"),
+        categories=[ModelCategoryBrief(key="reasoning", name="Reasoning", sort_order=1)],
+        offerings=[],
+    )
+
+
+async def _fake_update_model(db, slug, payload):
+    from admin_service.schemas.model_catalog import (
+        ModelCategoryBrief,
+        ModelVendorBrief,
+        SupportedModelDetail,
+    )
+
+    assert db == "db"
+    assert slug == "deepseek-r1"
+    return SupportedModelDetail(
+        id=2,
+        slug=slug,
+        name=payload.name or "DeepSeek-R1",
+        summary=payload.summary,
+        description=payload.description,
+        price_input_per_m_fen=payload.price_input_per_m_fen,
+        price_output_per_m_fen=payload.price_output_per_m_fen,
+        capability_tags=payload.capability_tags or ["reasoning"],
+        context_window=payload.context_window or 128000,
+        max_output_tokens=payload.max_output_tokens or 8192,
+        is_reasoning_model=payload.is_reasoning_model if payload.is_reasoning_model is not None else True,
+        is_active=payload.is_active if payload.is_active is not None else True,
+        sort_order=payload.sort_order or 30,
         vendor=ModelVendorBrief(id=1, slug="deepseek", name="DeepSeek"),
         categories=[ModelCategoryBrief(key="reasoning", name="Reasoning", sort_order=1)],
         offerings=[],
@@ -174,7 +216,10 @@ async def _fake_get_model(db, slug, *, active_only):
         id=1,
         slug=slug,
         name="DeepSeek-V3.2",
-        description=None,
+        summary="General-purpose flagship for coding workflows",
+        description="Full detail body for detail page",
+        price_input_per_m_fen=120,
+        price_output_per_m_fen=240,
         capability_tags=["chat"],
         context_window=128000,
         max_output_tokens=8192,
@@ -227,7 +272,11 @@ async def test_public_catalog_endpoints_delegate_filters_and_wrap_responses(monk
     assert vendors.data.items[0].slug == "deepseek"
     assert categories.data.items[0].key == "reasoning"
     assert models.data.items[0].name == "DeepSeek-V3.2"
+    assert models.data.items[0].summary == "General-purpose flagship for coding workflows"
+    assert models.data.items[0].price_input_per_m_fen == 120
     assert detail.data.offerings == []
+    assert detail.data.description == "Full detail body for detail page"
+    assert detail.data.price_output_per_m_fen == 240
 
 
 @pytest.mark.asyncio
@@ -256,7 +305,10 @@ async def test_admin_catalog_create_model_delegates_to_service(monkeypatch):
             slug="deepseek-r1",
             name="DeepSeek-R1",
             vendor_slug="deepseek",
+            summary="Reasoning-first model card summary",
             description="Reasoning model",
+            price_input_per_m_fen=321,
+            price_output_per_m_fen=654,
             capability_tags=["reasoning"],
             context_window=128000,
             max_output_tokens=8192,
@@ -270,5 +322,48 @@ async def test_admin_catalog_create_model_delegates_to_service(monkeypatch):
     )
 
     assert response.data.slug == "deepseek-r1"
+    assert response.data.summary == "Reasoning-first model card summary"
+    assert response.data.price_input_per_m_fen == 321
+    assert response.data.price_output_per_m_fen == 654
     assert response.data.vendor.slug == "deepseek"
     assert [category.key for category in response.data.categories] == ["reasoning"]
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_update_model_accepts_summary_and_fen_fields(monkeypatch):
+    from admin_service.api.v1.endpoints import model_catalog_admin
+    from admin_service.models import AdminUser
+    from admin_service.schemas.model_catalog import SupportedModelUpdate
+
+    monkeypatch.setattr(
+        model_catalog_admin.ModelCatalogService,
+        "update_model",
+        staticmethod(_fake_update_model),
+    )
+    current_admin = AdminUser(
+        id=1,
+        uid=99,
+        email="super@example.com",
+        password_hash="hash",
+        name="Super",
+        role="super_admin",
+        status=1,
+    )
+
+    response = await model_catalog_admin.update_supported_model(
+        slug="deepseek-r1",
+        payload=SupportedModelUpdate(
+            summary="更新后的卡片摘要",
+            description="更新后的详情正文",
+            price_input_per_m_fen=888,
+            price_output_per_m_fen=999,
+        ),
+        _current_admin=current_admin,
+        db="db",
+    )
+
+    assert response.data.slug == "deepseek-r1"
+    assert response.data.summary == "更新后的卡片摘要"
+    assert response.data.description == "更新后的详情正文"
+    assert response.data.price_input_per_m_fen == 888
+    assert response.data.price_output_per_m_fen == 999

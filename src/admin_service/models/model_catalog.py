@@ -69,7 +69,10 @@ class SupportedModel(Base, SnowflakeIdMixin, TimestampMixin):
         index=True,
         comment="Model vendor id",
     )
-    description = Column(Text, nullable=True, comment="Model summary")
+    summary = Column(String(255), nullable=True, comment="Model card summary")
+    description = Column(Text, nullable=True, comment="Model detail description")
+    price_input_per_m_fen = Column(Integer, nullable=True, comment="Input price per million tokens in fen")
+    price_output_per_m_fen = Column(Integer, nullable=True, comment="Output price per million tokens in fen")
     capability_tags = Column(JSON, nullable=False, default=list, comment="Capability tag list")
     context_window = Column(Integer, nullable=True, comment="Context window tokens")
     max_output_tokens = Column(Integer, nullable=True, comment="Max output tokens")

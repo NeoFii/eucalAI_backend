@@ -134,6 +134,7 @@ class SupportedModelRepository(BaseRepository[SupportedModel]):
                 or_(
                     SupportedModel.slug.ilike(pattern),
                     SupportedModel.name.ilike(pattern),
+                    SupportedModel.summary.ilike(pattern),
                     SupportedModel.description.ilike(pattern),
                 )
             )

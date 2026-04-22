@@ -58,7 +58,10 @@ class SupportedModelItem(DateTimeModel):
     id: int
     slug: str
     name: str
+    summary: str | None = None
     description: str | None = None
+    price_input_per_m_fen: int | None = None
+    price_output_per_m_fen: int | None = None
     capability_tags: list[str] = Field(default_factory=list)
     context_window: int | None = None
     max_output_tokens: int | None = None
@@ -105,7 +108,10 @@ class SupportedModelCreate(BaseModel):
     slug: str = Field(..., min_length=1, max_length=120)
     name: str = Field(..., min_length=1, max_length=160)
     vendor_slug: str = Field(..., min_length=1, max_length=80)
+    summary: str | None = Field(default=None, max_length=255)
     description: str | None = None
+    price_input_per_m_fen: int | None = Field(default=None, ge=0)
+    price_output_per_m_fen: int | None = Field(default=None, ge=0)
     capability_tags: list[str] = Field(default_factory=list)
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
@@ -118,7 +124,10 @@ class SupportedModelCreate(BaseModel):
 class SupportedModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     vendor_slug: str | None = Field(default=None, min_length=1, max_length=80)
+    summary: str | None = Field(default=None, max_length=255)
     description: str | None = None
+    price_input_per_m_fen: int | None = Field(default=None, ge=0)
+    price_output_per_m_fen: int | None = Field(default=None, ge=0)
     capability_tags: list[str] | None = None
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
