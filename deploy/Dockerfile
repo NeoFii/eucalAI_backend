@@ -33,9 +33,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --chown=appuser:appuser src/common/ /app/src/common/
 COPY --chown=appuser:appuser src/user_service/ /app/src/user_service/
 COPY --chown=appuser:appuser src/admin_service/ /app/src/admin_service/
-COPY --chown=appuser:appuser src/testing_service/ /app/src/testing_service/
 COPY --chown=appuser:appuser src/router_service/ /app/src/router_service/
-COPY --chown=appuser:appuser src/content_service/ /app/src/content_service/
 COPY --chown=appuser:appuser src/backend_app/ /app/src/backend_app/
 COPY --chown=appuser:appuser migrations/ /app/migrations/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
@@ -50,6 +48,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 USER appuser
 
-EXPOSE 8000 8001 8002 8003 8004 8012
+EXPOSE 8000 8001 8003 8004
 
 CMD ["/app/.venv/bin/uvicorn", "backend_app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]

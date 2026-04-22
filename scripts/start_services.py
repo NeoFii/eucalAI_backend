@@ -28,7 +28,6 @@ SERVICES = {
         "port": 8001,
         "color": "\033[94m",
         "env": {
-            "PROBE_SCHEDULER_ENABLED": "false",
             "PORT": "8001",
         },
     },
@@ -37,16 +36,6 @@ SERVICES = {
         "app": "admin_service.main:app",
         "port": 8001,
         "color": "\033[94m",
-    },
-    "testing-service": {
-        "name": "testing-service",
-        "app": "testing_service.main:app",
-        "port": 8002,
-        "color": "\033[95m",
-        "env": {
-            "PROBE_SCHEDULER_ENABLED": "false",
-            "PORT": "8002",
-        },
     },
     "router-service": {
         "name": "router-service",
@@ -60,32 +49,11 @@ SERVICES = {
         "port": 8004,
         "color": "\033[35m",
     },
-    "testing-scheduler": {
-        "name": "testing-scheduler",
-        "app": "testing_service.main:app",
-        "port": 8012,
-        "color": "\033[90m",
-        "env": {
-            "PROBE_SCHEDULER_ENABLED": "true",
-            "PORT": "8012",
-        },
-    },
-    "testing-worker": {
-        "name": "testing-worker",
-        "cmd": [sys.executable, "-m", "arq", "testing_service.worker.WorkerSettings"],
-        "color": "\033[93m",
-        "healthcheck": False,
-        "env": {
-            "PROBE_SCHEDULER_ENABLED": "false",
-        },
-    },
 }
 DEFAULT_SERVICES = [
     "backend-app",
     "inference-service",
     "router-service",
-    "testing-worker",
-    "testing-scheduler",
 ]
 START_ORDER = {
     service_name: index
@@ -93,11 +61,8 @@ START_ORDER = {
         [
             "backend-app",
             "admin-service",
-            "testing-service",
             "inference-service",
             "router-service",
-            "testing-worker",
-            "testing-scheduler",
         ]
     )
 }

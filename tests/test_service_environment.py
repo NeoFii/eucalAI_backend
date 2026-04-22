@@ -23,12 +23,12 @@ def test_validate_environment_requires_common_secrets_and_service_database_urls(
 def test_validate_environment_rejects_duplicate_database_urls():
     shared = "mysql+aiomysql://root:pw@localhost:3306/shared_db"
     result = validate_environment(
-        ["admin-service", "router-service"],
+        ["admin-service", "user-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "internal-secret",
             "ADMIN_DATABASE_URL": shared,
-            "ROUTER_DATABASE_URL": shared,
+            "USER_DATABASE_URL": shared,
         },
     )
 
@@ -36,51 +36,33 @@ def test_validate_environment_rejects_duplicate_database_urls():
     assert any("share the same database URL" in item for item in result.errors)
 
 
-def test_validate_environment_allows_shared_url_for_testing_service_and_worker():
-    shared = "mysql+aiomysql://root:pw@localhost:3306/testing_db"
-    result = validate_environment(
-        ["testing-service", "testing-worker"],
-        environ={
-            "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
-            "TESTING_DATABASE_URL": shared,
-            "BENCHMARK_QUEUE_REDIS_URL": "redis://127.0.0.1:6379/0",
-        },
-    )
-
-    assert result.ok
-    assert result.errors == []
-
-
 def test_validate_environment_warns_about_ignored_generic_database_url():
     result = validate_environment(
-        ["testing-service"],
+        ["backend-app"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "internal-secret",
-            "TESTING_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/testing_db",
-            "BENCHMARK_QUEUE_REDIS_URL": "redis://127.0.0.1:6379/0",
+            "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
+            "USER_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/user_db",
             "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
         },
     )
 
     assert result.ok
     assert "DATABASE_URL is set but ignored; use service-specific *_DATABASE_URL values" in result.warnings
-    assert any("TESTING_SECRET_MASTER_KEY is empty" in item for item in result.warnings)
 
 
-def test_validate_environment_requires_redis_for_testing_worker():
+def test_validate_environment_accepts_db_less_router_and_inference_services():
     result = validate_environment(
-        ["testing-worker"],
+        ["router-service", "inference-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "internal-secret",
-            "TESTING_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/testing_db",
         },
     )
 
-    assert not result.ok
-    assert "Missing BENCHMARK_QUEUE_REDIS_URL for testing-worker" in result.errors
+    assert result.ok
+    assert result.errors == []
 
 
 def test_validate_environment_validates_auth_cookie_settings():
@@ -106,7 +88,6 @@ def test_validate_environment_warns_when_router_master_keys_use_fallback():
         environ={
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "internal-secret",
-            "ROUTER_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/router_db",
         },
     )
 

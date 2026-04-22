@@ -15,7 +15,6 @@ os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 ROOT = Path(__file__).resolve().parent.parent
 SERVICE_MAIN_FILES = (
     ROOT / "src" / "admin_service" / "main.py",
-    ROOT / "src" / "testing_service" / "main.py",
 )
 
 
@@ -32,13 +31,9 @@ def test_service_entrypoints_install_observability_and_readiness_routes():
 
 def test_service_entrypoints_check_schema_before_later_startup_work():
     admin_main = (ROOT / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
-    testing_main = (ROOT / "src" / "testing_service" / "main.py").read_text(encoding="utf-8")
 
     assert admin_main.index("ensure_database_at_head(") < admin_main.index(
         "AdminBootstrapService.ensure_super_admin"
-    )
-    assert testing_main.index("ensure_database_at_head(") < testing_main.index(
-        "scheduler = AsyncIOScheduler()"
     )
 
 
@@ -95,13 +90,10 @@ def test_readme_documents_phase4_runtime_capabilities():
     assert "signed internal" in readme.lower()
 
 
-def test_runtime_docs_define_api_readiness_worker_probes_and_migration_ownership():
+def test_runtime_docs_define_api_readiness_and_migration_ownership():
     runtime_contracts = (ROOT / "docs" / "service-runtime-contracts.md").read_text(encoding="utf-8")
     phase4_ops = (ROOT / "docs" / "phase4-operations.md").read_text(encoding="utf-8")
 
-    assert "testing-worker" in runtime_contracts
-    assert "scripts/runtime_probe.py worker-ready" in runtime_contracts
-    assert "TESTING_DATABASE_URL" in runtime_contracts
-    assert "BENCHMARK_QUEUE_REDIS_URL" in phase4_ops
+    assert "scripts/runtime_probe.py http-ready" in runtime_contracts
     assert "generic `DATABASE_URL`" in phase4_ops
-    assert "scripts/runtime_probe.py worker-ready" in phase4_ops
+    assert "scripts/runtime_probe.py http-ready" in phase4_ops

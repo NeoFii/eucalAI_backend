@@ -8,10 +8,9 @@
 -- authoritative workflow.
 --
 -- Dependency order:
---   admin -> user -> testing
+--   admin -> user
 -- router-service is intentionally omitted — it has no database in the
--- current design; all routing metadata lives in user-service tables.
+-- current design.
 
 SOURCE scripts/sql/admin_schema.sql;
 SOURCE scripts/sql/user_schema.sql;
-SOURCE scripts/sql/testing_schema.sql;

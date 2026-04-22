@@ -1,38 +1,15 @@
-# Phase 2 Cutover Runbook
+# Phase 2 Cutover
 
-> 历史运维工具：从共享数据库切换到 database-per-service 的流程记录。`scripts/phase2_cutover.py` + `migrations/cutover_manifest.json` 是工具入口。
+This document is retained as operational history. Active schema management is now
+Alembic-only for admin and user.
 
-## 入口命令
+Current commands:
 
 ```bash
-uv run phase2-cutover --check-env
-uv run phase2-cutover --dry-run
-uv run phase2-cutover
+uv run migrate --service admin-service upgrade head
+uv run migrate --service user-service upgrade head
+uv run bootstrap-databases
 ```
 
-## 执行顺序
-
-按 `migrations/cutover_manifest.json::execution_order` 描述，依次处理：
-
-1. router-service
-2. testing-service
-3. admin-service
-4. user-service
-
-## 每个服务切换要点
-
-### router-service
-对 `ROUTER_DATABASE_URL` 目标库执行 Alembic baseline + router-specific 迁移；切换完成后运行 `post_cutover_checks`。
-
-### testing-service
-对 `TESTING_DATABASE_URL` 初始化全部 testing 域表 + 视图；确认 `admin-service` 内部 identity 端点可达。
-
-### admin-service
-初始化 admin schema；确认 bootstrap-super-admin 凭据已配置。
-
-### user-service
-初始化 user schema；确认 admin 的邀请码 internal 端点可达。
-
-## 状态
-
-数据库-per-服务切换已全部完成（backend-app 合并后仍保留每库独立）。本脚本主要作为历史参考和紧急恢复工具。
+The phase2 helper and manifest may still be useful as historical references for
+schema ownership review, but they are not part of runtime startup.

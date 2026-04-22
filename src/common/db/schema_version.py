@@ -40,13 +40,6 @@ SERVICE_CONFIGS = {
         alembic_ini_path=(ROOT / "migrations" / "user_service" / "alembic.ini").resolve(),
         database_env="USER_DATABASE_URL",
     ),
-    "testing-service": ServiceMigrationConfig(
-        service="testing-service",
-        package="testing_service",
-        script_location=(ROOT / "migrations" / "testing_service").resolve(),
-        alembic_ini_path=(ROOT / "migrations" / "testing_service" / "alembic.ini").resolve(),
-        database_env="TESTING_DATABASE_URL",
-    ),
 }
 
 
