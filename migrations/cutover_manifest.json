@@ -15,7 +15,11 @@
       "owned_tables": [
         "admin_users",
         "admin_audit_logs",
-        "invitation_codes"
+        "invitation_codes",
+        "model_vendors",
+        "model_categories",
+        "supported_models",
+        "supported_model_category_map"
       ],
       "owned_views": [],
       "internal_dependencies": [

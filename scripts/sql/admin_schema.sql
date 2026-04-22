@@ -74,4 +74,67 @@ CREATE TABLE IF NOT EXISTS `invitation_codes` (
     CONSTRAINT `fk_invitation_codes_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Invitation codes';
 
+CREATE TABLE IF NOT EXISTS `model_vendors` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `slug` VARCHAR(80) NOT NULL COMMENT 'Vendor slug',
+    `name` VARCHAR(120) NOT NULL COMMENT 'Vendor display name',
+    `logo_url` VARCHAR(512) NULL COMMENT 'Vendor logo URL',
+    `is_active` BOOL NOT NULL DEFAULT 1 COMMENT 'Whether vendor is active',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT 'Display sort order',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_model_vendors_slug` (`slug`),
+    KEY `idx_model_vendors_sort_order` (`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Model vendors';
+
+CREATE TABLE IF NOT EXISTS `model_categories` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `key` VARCHAR(80) NOT NULL COMMENT 'Category key',
+    `name` VARCHAR(120) NOT NULL COMMENT 'Category display name',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT 'Display sort order',
+    `is_active` BOOL NOT NULL DEFAULT 1 COMMENT 'Whether category is active',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_model_categories_key` (`key`),
+    KEY `idx_model_categories_sort_order` (`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Model categories';
+
+CREATE TABLE IF NOT EXISTS `supported_models` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `slug` VARCHAR(120) NOT NULL COMMENT 'Model slug',
+    `name` VARCHAR(160) NOT NULL COMMENT 'Model display name',
+    `vendor_id` BIGINT NOT NULL COMMENT 'Model vendor id',
+    `description` TEXT NULL COMMENT 'Model summary',
+    `capability_tags` JSON NOT NULL COMMENT 'Capability tag list',
+    `context_window` INT NULL COMMENT 'Context window tokens',
+    `max_output_tokens` INT NULL COMMENT 'Max output tokens',
+    `is_reasoning_model` BOOL NOT NULL DEFAULT 0 COMMENT 'Whether this is a reasoning model',
+    `is_active` BOOL NOT NULL DEFAULT 1 COMMENT 'Whether model is active',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT 'Display sort order',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_supported_models_slug` (`slug`),
+    KEY `idx_supported_models_vendor_id` (`vendor_id`),
+    KEY `idx_supported_models_sort_order` (`sort_order`),
+    CONSTRAINT `fk_supported_models_vendor` FOREIGN KEY (`vendor_id`) REFERENCES `model_vendors` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Supported models';
+
+CREATE TABLE IF NOT EXISTS `supported_model_category_map` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `model_id` BIGINT NOT NULL COMMENT 'Supported model id',
+    `category_id` BIGINT NOT NULL COMMENT 'Model category id',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT 'Model-local category order',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_supported_model_category` (`model_id`, `category_id`),
+    KEY `idx_supported_model_category_model_id` (`model_id`),
+    KEY `idx_supported_model_category_category_id` (`category_id`),
+    CONSTRAINT `fk_supported_model_category_model` FOREIGN KEY (`model_id`) REFERENCES `supported_models` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_supported_model_category_category` FOREIGN KEY (`category_id`) REFERENCES `model_categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Supported model category map';
+
 SET FOREIGN_KEY_CHECKS = 1;

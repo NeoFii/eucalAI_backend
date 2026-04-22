@@ -10,8 +10,9 @@ references only.
 | admin | `migrations/admin_service` | `scripts/sql/admin_schema.sql` | `ADMIN_DATABASE_URL` |
 | user | `migrations/user_service` | `scripts/sql/user_schema.sql` | `USER_DATABASE_URL` |
 
-Admin-owned objects include `admin_users`, `admin_audit_logs`, and
-`invitation_codes`.
+Admin-owned objects include `admin_users`, `admin_audit_logs`,
+`invitation_codes`, `model_vendors`, `model_categories`, `supported_models`,
+and `supported_model_category_map`.
 
 User-owned objects include `users`, `user_api_keys`,
 `voucher_redemption_codes`, `usage_stats`, billing ledger tables, and

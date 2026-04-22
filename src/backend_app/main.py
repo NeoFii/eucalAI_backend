@@ -38,6 +38,8 @@ from admin_service.api.v1.endpoints import (
     auth as admin_auth_endpoint,
     internal as admin_internal_endpoint,
     invitation as admin_invitation_endpoint,
+    model_catalog as admin_model_catalog_endpoint,
+    model_catalog_admin as admin_model_catalog_admin_endpoint,
     user_management as user_management_endpoint,
     vouchers as admin_vouchers_endpoint,
 )
@@ -82,6 +84,7 @@ def _build_admin_public_api_router() -> APIRouter:
     router.include_router(admin_audit_logs_endpoint.router)
     router.include_router(admin_invitation_endpoint.router)
     router.include_router(admin_vouchers_endpoint.router)
+    router.include_router(admin_model_catalog_admin_endpoint.router)
     router.include_router(user_management_endpoint.router)
     return router
 
@@ -99,6 +102,8 @@ def _build_admin_internal_api_router() -> APIRouter:
 user_api_router = _build_user_api_router()
 admin_public_router = _build_admin_public_api_router()
 admin_internal_router = _build_admin_internal_api_router()
+model_catalog_router = APIRouter(prefix="/api/v1")
+model_catalog_router.include_router(admin_model_catalog_endpoint.router)
 
 
 app = FastAPI(
@@ -128,6 +133,7 @@ register_exception_handlers(app)
 # shadowed.
 app.include_router(admin_public_router)
 app.include_router(admin_internal_router)
+app.include_router(model_catalog_router)
 app.include_router(user_api_router)
 
 
