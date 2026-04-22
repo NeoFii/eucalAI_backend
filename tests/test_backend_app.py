@@ -65,6 +65,7 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     assert ("GET", "/api/v1/billing/balance") in pairs
     assert ("GET", "/api/v1/keys") in pairs
     assert ("POST", "/api/v1/admin/users/{uid}/topup") in pairs
+    assert ("POST", "/api/v1/admin/vouchers") in pairs
     # user internal contracts
     assert any(p.startswith("/api/v1/internal/users") for p in paths_by_prefix)
 

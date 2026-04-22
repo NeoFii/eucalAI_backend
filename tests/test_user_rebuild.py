@@ -91,6 +91,178 @@ async def test_balance_service_freeze_locks_user_row_before_mutation():
 
 
 @pytest.mark.asyncio
+async def test_voucher_service_create_initializes_user_voucher():
+    from user_service.models import UserVoucher, VoucherTransaction
+    from user_service.services.voucher_service import VoucherService
+
+    expires_at = datetime(2026, 5, 1, 12, 0, 0)
+
+    class FakeSession:
+        def __init__(self):
+            self.added = []
+            self.commit_calls = 0
+            self.refresh_calls = 0
+            self.flush_calls = 0
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+        async def flush(self):
+            self.flush_calls += 1
+
+        async def refresh(self, _obj):
+            self.refresh_calls += 1
+
+    db = FakeSession()
+    voucher = await VoucherService.create(
+        db,
+        user_id=5,
+        amount=800,
+        expires_at=expires_at,
+        created_by_admin_uid=99,
+        remark="launch credit",
+    )
+
+    assert isinstance(voucher, UserVoucher)
+    assert voucher.user_id == 5
+    assert voucher.original_amount == 800
+    assert voucher.remaining_amount == 800
+    assert voucher.frozen_amount == 0
+    assert voucher.used_amount == 0
+    assert voucher.status == UserVoucher.STATUS_ACTIVE
+    assert voucher.expires_at == expires_at
+    assert voucher.created_by_admin_uid == 99
+    assert voucher.remark == "launch credit"
+    assert db.added[0] is voucher
+    assert isinstance(db.added[1], VoucherTransaction)
+    assert db.added[1].type == VoucherTransaction.TYPE_ISSUE
+    assert db.added[1].amount == 800
+    assert db.commit_calls == 1
+    assert db.flush_calls == 1
+    assert db.refresh_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_balance_service_freeze_uses_voucher_before_balance(monkeypatch):
+    from user_service.models import User
+    from user_service.services.balance_service import BalanceService
+
+    user = User(
+        id=1,
+        uid=1,
+        email="user@example.com",
+        password_hash="hash",
+        status=1,
+        balance=1000,
+        frozen_amount=0,
+    )
+    calls = []
+
+    async def fake_freeze_vouchers(db, *, user_id, amount, request_id):
+        calls.append(("voucher", db, user_id, amount, request_id))
+        return 700
+
+    monkeypatch.setattr(
+        "user_service.services.balance_service.VoucherService.freeze_available",
+        fake_freeze_vouchers,
+    )
+
+    class FakeSession:
+        def __init__(self):
+            self.added = []
+            self.commit_calls = 0
+
+        async def execute(self, _statement):
+            return ScalarResult(user)
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+    db = FakeSession()
+    await BalanceService.freeze(db, user_id=1, amount=900, request_id="req-voucher")
+
+    assert calls == [("voucher", db, 1, 900, "req-voucher")]
+    assert user.balance == 800
+    assert user.frozen_amount == 200
+    assert db.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_balance_service_freeze_rejects_api_key_quota_overrun(monkeypatch):
+    from common.core.exceptions import ValidationException
+    from user_service.models import User, UserApiKey
+    from user_service.services.balance_service import BalanceService
+
+    user = User(
+        id=1,
+        uid=1,
+        email="user@example.com",
+        password_hash="hash",
+        status=1,
+        balance=1000,
+        frozen_amount=0,
+    )
+    api_key = UserApiKey(
+        id=10,
+        user_id=1,
+        key_hash="hash",
+        key_prefix="sk-test",
+        name="default",
+        status=UserApiKey.STATUS_ACTIVE,
+        quota_mode=UserApiKey.MODE_LIMITED,
+        quota_limit=500,
+        quota_used=450,
+    )
+    voucher_called = False
+
+    async def fake_freeze_vouchers(*_args, **_kwargs):
+        nonlocal voucher_called
+        voucher_called = True
+        return 0
+
+    monkeypatch.setattr(
+        "user_service.services.balance_service.VoucherService.freeze_available",
+        fake_freeze_vouchers,
+    )
+
+    class FakeSession:
+        def __init__(self):
+            self.execute_calls = 0
+            self.commit_calls = 0
+
+        async def execute(self, _statement):
+            self.execute_calls += 1
+            if self.execute_calls == 1:
+                return ScalarResult(user)
+            if self.execute_calls == 2:
+                return ScalarResult(None)
+            return ScalarResult(api_key)
+
+        def add(self, _obj):
+            raise AssertionError("no ledger should be written")
+
+        async def commit(self):
+            self.commit_calls += 1
+
+    with pytest.raises(ValidationException, match="API Key 限额不足"):
+        await BalanceService.freeze(
+            FakeSession(),
+            user_id=1,
+            amount=100,
+            request_id="req-limit",
+            api_key_id=10,
+        )
+
+    assert voucher_called is False
+
+
+@pytest.mark.asyncio
 async def test_balance_service_topup_rejects_already_paid_order():
     from common.core.exceptions import ValidationException
     from user_service.models import TopupOrder, User
@@ -140,6 +312,87 @@ async def test_balance_service_topup_rejects_already_paid_order():
     assert user.balance == 1000
     assert db.added == []
     assert db.commit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_balance_service_settle_consumes_voucher_then_balance_and_counts_quota(monkeypatch):
+    from user_service.models import User, UserApiKey
+    from user_service.services.balance_service import BalanceService
+
+    user = User(
+        id=1,
+        uid=1,
+        email="user@example.com",
+        password_hash="hash",
+        status=1,
+        balance=800,
+        frozen_amount=200,
+        used_amount=0,
+        total_requests=0,
+        total_tokens=0,
+    )
+    api_key = UserApiKey(
+        id=10,
+        user_id=1,
+        key_hash="hash",
+        key_prefix="sk-test",
+        name="default",
+        status=UserApiKey.STATUS_ACTIVE,
+        quota_mode=UserApiKey.MODE_LIMITED,
+        quota_limit=1150,
+        quota_used=300,
+    )
+    calls = []
+
+    async def fake_settle_vouchers(db, *, user_id, request_id, actual_amount):
+        calls.append(("voucher", db, user_id, request_id, actual_amount))
+        return 700
+
+    monkeypatch.setattr(
+        "user_service.services.balance_service.VoucherService.settle_frozen",
+        fake_settle_vouchers,
+    )
+
+    class FakeSession:
+        def __init__(self):
+            self.execute_calls = 0
+            self.added = []
+            self.commit_calls = 0
+
+        async def execute(self, _statement):
+            self.execute_calls += 1
+            if self.execute_calls == 1:
+                return ScalarResult(user)
+            if self.execute_calls == 2:
+                return ScalarResult(None)
+            return ScalarResult(api_key)
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+    db = FakeSession()
+    await BalanceService.settle(
+        db,
+        user_id=1,
+        request_id="req-voucher",
+        estimated_amount=900,
+        actual_amount=850,
+        api_key_id=10,
+        total_tokens=123,
+    )
+
+    assert calls == [("voucher", db, 1, "req-voucher", 850)]
+    assert user.balance == 850
+    assert user.frozen_amount == 0
+    assert user.used_amount == 850
+    assert user.total_requests == 1
+    assert user.total_tokens == 123
+    assert api_key.quota_used == 1150
+    assert api_key.status == UserApiKey.STATUS_EXHAUSTED
+    assert db.commit_calls == 1
 
 
 def test_balance_response_exposes_available_and_frozen_amounts():

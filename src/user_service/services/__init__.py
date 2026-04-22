@@ -8,6 +8,7 @@ from user_service.services.balance_service import BalanceService
 from user_service.services.email_service import email_service
 from user_service.services.topup_order_service import TopupOrderService
 from user_service.services.usage_stat_service import UsageStatService
+from user_service.services.voucher_service import VoucherService
 
 __all__ = [
     "AdminInvitationGateway",
@@ -16,5 +17,6 @@ __all__ = [
     "BalanceService",
     "TopupOrderService",
     "UsageStatService",
+    "VoucherService",
     "email_service",
 ]

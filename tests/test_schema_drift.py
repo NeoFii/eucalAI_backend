@@ -34,6 +34,8 @@ OWNED_SCHEMAS = {
             "user_sessions",
             "email_verification_codes",
             "user_api_keys",
+            "user_vouchers",
+            "voucher_transactions",
             "balance_transactions",
             "topup_orders",
             "api_call_logs",

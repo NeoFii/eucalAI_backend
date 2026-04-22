@@ -39,6 +39,7 @@ from admin_service.api.v1.endpoints import (
     internal as admin_internal_endpoint,
     invitation as admin_invitation_endpoint,
     user_management as user_management_endpoint,
+    vouchers as admin_vouchers_endpoint,
 )
 from user_service.api.v1.endpoints import auth as user_auth_endpoint
 from user_service.api.v1.endpoints import billing as user_billing_endpoint
@@ -80,6 +81,7 @@ def _build_admin_public_api_router() -> APIRouter:
     router.include_router(admin_users_endpoint.router)
     router.include_router(admin_audit_logs_endpoint.router)
     router.include_router(admin_invitation_endpoint.router)
+    router.include_router(admin_vouchers_endpoint.router)
     router.include_router(user_management_endpoint.router)
     return router
 
