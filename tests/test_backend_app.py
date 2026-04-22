@@ -63,6 +63,7 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     # user public routes (public /api/v1/auth/* belongs to user)
     assert ("POST", "/api/v1/auth/login") in pairs
     assert ("GET", "/api/v1/billing/balance") in pairs
+    assert ("POST", "/api/v1/billing/vouchers/redeem") in pairs
     assert ("GET", "/api/v1/keys") in pairs
     assert ("POST", "/api/v1/admin/users/{uid}/topup") in pairs
     assert ("POST", "/api/v1/admin/vouchers") in pairs

@@ -1,4 +1,4 @@
-"""Admin-facing voucher management endpoints."""
+"""Admin-facing voucher redemption-code management endpoints."""
 # ruff: noqa: B008
 
 from __future__ import annotations
@@ -11,12 +11,14 @@ from admin_service.gateway import UserManagementGateway
 from admin_service.models import AdminUser
 from admin_service.policies import require_active_admin, require_super_admin
 from admin_service.schemas.voucher import (
-    CreateVoucherRequest,
-    UpdateVoucherRequest,
-    VoucherItem,
-    VoucherListResponse,
+    CreatedVoucherCodeItem,
+    GenerateVoucherCodesRequest,
+    VoucherCodeCreateData,
+    VoucherCodeCreateResponse,
+    VoucherCodeItem,
+    VoucherCodeListResponse,
+    VoucherCodeResponse,
     VoucherOperationResponse,
-    VoucherResponse,
 )
 from admin_service.services.audit_service import AdminAuditService
 from common.api import PaginatedResponse
@@ -31,16 +33,17 @@ def _request_meta(request: Request) -> tuple[str | None, str | None]:
     return ip_address, user_agent
 
 
-@router.post("", response_model=VoucherResponse, summary="Create user voucher")
-async def create_user_voucher(
-    payload: CreateVoucherRequest,
+@router.post("", response_model=VoucherCodeCreateResponse, summary="Generate voucher codes")
+async def generate_voucher_codes(
+    payload: GenerateVoucherCodesRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
-) -> VoucherResponse:
-    data = await _gateway.create_voucher(
-        uid=payload.uid,
+) -> VoucherCodeCreateResponse:
+    data = await _gateway.generate_voucher_codes(
         amount=payload.amount,
+        count=payload.count,
+        starts_at=payload.starts_at,
         expires_at=payload.expires_at,
         operator_uid=current_admin.uid,
         remark=payload.remark,
@@ -50,35 +53,43 @@ async def create_user_voucher(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
-        action="create_voucher",
-        resource_type="voucher",
-        resource_id=str(data["id"]),
+        action="generate_voucher_codes",
+        resource_type="voucher_redemption_code",
+        resource_id="batch",
         status="success",
-        after_data={"uid": payload.uid, "amount": payload.amount, "remark": payload.remark},
+        after_data={
+            "amount": payload.amount,
+            "count": payload.count,
+            "starts_at": payload.starts_at.isoformat(),
+            "expires_at": payload.expires_at.isoformat(),
+            "remark": payload.remark,
+        },
         ip_address=ip_address,
         user_agent=user_agent,
     )
     await db.commit()
-    return VoucherResponse(data=VoucherItem(**data))
+    return VoucherCodeCreateResponse(
+        data=VoucherCodeCreateData(
+            items=[CreatedVoucherCodeItem(**item) for item in data["items"]]
+        )
+    )
 
 
-@router.get("", response_model=VoucherListResponse, summary="List user vouchers")
-async def list_user_vouchers(
+@router.get("", response_model=VoucherCodeListResponse, summary="List voucher codes")
+async def list_voucher_codes(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    user_id: int | None = None,
     status: int | None = None,
     _current_admin: AdminUser = Depends(require_active_admin),
-) -> VoucherListResponse:
-    data = await _gateway.list_vouchers(
+) -> VoucherCodeListResponse:
+    data = await _gateway.list_voucher_codes(
         page=page,
         page_size=page_size,
-        user_id=user_id,
         status=status,
     )
-    return VoucherListResponse(
-        data=PaginatedResponse[VoucherItem](
-            items=[VoucherItem(**item) for item in data["items"]],
+    return VoucherCodeListResponse(
+        data=PaginatedResponse[VoucherCodeItem](
+            items=[VoucherCodeItem(**item) for item in data["items"]],
             total=data["total"],
             page=data["page"],
             page_size=data["page_size"],
@@ -86,66 +97,38 @@ async def list_user_vouchers(
     )
 
 
-@router.get("/{voucher_id}", response_model=VoucherResponse, summary="Get voucher")
-async def get_user_voucher(
-    voucher_id: int,
+@router.get("/{code_id}", response_model=VoucherCodeResponse, summary="Get voucher code")
+async def get_voucher_code(
+    code_id: int,
     _current_admin: AdminUser = Depends(require_active_admin),
-) -> VoucherResponse:
-    data = await _gateway.get_voucher(voucher_id)
-    return VoucherResponse(data=VoucherItem(**data))
+) -> VoucherCodeResponse:
+    data = await _gateway.get_voucher_code(code_id)
+    return VoucherCodeResponse(data=VoucherCodeItem(**data))
 
 
-@router.patch("/{voucher_id}", response_model=VoucherResponse, summary="Update voucher")
-async def update_user_voucher(
-    voucher_id: int,
-    payload: UpdateVoucherRequest,
-    request: Request,
-    current_admin: AdminUser = Depends(require_super_admin),
-    db: AsyncSession = Depends(get_db_session),
-) -> VoucherResponse:
-    data = await _gateway.update_voucher(
-        voucher_id,
-        status=payload.status,
-        expires_at=payload.expires_at,
-        operator_uid=current_admin.uid,
-        remark=payload.remark,
-    )
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
-        db,
-        actor_admin_id=current_admin.id,
-        target_admin_id=None,
-        action="update_voucher",
-        resource_type="voucher",
-        resource_id=str(voucher_id),
-        status="success",
-        after_data=payload.model_dump(exclude_unset=True),
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-    await db.commit()
-    return VoucherResponse(data=VoucherItem(**data))
-
-
-@router.delete("/{voucher_id}", response_model=VoucherOperationResponse, summary="Delete voucher")
-async def delete_user_voucher(
-    voucher_id: int,
+@router.delete(
+    "/{code_id}",
+    response_model=VoucherOperationResponse,
+    summary="Disable voucher code",
+)
+async def disable_voucher_code(
+    code_id: int,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> VoucherOperationResponse:
-    await _gateway.delete_voucher(voucher_id, operator_uid=current_admin.uid)
+    await _gateway.disable_voucher_code(code_id, operator_uid=current_admin.uid)
     ip_address, user_agent = _request_meta(request)
     await AdminAuditService.record(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
-        action="delete_voucher",
-        resource_type="voucher",
-        resource_id=str(voucher_id),
+        action="disable_voucher_code",
+        resource_type="voucher_redemption_code",
+        resource_id=str(code_id),
         status="success",
         ip_address=ip_address,
         user_agent=user_agent,
     )
     await db.commit()
-    return VoucherOperationResponse(message="删除成功")
+    return VoucherOperationResponse(message="禁用成功")

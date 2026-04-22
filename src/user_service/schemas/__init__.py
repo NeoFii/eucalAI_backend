@@ -26,6 +26,8 @@ from user_service.schemas.billing import (
     BalanceTransactionItem,
     TopupOrderItem,
     UsageStatItem,
+    VoucherRedeemRequest,
+    VoucherRedeemResponseData,
 )
 from user_service.schemas.billing_admin import (
     AdminAdjustBalanceRequest,
@@ -76,4 +78,6 @@ __all__ = [
     "UserInfoResponse",
     "UserInfoResponseData",
     "VerifyEmailRequest",
+    "VoucherRedeemRequest",
+    "VoucherRedeemResponseData",
 ]
