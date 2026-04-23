@@ -166,6 +166,18 @@ def validate_environment(
                 "PROVIDER_SECRET_MASTER_KEY is empty; router-service will derive provider keys from JWT_SECRET_KEY"
             )
 
+    if set(selected_services) & {"admin-service", "backend-app"}:
+        provider_secret = _get_first_env(env, "PROVIDER_SECRET_MASTER_KEY")
+        if not provider_secret:
+            result.errors.append(
+                "PROVIDER_SECRET_MASTER_KEY is required for admin-service / backend-app "
+                "(must be 64-char hex string for AES-256-GCM)"
+            )
+        elif len(provider_secret) != 64:
+            result.errors.append(
+                "PROVIDER_SECRET_MASTER_KEY must be exactly 64 hex characters (32 bytes)"
+            )
+
     if "inference-service" in selected_services:
         inference_secret = _get_env(env, "INFERENCE_SERVICE_SECRET")
         allow_insecure = _get_env(env, "INFERENCE_ALLOW_INSECURE_DEV")

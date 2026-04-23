@@ -31,6 +31,8 @@ OWNED_SCHEMAS = {
             "model_categories",
             "supported_models",
             "supported_model_category_map",
+            "provider_credentials",
+            "routing_configs",
         ],
         "views": [],
         "base": admin_db.Base,

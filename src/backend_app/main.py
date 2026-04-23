@@ -41,6 +41,7 @@ from admin_service.api.v1.endpoints import (
     invitation as admin_invitation_endpoint,
     model_catalog as admin_model_catalog_endpoint,
     model_catalog_admin as admin_model_catalog_admin_endpoint,
+    routing_config as admin_routing_config_endpoint,
     user_management as user_management_endpoint,
     vouchers as admin_vouchers_endpoint,
 )
@@ -86,6 +87,7 @@ def _build_admin_public_api_router() -> APIRouter:
     router.include_router(admin_invitation_endpoint.router)
     router.include_router(admin_vouchers_endpoint.router)
     router.include_router(admin_model_catalog_admin_endpoint.router)
+    router.include_router(admin_routing_config_endpoint.router)
     router.include_router(user_management_endpoint.router)
     return router
 

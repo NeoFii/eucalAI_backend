@@ -5,6 +5,8 @@ from scripts.check_service_environment import (
     validate_environment,
 )
 
+_FAKE_MASTER_KEY = "a" * 64
+
 
 def test_validate_environment_requires_common_secrets_and_service_database_urls():
     result = validate_environment(
@@ -13,6 +15,7 @@ def test_validate_environment_requires_common_secrets_and_service_database_urls(
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
             "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
+            "PROVIDER_SECRET_MASTER_KEY": _FAKE_MASTER_KEY,
         },
     )
 
@@ -29,6 +32,7 @@ def test_validate_environment_rejects_duplicate_database_urls():
             "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
             "ADMIN_DATABASE_URL": shared,
             "USER_DATABASE_URL": shared,
+            "PROVIDER_SECRET_MASTER_KEY": _FAKE_MASTER_KEY,
         },
     )
 
@@ -45,6 +49,7 @@ def test_validate_environment_warns_about_ignored_generic_database_url():
             "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
             "USER_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/user_db",
             "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
+            "PROVIDER_SECRET_MASTER_KEY": _FAKE_MASTER_KEY,
         },
     )
 
@@ -102,6 +107,7 @@ def test_validate_environment_validates_auth_cookie_settings():
             "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
             "JWT_REFRESH_TOKEN_EXPIRE_DAYS": "0",
             "COOKIE_SAMESITE": "invalid",
+            "PROVIDER_SECRET_MASTER_KEY": _FAKE_MASTER_KEY,
         },
     )
 
@@ -133,6 +139,7 @@ def test_format_validation_result_renders_errors_and_warnings():
                 "INTERNAL_SECRET": "",
                 "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
                 "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
+                "PROVIDER_SECRET_MASTER_KEY": _FAKE_MASTER_KEY,
             },
         )
     )

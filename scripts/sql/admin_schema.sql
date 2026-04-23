@@ -140,4 +140,38 @@ CREATE TABLE IF NOT EXISTS `supported_model_category_map` (
     CONSTRAINT `fk_supported_model_category_category` FOREIGN KEY (`category_id`) REFERENCES `model_categories` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Supported model category map';
 
+CREATE TABLE IF NOT EXISTS `provider_credentials` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `slug` VARCHAR(64) NOT NULL COMMENT 'Credential reference slug',
+    `provider_slug` VARCHAR(64) NOT NULL COMMENT 'Provider identifier',
+    `api_key_enc` JSON NOT NULL COMMENT 'AES-256-GCM encrypted API key',
+    `mask` VARCHAR(32) NOT NULL COMMENT 'Masked API key for display',
+    `is_active` BOOL NOT NULL DEFAULT 1 COMMENT 'Whether credential is active',
+    `remark` VARCHAR(256) NULL COMMENT 'Remark',
+    `created_by` BIGINT NOT NULL COMMENT 'Creator admin id',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_provider_credentials_slug` (`slug`),
+    CONSTRAINT `fk_provider_credentials_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Provider credentials';
+
+CREATE TABLE IF NOT EXISTS `routing_configs` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
+    `version` INT NOT NULL COMMENT 'Config version number',
+    `status` VARCHAR(16) NOT NULL DEFAULT 'draft' COMMENT 'draft/active/superseded',
+    `config_data` JSON NOT NULL COMMENT 'Full routing policy JSON',
+    `description` VARCHAR(512) NULL COMMENT 'Version description',
+    `published_at` DATETIME NULL COMMENT 'Published at',
+    `published_by` BIGINT NULL COMMENT 'Publisher admin id',
+    `created_by` BIGINT NOT NULL COMMENT 'Creator admin id',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_routing_configs_version` (`version`),
+    KEY `idx_routing_configs_status` (`status`),
+    CONSTRAINT `fk_routing_configs_published_by` FOREIGN KEY (`published_by`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_routing_configs_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Routing configs';
+
 SET FOREIGN_KEY_CHECKS = 1;

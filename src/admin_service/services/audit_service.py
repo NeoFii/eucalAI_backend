@@ -54,6 +54,16 @@ class AdminAuditService:
             "update_supported_model",
             "disable_supported_model",
         ),
+        "routing_config": (
+            "create_routing_config",
+            "update_routing_config",
+            "publish_routing_config",
+            "rollback_routing_config",
+            "create_provider_credential",
+            "update_provider_credential",
+            "disable_provider_credential",
+            "force_disable_provider_credential",
+        ),
     }
 
     @staticmethod
