@@ -14,7 +14,8 @@ from admin_service.db import get_db
 from admin_service.models import AdminUser
 from admin_service.services.auth_service import AdminAuthService
 from common.core.exceptions import AuthenticationException, InvalidTokenException
-from common.utils.jwt import decode_token
+from common.token_blacklist import is_token_blacklisted
+from common.utils.jwt import decode_token, get_token_jti
 
 # HTTP Bearer 安全方案
 security = HTTPBearer(auto_error=False)
@@ -52,6 +53,9 @@ async def get_current_admin(
 
     if not token:
         raise AuthenticationException(detail="未提供认证信息")
+
+    if await is_token_blacklisted(get_token_jti(token)):
+        raise InvalidTokenException(detail="令牌已被吊销")
 
     # 解码令牌
     payload = decode_token(
@@ -99,8 +103,16 @@ async def get_optional_current_admin(
         return None
 
 
+def get_request_meta(request: Request) -> tuple[str | None, str | None]:
+    """Extract IP address and user-agent from a FastAPI request."""
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    return ip_address, user_agent
+
+
 __all__ = [
     "get_current_admin",
     "get_db_session",
     "get_optional_current_admin",
+    "get_request_meta",
 ]

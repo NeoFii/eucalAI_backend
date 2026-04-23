@@ -8,6 +8,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
+from admin_service.utils.password import check_password_strength
 from common.api import PaginatedResponse
 
 
@@ -28,14 +29,22 @@ class UpdateUserStatusRequest(BaseModel):
 class ResetUserPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128, description="新密码")
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        ok, message = check_password_strength(value)
+        if not ok:
+            raise ValueError(message)
+        return value
+
 
 class TopupUserRequest(BaseModel):
-    amount: int = Field(..., gt=0, description="充值金额（分）")
-    remark: str = Field(default="", description="备注")
+    amount: int = Field(..., gt=0, le=1_000_000, description="充值金额（分）")
+    remark: str = Field(default="", max_length=255, description="备注")
 
 
 class AdjustUserBalanceRequest(BaseModel):
-    amount: int = Field(..., description="正数增加余额，负数扣减余额")
+    amount: int = Field(..., ge=-1_000_000, le=1_000_000, description="正数增加余额，负数扣减余额")
     remark: str = Field(..., min_length=1, max_length=255, description="备注")
 
     @field_validator("amount")

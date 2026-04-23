@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field, field_serializer
 from common.api import PaginatedResponse
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
 
-AdminAuditCategory = Literal["all", "governance", "auth", "user_management"]
+AdminAuditCategory = Literal[
+    "all", "governance", "auth", "user_management", "invitation", "model_catalog"
+]
 
 
 class AdminAuditActor(BaseModel):

@@ -1,10 +1,20 @@
-"""Gateways for admin-service external contracts."""
+"""Admin control-plane facade for user-service.
+
+This module proxies user-management and voucher operations to user-service
+via HMAC-signed internal HTTP calls. It is intentionally part of admin_service
+(not a separate package) because admin is the only consumer of these facades.
+If the admin-service package boundary needs tightening, this module and the
+corresponding endpoint files (user_management.py, vouchers.py) are the
+candidates for extraction.
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import NoReturn
 
 from admin_service.config import settings
+from admin_service.exceptions import AdminConflictException, AdminPermissionDeniedException
 from common.core.exceptions import (
     ServiceUnavailableException,
     UserNotFoundException,
@@ -54,7 +64,12 @@ class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
             )
         except InternalServiceError as exc:
             raise ServiceUnavailableException("User identity service unavailable") from exc
-        return int(payload["total_users"])
+        try:
+            return int(payload["total_users"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ServiceUnavailableException(
+                "Unexpected response format from user-service",
+            ) from exc
 
 
 USER_MGMT_TIMEOUT_SECONDS = 5.0
@@ -81,12 +96,20 @@ class UserManagementGateway(BaseGateway):
             ),
         }
 
-    def _handle_error(self, exc: InternalServiceError) -> None:
+    def _handle_error(self, exc: InternalServiceError) -> NoReturn:
         if isinstance(exc, InternalServiceResponseError):
             if exc.status_code == 404:
                 raise UserNotFoundException(detail=exc.detail or "User not found") from exc
             if exc.status_code == 422:
                 raise ValidationException(detail=exc.detail or "Validation error") from exc
+            if exc.status_code == 403:
+                raise AdminPermissionDeniedException(
+                    detail=exc.detail or "Permission denied",
+                ) from exc
+            if exc.status_code == 409:
+                raise AdminConflictException(
+                    detail=exc.detail or "Resource conflict",
+                ) from exc
         raise ServiceUnavailableException("User service unavailable") from exc
 
     async def list_users(

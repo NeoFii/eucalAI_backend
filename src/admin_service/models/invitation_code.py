@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, SmallInteger, String, Text
 from sqlalchemy.orm import relationship
 
 from admin_service.db import Base
 from common.db.base import SnowflakeIdMixin, TimestampMixin
 from common.utils.timezone import now
-
-if TYPE_CHECKING:
-    pass
 
 
 class InvitationCode(Base, SnowflakeIdMixin, TimestampMixin):

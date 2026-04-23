@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_service.dependencies import get_db_session
+from admin_service.dependencies import get_db_session, get_request_meta
 from admin_service.models import AdminUser
 from admin_service.policies import require_active_admin, require_super_admin
 from admin_service.schemas.model_catalog import (
@@ -25,6 +25,7 @@ from admin_service.schemas.model_catalog import (
     SupportedModelUpdate,
 )
 from admin_service.services.model_catalog_service import ModelCatalogService
+from admin_service.utils.parsing import parse_comma_separated
 from common.api import PaginatedResponse
 
 router = APIRouter(prefix="/model-catalog", tags=["admin-model-catalog"])
@@ -51,10 +52,20 @@ async def admin_list_model_vendors(
 @router.post("/vendors", response_model=ModelVendorResponse, summary="Create catalog vendor")
 async def create_model_vendor(
     payload: ModelVendorCreate,
-    _current_admin: AdminUser = Depends(require_super_admin),
+    http_request: Request,
+    current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ModelVendorResponse:
-    return ModelVendorResponse(data=await ModelCatalogService.create_vendor(db, payload))
+    ip_address, user_agent = get_request_meta(http_request)
+    return ModelVendorResponse(
+        data=await ModelCatalogService.create_vendor(
+            db,
+            payload,
+            actor_admin_id=current_admin.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    )
 
 
 @router.patch(
@@ -63,12 +74,23 @@ async def create_model_vendor(
     summary="Update catalog vendor",
 )
 async def update_model_vendor(
-    slug: str,
     payload: ModelVendorUpdate,
-    _current_admin: AdminUser = Depends(require_super_admin),
+    http_request: Request,
+    slug: str = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=120),
+    current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ModelVendorResponse:
-    return ModelVendorResponse(data=await ModelCatalogService.update_vendor(db, slug, payload))
+    ip_address, user_agent = get_request_meta(http_request)
+    return ModelVendorResponse(
+        data=await ModelCatalogService.update_vendor(
+            db,
+            slug,
+            payload,
+            actor_admin_id=current_admin.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    )
 
 
 @router.get(
@@ -100,10 +122,20 @@ async def admin_list_model_categories(
 )
 async def create_model_category(
     payload: ModelCategoryCreate,
-    _current_admin: AdminUser = Depends(require_super_admin),
+    http_request: Request,
+    current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ModelCategoryResponse:
-    return ModelCategoryResponse(data=await ModelCatalogService.create_category(db, payload))
+    ip_address, user_agent = get_request_meta(http_request)
+    return ModelCategoryResponse(
+        data=await ModelCatalogService.create_category(
+            db,
+            payload,
+            actor_admin_id=current_admin.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    )
 
 
 @router.patch(
@@ -112,25 +144,36 @@ async def create_model_category(
     summary="Update catalog category",
 )
 async def update_model_category(
-    key: str,
     payload: ModelCategoryUpdate,
-    _current_admin: AdminUser = Depends(require_super_admin),
+    http_request: Request,
+    key: str = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=120),
+    current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ModelCategoryResponse:
-    return ModelCategoryResponse(data=await ModelCatalogService.update_category(db, key, payload))
+    ip_address, user_agent = get_request_meta(http_request)
+    return ModelCategoryResponse(
+        data=await ModelCatalogService.update_category(
+            db,
+            key,
+            payload,
+            actor_admin_id=current_admin.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    )
 
 
 @router.get("/models", response_model=SupportedModelListResponse, summary="List catalog models")
 async def admin_list_supported_models(
     category: str | None = None,
-    vendors: str | None = None,
-    q: str | None = None,
+    vendors: str | None = Query(default=None, max_length=500),
+    q: str | None = Query(default=None, max_length=200),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     _current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> SupportedModelListResponse:
-    vendor_list = [item.strip() for item in (vendors or "").split(",") if item.strip()]
+    vendor_list = parse_comma_separated(vendors)
     items, total = await ModelCatalogService.list_models(
         db,
         category=category,
@@ -148,11 +191,20 @@ async def admin_list_supported_models(
 @router.post("/models", response_model=SupportedModelResponse, summary="Create catalog model")
 async def create_supported_model(
     payload: SupportedModelCreate,
+    http_request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> SupportedModelResponse:
-    del current_admin
-    return SupportedModelResponse(data=await ModelCatalogService.create_model(db, payload))
+    ip_address, user_agent = get_request_meta(http_request)
+    return SupportedModelResponse(
+        data=await ModelCatalogService.create_model(
+            db,
+            payload,
+            actor_admin_id=current_admin.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    )
 
 
 @router.patch(
@@ -161,12 +213,23 @@ async def create_supported_model(
     summary="Update catalog model",
 )
 async def update_supported_model(
-    slug: str,
     payload: SupportedModelUpdate,
-    _current_admin: AdminUser = Depends(require_super_admin),
+    http_request: Request,
+    slug: str = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=120),
+    current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> SupportedModelResponse:
-    return SupportedModelResponse(data=await ModelCatalogService.update_model(db, slug, payload))
+    ip_address, user_agent = get_request_meta(http_request)
+    return SupportedModelResponse(
+        data=await ModelCatalogService.update_model(
+            db,
+            slug,
+            payload,
+            actor_admin_id=current_admin.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    )
 
 
 @router.delete(
@@ -175,9 +238,17 @@ async def update_supported_model(
     summary="Disable catalog model",
 )
 async def disable_supported_model(
-    slug: str,
-    _current_admin: AdminUser = Depends(require_super_admin),
+    http_request: Request,
+    slug: str = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=120),
+    current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ModelCatalogOperationResponse:
-    await ModelCatalogService.disable_model(db, slug)
+    ip_address, user_agent = get_request_meta(http_request)
+    await ModelCatalogService.disable_model(
+        db,
+        slug,
+        actor_admin_id=current_admin.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
     return ModelCatalogOperationResponse(message="disabled")

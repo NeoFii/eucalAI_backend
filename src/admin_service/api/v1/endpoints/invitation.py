@@ -1,12 +1,10 @@
 """Invitation-code admin endpoints."""
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.api import PaginatedResponse
 from admin_service.dependencies import get_db_session
 from admin_service.gateway import UserStatsGateway
 from admin_service.models import AdminUser
@@ -24,21 +22,22 @@ from admin_service.schemas import (
     UpdateInvitationCodeRequest,
 )
 from admin_service.services.invitation_service import InvitationCodeService
+from common.api import PaginatedResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["invitation-codes"])
+_stats_gateway = UserStatsGateway()
 
 
 @router.get(
     "/dashboard/stats", response_model=DashboardStatsResponse, summary="Get dashboard stats"
 )
 async def get_dashboard_stats(
-    current_admin: AdminUser = Depends(require_active_admin),
+    _current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> DashboardStatsResponse:
-    del current_admin
     code_stats = await InvitationCodeService.get_stats(db)
-    total_users = await UserStatsGateway().fetch_total_users()
+    total_users = await _stats_gateway.fetch_total_users()
     return DashboardStatsResponse(
         code=200,
         message="success",
@@ -57,18 +56,24 @@ async def get_dashboard_stats(
     summary="Generate invitation codes",
 )
 async def generate_invitation_codes(
-    request: GenerateInvitationCodeRequest,
+    payload: GenerateInvitationCodeRequest,
+    http_request: Request,
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> GenerateInvitationCodeResponse:
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
     codes = await InvitationCodeService.generate(
         db=db,
         created_by=current_admin.id,
-        quantity=request.quantity,
-        expires_days=request.expires_days,
-        expires_at=request.expires_at,
-        max_uses=request.max_uses,
-        remark=request.remark,
+        quantity=payload.quantity,
+        expires_days=payload.expires_days,
+        expires_at=payload.expires_at,
+        max_uses=payload.max_uses,
+        remark=payload.remark,
+        actor_admin_id=current_admin.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
     )
     return GenerateInvitationCodeResponse(
         code=200,
@@ -97,11 +102,10 @@ async def generate_invitation_codes(
 async def list_invitation_codes(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status: Optional[int] = Query(None),
-    current_admin: AdminUser = Depends(require_active_admin),
+    status: int | None = Query(None),
+    _current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeListResponse:
-    del current_admin
     codes, total = await InvitationCodeService.list(
         db=db, page=page, page_size=page_size, status=status
     )
@@ -137,11 +141,18 @@ async def list_invitation_codes(
 )
 async def enable_invitation_code(
     code_id: int,
+    http_request: Request,
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeOperationResponse:
-    del current_admin
-    await InvitationCodeService.enable(db, code_id)
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
+    await InvitationCodeService.enable(
+        db, code_id,
+        actor_admin_id=current_admin.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
     return InvitationCodeOperationResponse(code=200, message="success")
 
 
@@ -152,11 +163,18 @@ async def enable_invitation_code(
 )
 async def disable_invitation_code(
     code_id: int,
+    http_request: Request,
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeOperationResponse:
-    del current_admin
-    await InvitationCodeService.disable(db, code_id)
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
+    await InvitationCodeService.disable(
+        db, code_id,
+        actor_admin_id=current_admin.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
     return InvitationCodeOperationResponse(code=200, message="success")
 
 
@@ -167,15 +185,20 @@ async def disable_invitation_code(
 )
 async def update_invitation_code(
     code_id: int,
-    request: UpdateInvitationCodeRequest,
+    payload: UpdateInvitationCodeRequest,
+    http_request: Request,
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> InvitationCodeOperationResponse:
-    del current_admin
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
     await InvitationCodeService.update(
         db,
         code_id,
-        expires_at=request.expires_at,
-        remark=request.remark,
+        expires_at=payload.expires_at,
+        remark=payload.remark,
+        actor_admin_id=current_admin.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
     )
     return InvitationCodeOperationResponse(code=200, message="success")

@@ -423,7 +423,7 @@ async def test_list_admin_users_endpoint_returns_paginated_items(monkeypatch):
     response = await list_admin_users(
         page=1,
         page_size=20,
-        current_admin=current_admin,
+        _current_admin=current_admin,
         db=object(),
     )
 

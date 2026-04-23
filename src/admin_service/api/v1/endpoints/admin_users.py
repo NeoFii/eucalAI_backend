@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api import PaginatedResponse
-from admin_service.dependencies import get_db_session
+from admin_service.dependencies import get_db_session, get_request_meta
 from admin_service.models import AdminUser
 from admin_service.policies import require_super_admin
 from admin_service.schemas import (
@@ -22,20 +22,13 @@ from admin_service.services.management_service import AdminManagementService
 router = APIRouter(prefix="/admin-users", tags=["admin-users"])
 
 
-def _request_meta(request: Request) -> tuple[str | None, str | None]:
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    return ip_address, user_agent
-
-
 @router.get("/", response_model=AdminListResponse, summary="List admin users")
 async def list_admin_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_admin: AdminUser = Depends(require_super_admin),
+    _current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminListResponse:
-    del current_admin
     admins, total = await AdminManagementService.list_admins(db, page=page, page_size=page_size)
     return AdminListResponse(
         code=200,
@@ -68,7 +61,7 @@ async def create_admin_user(
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> CreateAdminResponse:
-    ip_address, user_agent = _request_meta(request)
+    ip_address, user_agent = get_request_meta(request)
     admin = await AdminManagementService.create_admin(
         db,
         actor_admin=current_admin,
@@ -101,7 +94,7 @@ async def update_admin_user_status(
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminBaseResponse:
-    ip_address, user_agent = _request_meta(request)
+    ip_address, user_agent = get_request_meta(request)
     await AdminManagementService.update_admin_status(
         db,
         actor_admin=current_admin,
@@ -123,7 +116,7 @@ async def reset_admin_user_password(
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminBaseResponse:
-    ip_address, user_agent = _request_meta(request)
+    ip_address, user_agent = get_request_meta(request)
     await AdminManagementService.reset_admin_password(
         db,
         actor_admin=current_admin,

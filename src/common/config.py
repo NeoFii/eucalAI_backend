@@ -54,6 +54,8 @@ class BaseServiceSettings(BaseSettings):
     COOKIE_SECURE: bool = True
     COOKIE_SAMESITE: str = "strict"
 
+    REDIS_URL: str = "redis://127.0.0.1:6379/0"
+
     SNOWFLAKE_WORKER_ID: int = 1
     SNOWFLAKE_DATACENTER_ID: int = 1
 
@@ -99,6 +101,9 @@ class BaseServiceSettings(BaseSettings):
 
         if not self.INTERNAL_SECRET:
             raise ValueError("INTERNAL_SECRET must be configured")
+
+        if len(self.INTERNAL_SECRET) < 32:
+            raise ValueError("INTERNAL_SECRET length must be at least 32")
 
         return self
 

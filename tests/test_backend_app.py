@@ -16,7 +16,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
-os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret")
+os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret_32chars_long!")
 os.environ.setdefault("ADMIN_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/admin")
 os.environ.setdefault("USER_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/user")
 
@@ -182,3 +182,74 @@ def test_backend_app_uses_lifecycle_manager_as_single_lifespan_path():
     assert isinstance(main.lifecycle_manager, LifecycleManager)
     assert contains_lifecycle_manager(main.app.router.lifespan_context)
     assert not hasattr(main, "lifespan")
+
+
+def test_admin_route_completeness():
+    """Every route declared in admin_service's standalone api_router must be
+    reachable in backend-app (possibly under a shifted prefix)."""
+
+    from admin_service.api.v1.router import api_router
+    from fastapi.routing import APIRoute as _APIRoute
+
+    # 1. Extract all (method, path) pairs from standalone admin api_router.
+    standalone_pairs: list[tuple[str, str]] = []
+    for route in api_router.routes:
+        if not isinstance(route, _APIRoute):
+            continue
+        for method in route.methods or ():
+            if method in {"HEAD", "OPTIONS"}:
+                continue
+            standalone_pairs.append((method, route.path))
+
+    assert standalone_pairs, "admin api_router should have routes"
+
+    # 2. Categorise standalone routes.
+    internal_pairs: list[tuple[str, str]] = []
+    public_model_catalog_pairs: list[tuple[str, str]] = []
+    admin_model_catalog_pairs: list[tuple[str, str]] = []
+    regular_admin_pairs: list[tuple[str, str]] = []
+
+    # Public model-catalog paths (no prefix in model_catalog.py, mounted at /api/v1 in standalone)
+    _public_mc_prefixes = ("/api/v1/model-vendors", "/api/v1/models")
+
+    for method, path in standalone_pairs:
+        if "/internal/" in path:
+            internal_pairs.append((method, path))
+        elif path.startswith("/api/v1/admin/model-catalog"):
+            admin_model_catalog_pairs.append((method, path))
+        elif any(path.startswith(p) for p in _public_mc_prefixes):
+            public_model_catalog_pairs.append((method, path))
+        else:
+            regular_admin_pairs.append((method, path))
+
+    # 3. Build the backend-app route set for comparison.
+    backend_pairs = set(_build_app_routes_snapshot())
+
+    missing: list[tuple[str, str, str]] = []
+
+    # Regular admin paths: /api/v1/xxx -> /api/v1/admin/xxx
+    for method, path in regular_admin_pairs:
+        mapped = path.replace("/api/v1/", "/api/v1/admin/", 1)
+        if (method, mapped) not in backend_pairs:
+            missing.append((method, path, mapped))
+
+    # Admin model-catalog paths: already /api/v1/admin/model-catalog/*, keep as-is
+    for method, path in admin_model_catalog_pairs:
+        if (method, path) not in backend_pairs:
+            missing.append((method, path, path))
+
+    # Internal paths: mounted at /api/v1/ in backend-app, same as standalone
+    for method, path in internal_pairs:
+        if (method, path) not in backend_pairs:
+            missing.append((method, path, path))
+
+    # Public model-catalog paths: mounted at /api/v1/ in backend-app, same as standalone
+    for method, path in public_model_catalog_pairs:
+        if (method, path) not in backend_pairs:
+            missing.append((method, path, path))
+
+    assert not missing, (
+        "admin_service routes missing from backend-app "
+        "(standalone_path -> expected_backend_path): "
+        + ", ".join(f"{m} {orig} -> {mapped}" for m, orig, mapped in missing)
+    )

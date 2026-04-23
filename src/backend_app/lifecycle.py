@@ -17,6 +17,7 @@ from admin_service.services.bootstrap_service import AdminBootstrapService
 from backend_app.config import settings
 from common.db import ensure_database_at_head
 from common.observability import log_event
+from common.redis import close_redis, init_redis
 from common.utils.snowflake import configure_snowflake
 from user_service import db as user_db
 from user_service.config import settings as user_settings
@@ -141,6 +142,11 @@ def build_lifecycle_manager(*, logger: logging.Logger) -> LifecycleManager:
             worker_id=settings.SNOWFLAKE_WORKER_ID,
             datacenter_id=settings.SNOWFLAKE_DATACENTER_ID,
         ),
+    )
+    manager.register(
+        "redis",
+        startup=lambda: init_redis(settings.REDIS_URL),
+        shutdown=close_redis,
     )
     manager.register(
         "admin-database",

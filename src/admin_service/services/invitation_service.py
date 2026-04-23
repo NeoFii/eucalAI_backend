@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.models import InvitationCode
 from admin_service.repositories import InvitationCodeRepository
+from admin_service.services.audit_service import AdminAuditService
 from common.core.exceptions import (
     InvalidInvitationCodeException,
     InvitationCodeDisabledException,
@@ -38,6 +39,10 @@ class InvitationCodeService:
         expires_at: Optional[datetime] = None,
         max_uses: int = 1,
         remark: Optional[str] = None,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> list[InvitationCode]:
         """Create one or more invitation codes."""
         del max_uses
@@ -60,6 +65,20 @@ class InvitationCodeService:
             )
             repo.add(code)
             codes.append(code)
+
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="generate_invitation_codes",
+                resource_type="invitation_code",
+                resource_id="batch",
+                status="success",
+                after_data={"quantity": quantity, "expires_at": str(resolved_expires_at)},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         await db.commit()
         for code in codes:
@@ -129,7 +148,14 @@ class InvitationCodeService:
         return True
 
     @staticmethod
-    async def enable(db: AsyncSession, code_id: int) -> InvitationCode:
+    async def enable(
+        db: AsyncSession,
+        code_id: int,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> InvitationCode:
         """Enable an unused invitation code."""
         code = await InvitationCodeRepository(db).get_by_id(code_id)
 
@@ -138,20 +164,57 @@ class InvitationCodeService:
         if code.status == 1:
             raise InvitationCodeUsedException()
 
+        before_status = code.status
         code.status = 0
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="enable_invitation_code",
+                resource_type="invitation_code",
+                resource_id=str(code_id),
+                status="success",
+                before_data={"status": before_status},
+                after_data={"status": 0},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         await db.refresh(code)
         return code
 
     @staticmethod
-    async def disable(db: AsyncSession, code_id: int) -> InvitationCode:
+    async def disable(
+        db: AsyncSession,
+        code_id: int,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> InvitationCode:
         """Disable an invitation code."""
         code = await InvitationCodeRepository(db).get_by_id(code_id)
 
         if code is None:
             raise InvalidInvitationCodeException()
 
+        before_status = code.status
         code.status = 2
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="disable_invitation_code",
+                resource_type="invitation_code",
+                resource_id=str(code_id),
+                status="success",
+                before_data={"status": before_status},
+                after_data={"status": 2},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         await db.refresh(code)
         return code
@@ -162,6 +225,10 @@ class InvitationCodeService:
         code_id: int,
         expires_at: Optional[datetime] = None,
         remark: Optional[str] = None,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> InvitationCode:
         """Update editable invitation-code fields."""
         code = await InvitationCodeRepository(db).get_by_id(code_id)
@@ -171,10 +238,31 @@ class InvitationCodeService:
         if code.status == 1:
             raise InvitationCodeUsedException()
 
+        before_data = {}
+        after_data = {}
         if expires_at is not None:
+            before_data["expires_at"] = str(code.expires_at)
             code.expires_at = expires_at
+            after_data["expires_at"] = str(expires_at)
         if remark is not None:
+            before_data["remark"] = code.remark
             code.remark = remark
+            after_data["remark"] = remark
+
+        if actor_admin_id is not None and (before_data or after_data):
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="update_invitation_code",
+                resource_type="invitation_code",
+                resource_id=str(code_id),
+                status="success",
+                before_data=before_data or None,
+                after_data=after_data or None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
 
         await db.commit()
         await db.refresh(code)

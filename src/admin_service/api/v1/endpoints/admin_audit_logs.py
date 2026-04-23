@@ -51,7 +51,7 @@ async def list_admin_audit_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     category: AdminAuditCategory = Query(default="all"),
-    action: str | None = Query(default=None),
+    action: str | None = Query(default=None, max_length=100),
     actor_uid: int | None = Query(default=None),
     target_uid: int | None = Query(default=None),
     current_admin: AdminUser = Depends(require_super_admin),

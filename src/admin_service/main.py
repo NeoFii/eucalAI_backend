@@ -22,6 +22,7 @@ from common.db import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability, log_event
+from common.redis import close_redis, init_redis
 from common.utils.snowflake import configure_snowflake
 
 configure_logging(settings.LOG_LEVEL)
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
         worker_id=settings.SNOWFLAKE_WORKER_ID,
         datacenter_id=settings.SNOWFLAKE_DATACENTER_ID,
     )
+    await init_redis(settings.REDIS_URL)
     create_engine(
         database_url=settings.DATABASE_URL,
         pool_size=settings.DATABASE_POOL_SIZE,
@@ -62,6 +64,7 @@ async def lifespan(app: FastAPI):
     yield
 
     log_event(logger, logging.INFO, "service_stopping", service=settings.SERVICE_NAME)
+    await close_redis()
     await close_db()
 
 

@@ -28,7 +28,7 @@ ACTIVE_SCAN_PATHS = (
 
 def test_backend_app_import_does_not_load_removed_package(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", "x" * 32)
-    monkeypatch.setenv("INTERNAL_SECRET", "internal-secret")
+    monkeypatch.setenv("INTERNAL_SECRET", "test_internal_secret_32chars_long!")
     monkeypatch.setenv("ADMIN_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/admin")
     monkeypatch.setenv("USER_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/user")
 

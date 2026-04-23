@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import List, Optional, Union
+from urllib.parse import urlparse
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 
 from common.config import BaseServiceSettings
+
+_config_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseServiceSettings):
@@ -32,10 +36,34 @@ class Settings(BaseServiceSettings):
     ]
 
     INTERNAL_API_PREFIX: str = "/internal"
-    USER_SERVICE_URL: str = "http://127.0.0.1:8001"
+    USER_SERVICE_URL: str = "http://127.0.0.1:8000"
 
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
+
+    @model_validator(mode="after")
+    def _check_config_consistency(self) -> Settings:
+        parsed = urlparse(self.USER_SERVICE_URL)
+        user_port = parsed.port or 80
+        if user_port == self.PORT:
+            _config_logger.warning(
+                "USER_SERVICE_URL (%s) points to the same port as this service (%d). "
+                "Gateway calls will loop back unless running in merged backend-app mode.",
+                self.USER_SERVICE_URL,
+                self.PORT,
+            )
+        if not self.DEBUG:
+            if not self.COOKIE_SECURE:
+                _config_logger.warning(
+                    "Forcing COOKIE_SECURE=True because DEBUG is False"
+                )
+                self.COOKIE_SECURE = True
+            if self.COOKIE_SAMESITE != "strict":
+                _config_logger.warning(
+                    "Forcing COOKIE_SAMESITE='strict' because DEBUG is False"
+                )
+                self.COOKIE_SAMESITE = "strict"
+        return self
 
     SNOWFLAKE_WORKER_ID: int = 2
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

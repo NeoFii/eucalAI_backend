@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 
-os.environ["INTERNAL_SECRET"] = "test_secret"
+os.environ["INTERNAL_SECRET"] = "test_internal_secret_32chars_long!"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
 USER_ROOT = Path(__file__).resolve().parents[1] / "src" / "user_service"

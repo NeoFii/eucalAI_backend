@@ -15,7 +15,7 @@ class AdminLoginRequest(BaseModel):
     """Admin login request."""
 
     email: EmailStr = Field(..., description="登录邮箱")
-    password: str = Field(..., description="密码")
+    password: str = Field(..., max_length=128, description="密码")
 
 
 class AdminUserData(BaseModel):

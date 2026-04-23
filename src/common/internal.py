@@ -344,8 +344,8 @@ async def request_internal_json(
     _check_circuit_open(key=breaker_key, target_service=target_service, path=path)
 
     for attempt in range(attempts):
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            try:
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.request(
                     method,
                     url,
@@ -360,20 +360,20 @@ async def request_internal_json(
                     json=json_body,
                     params=query_params,
                 )
-            except httpx.HTTPError as exc:
-                if attempt == attempts - 1:
-                    _record_failure(
-                        key=breaker_key,
-                        threshold=circuit_breaker_threshold,
-                        cooldown_seconds=circuit_breaker_cooldown_seconds,
-                    )
-                    raise InternalServiceUnavailableError(
-                        f"{target_service} request failed",
-                        target_service=target_service,
-                        path=path,
-                    ) from exc
-                await asyncio.sleep(retry_backoff_seconds * (attempt + 1))
-                continue
+        except httpx.HTTPError as exc:
+            if attempt == attempts - 1:
+                _record_failure(
+                    key=breaker_key,
+                    threshold=circuit_breaker_threshold,
+                    cooldown_seconds=circuit_breaker_cooldown_seconds,
+                )
+                raise InternalServiceUnavailableError(
+                    f"{target_service} request failed",
+                    target_service=target_service,
+                    path=path,
+                ) from exc
+            await asyncio.sleep(retry_backoff_seconds * (attempt + 1))
+            continue
 
         if allow_404 and response.status_code == status.HTTP_404_NOT_FOUND:
             _record_success(breaker_key)

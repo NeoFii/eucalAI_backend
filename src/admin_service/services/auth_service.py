@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,19 +19,32 @@ from common.core.exceptions import (
     TokenExpiredException,
     WeakPasswordException,
 )
+from common.token_blacklist import blacklist_token, is_token_blacklisted
 from common.utils import (
     create_access_token,
     create_refresh_token,
     hash_password,
     verify_password,
 )
-from common.utils.jwt import decode_token
+from common.utils.jwt import decode_token, get_token_jti
 from common.utils.timezone import now
 
 logger = logging.getLogger(__name__)
 
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCK_DURATION_HOURS = 1
+
+_DUMMY_HASH = hash_password("timing-equalization-dummy")
+
+
+def _remaining_ttl(token: str) -> int:
+    """Return the number of seconds until a JWT expires (0 if already expired or unparseable)."""
+    payload = decode_token(token, settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM)
+    if not payload or "exp" not in payload:
+        return 0
+    exp = payload["exp"]
+    remaining = int(exp - datetime.now(timezone.utc).timestamp())
+    return max(remaining, 0)
 
 
 class AdminAuthService:
@@ -51,6 +64,7 @@ class AdminAuthService:
         admin = await user_repo.get_by_email(email)
 
         if not admin:
+            verify_password("dummy", _DUMMY_HASH)
             raise InvalidCredentialsException()
 
         was_locked = bool(admin.login_locked_until and admin.login_locked_until > now())
@@ -97,7 +111,7 @@ class AdminAuthService:
             raise InvalidCredentialsException()
 
         if admin.status == 0:
-            raise InvalidCredentialsException(detail="Account is disabled")
+            raise InvalidCredentialsException()
 
         admin.login_fail_count = 0
         admin.login_locked_until = None
@@ -139,15 +153,29 @@ class AdminAuthService:
         return admin, access_token
 
     @staticmethod
-    async def logout(admin: AdminUser) -> None:
-        """Log out an admin."""
+    async def logout(
+        admin: AdminUser,
+        access_token: str | None = None,
+        refresh_token: str | None = None,
+    ) -> None:
+        """Log out an admin and revoke active tokens."""
         logger.info("Admin logout: %s", admin.email)
+        if access_token:
+            remaining = _remaining_ttl(access_token)
+            await blacklist_token(get_token_jti(access_token), remaining)
+        if refresh_token:
+            remaining = _remaining_ttl(refresh_token)
+            await blacklist_token(get_token_jti(refresh_token), remaining)
 
     @staticmethod
     async def refresh_access_token(
         db: AsyncSession, refresh_token: str
     ) -> tuple[str, str]:
         """Issue new access and refresh tokens from a refresh token."""
+        old_jti = get_token_jti(refresh_token)
+        if await is_token_blacklisted(old_jti):
+            raise InvalidTokenException(detail="Refresh token has been revoked")
+
         payload = decode_token(refresh_token, settings.JWT_SECRET_KEY, settings.JWT_ALGORITHM)
         if not payload:
             raise InvalidTokenException()
@@ -174,6 +202,10 @@ class AdminAuthService:
             algorithm=settings.JWT_ALGORITHM,
             expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
         )
+
+        remaining = _remaining_ttl(refresh_token)
+        await blacklist_token(old_jti, remaining)
+
         return new_access_token, new_refresh_token
 
     @staticmethod
@@ -187,6 +219,8 @@ class AdminAuthService:
         admin: AdminUser,
         old_password: str,
         new_password: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> None:
         """Change the admin password."""
         if not verify_password(old_password, admin.password_hash):
@@ -199,5 +233,17 @@ class AdminAuthService:
             raise WeakPasswordException(detail=message)
 
         admin.password_hash = hash_password(new_password)
+        admin.password_changed_at = now()
+        await AdminAuditService.record(
+            db,
+            actor_admin_id=admin.id,
+            target_admin_id=admin.id,
+            action="admin_change_password",
+            resource_type="admin_user",
+            resource_id=str(admin.uid),
+            status="success",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
         await db.commit()
         logger.info("Admin password changed: uid=%s", admin.uid)

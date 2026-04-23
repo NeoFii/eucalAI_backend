@@ -11,7 +11,7 @@ def test_validate_environment_requires_common_secrets_and_service_database_urls(
         ["admin-service", "user-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
             "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
         },
     )
@@ -26,7 +26,7 @@ def test_validate_environment_rejects_duplicate_database_urls():
         ["admin-service", "user-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
             "ADMIN_DATABASE_URL": shared,
             "USER_DATABASE_URL": shared,
         },
@@ -41,7 +41,7 @@ def test_validate_environment_warns_about_ignored_generic_database_url():
         ["backend-app"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
             "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
             "USER_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/user_db",
             "DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/ignored",
@@ -57,7 +57,7 @@ def test_validate_environment_accepts_db_less_router_and_inference_services():
         ["router-service", "inference-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
         },
     )
 
@@ -70,7 +70,7 @@ def test_validate_environment_validates_auth_cookie_settings():
         ["admin-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
             "ADMIN_DATABASE_URL": "mysql+aiomysql://root:pw@localhost:3306/admin_db",
             "JWT_REFRESH_TOKEN_EXPIRE_DAYS": "0",
             "COOKIE_SAMESITE": "invalid",
@@ -87,7 +87,7 @@ def test_validate_environment_warns_when_router_master_keys_use_fallback():
         ["router-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
-            "INTERNAL_SECRET": "internal-secret",
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
         },
     )
 

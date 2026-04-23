@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-os.environ["INTERNAL_SECRET"] = "test_secret"
+os.environ["INTERNAL_SECRET"] = "test_internal_secret_32chars_long!"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
 

@@ -1,14 +1,19 @@
-"""Admin-facing user management endpoints."""
+"""Admin-facing user management endpoints (facade over user-service).
+
+These endpoints proxy user operations to user-service via the gateway layer.
+They belong to the admin control-plane facade, not the admin domain proper.
+"""
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_service.dependencies import get_db_session
+from admin_service.dependencies import get_db_session, get_request_meta
 from admin_service.gateway import UserManagementGateway
 from admin_service.models import AdminUser
 from admin_service.policies import require_active_admin, require_super_admin
@@ -41,10 +46,21 @@ router = APIRouter(prefix="/users", tags=["user-management"])
 _gateway = UserManagementGateway()
 
 
-def _request_meta(request: Request) -> tuple[str | None, str | None]:
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    return ip_address, user_agent
+async def _safe_audit_commit(
+    db: AsyncSession,
+    **audit_kwargs,
+) -> None:
+    """Write an audit record and commit. On failure, log the full audit payload
+    at CRITICAL level so it can be recovered from logs."""
+    try:
+        await AdminAuditService.record(db, **audit_kwargs)
+        await db.commit()
+    except Exception:
+        logger.critical(
+            "Audit commit failed after successful gateway operation: %s",
+            json.dumps(audit_kwargs, default=str),
+        )
+        await db.rollback()
 
 
 @router.get("/", response_model=UserListResponse, summary="List users")
@@ -90,9 +106,9 @@ async def update_user_status(
     db: AsyncSession = Depends(get_db_session),
 ) -> UserOperationResponse:
     result = await _gateway.update_user_status(uid, payload.status)
-    ip_address, user_agent = _request_meta(request)
+    ip_address, user_agent = get_request_meta(request)
     action = "enable_user" if payload.status == 1 else "disable_user"
-    await AdminAuditService.record(
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -105,7 +121,6 @@ async def update_user_status(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return UserOperationResponse(message="操作成功")
 
 
@@ -122,8 +137,8 @@ async def reset_user_password(
     db: AsyncSession = Depends(get_db_session),
 ) -> UserOperationResponse:
     await _gateway.reset_user_password(uid, payload.new_password)
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
+    ip_address, user_agent = get_request_meta(request)
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -134,7 +149,6 @@ async def reset_user_password(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return UserOperationResponse(message="密码重置成功")
 
 
@@ -156,8 +170,8 @@ async def topup_user(
         operator_uid=current_admin.uid,
         remark=payload.remark,
     )
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
+    ip_address, user_agent = get_request_meta(request)
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -169,7 +183,6 @@ async def topup_user(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return UserOperationResponse(message="充值成功")
 
 
@@ -191,8 +204,8 @@ async def adjust_user_balance(
         operator_uid=current_admin.uid,
         remark=payload.remark,
     )
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
+    ip_address, user_agent = get_request_meta(request)
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -204,7 +217,6 @@ async def adjust_user_balance(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return UserOperationResponse(message="余额调整成功")
 
 
@@ -252,8 +264,8 @@ async def disable_user_api_key(
     db: AsyncSession = Depends(get_db_session),
 ) -> UserOperationResponse:
     await _gateway.disable_user_api_key(uid, key_id)
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
+    ip_address, user_agent = get_request_meta(request)
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -265,7 +277,6 @@ async def disable_user_api_key(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return UserOperationResponse(message="API Key 已禁用")
 
 

@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, SmallInteger, String
 from sqlalchemy.orm import relationship
 
 from admin_service.db import Base
 from common.db.base import SnowflakeIdMixin, TimestampMixin
-
-if TYPE_CHECKING:
-    pass
 
 
 class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):

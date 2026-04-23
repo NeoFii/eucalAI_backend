@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
-os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret")
+os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret_32chars_long!")
 os.environ.setdefault("ADMIN_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/admin")
 
 
@@ -144,7 +145,7 @@ async def _fake_list_models(db, **kwargs):
     ], 1
 
 
-async def _fake_create_model(db, payload):
+async def _fake_create_model(db, payload, **kwargs):
     from admin_service.schemas.model_catalog import (
         ModelCategoryBrief,
         ModelVendorBrief,
@@ -173,7 +174,7 @@ async def _fake_create_model(db, payload):
     )
 
 
-async def _fake_update_model(db, slug, payload):
+async def _fake_update_model(db, slug, payload, **kwargs):
     from admin_service.schemas.model_catalog import (
         ModelCategoryBrief,
         ModelVendorBrief,
@@ -300,6 +301,11 @@ async def test_admin_catalog_create_model_delegates_to_service(monkeypatch):
         status=1,
     )
 
+    mock_request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"user-agent": "test"},
+    )
+
     response = await model_catalog_admin.create_supported_model(
         payload=SupportedModelCreate(
             slug="deepseek-r1",
@@ -317,6 +323,7 @@ async def test_admin_catalog_create_model_delegates_to_service(monkeypatch):
             sort_order=30,
             category_keys=["reasoning"],
         ),
+        http_request=mock_request,
         current_admin=current_admin,
         db="db",
     )
@@ -350,6 +357,11 @@ async def test_admin_catalog_update_model_accepts_summary_and_fen_fields(monkeyp
         status=1,
     )
 
+    mock_request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"user-agent": "test"},
+    )
+
     response = await model_catalog_admin.update_supported_model(
         slug="deepseek-r1",
         payload=SupportedModelUpdate(
@@ -358,7 +370,8 @@ async def test_admin_catalog_update_model_accepts_summary_and_fen_fields(monkeyp
             price_input_per_m_fen=888,
             price_output_per_m_fen=999,
         ),
-        _current_admin=current_admin,
+        http_request=mock_request,
+        current_admin=current_admin,
         db="db",
     )
 

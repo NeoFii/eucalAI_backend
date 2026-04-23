@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.models import (
@@ -15,6 +17,7 @@ from admin_service.repositories import (
     ModelVendorRepository,
     SupportedModelRepository,
 )
+from admin_service.services.audit_service import AdminAuditService
 from admin_service.schemas.model_catalog import (
     ModelCategoryBrief,
     ModelCategoryCreate,
@@ -160,12 +163,32 @@ class ModelCatalogService:
         return ModelCatalogService._model_item(model, detail=True)
 
     @staticmethod
-    async def create_vendor(db: AsyncSession, payload: ModelVendorCreate) -> ModelVendorItem:
+    async def create_vendor(
+        db: AsyncSession,
+        payload: ModelVendorCreate,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> ModelVendorItem:
         repo = ModelVendorRepository(db)
         if await repo.get_by_slug(payload.slug):
             raise ValidationException("vendor slug already exists")
         vendor = ModelVendor(**payload.model_dump())
         repo.add(vendor)
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="create_model_vendor",
+                resource_type="model_vendor",
+                resource_id=payload.slug,
+                status="success",
+                after_data=payload.model_dump(),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         await db.refresh(vendor)
         return ModelCatalogService._vendor_item(vendor)
@@ -175,23 +198,61 @@ class ModelCatalogService:
         db: AsyncSession,
         slug: str,
         payload: ModelVendorUpdate,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> ModelVendorItem:
         vendor = await ModelVendorRepository(db).get_by_slug(slug)
         if vendor is None:
             raise NotFoundException("vendor not found")
-        for key, value in payload.model_dump(exclude_unset=True).items():
+        changed = payload.model_dump(exclude_unset=True)
+        for key, value in changed.items():
             setattr(vendor, key, value)
+        if actor_admin_id is not None and changed:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="update_model_vendor",
+                resource_type="model_vendor",
+                resource_id=slug,
+                status="success",
+                after_data=changed,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         await db.refresh(vendor)
         return ModelCatalogService._vendor_item(vendor)
 
     @staticmethod
-    async def create_category(db: AsyncSession, payload: ModelCategoryCreate) -> ModelCategoryItem:
+    async def create_category(
+        db: AsyncSession,
+        payload: ModelCategoryCreate,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> ModelCategoryItem:
         repo = ModelCategoryRepository(db)
         if await repo.get_by_key(payload.key):
             raise ValidationException("category key already exists")
         category = ModelCategory(**payload.model_dump())
         repo.add(category)
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="create_model_category",
+                resource_type="model_category",
+                resource_id=payload.key,
+                status="success",
+                after_data=payload.model_dump(),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         await db.refresh(category)
         return ModelCatalogService._category_item(category)
@@ -201,12 +262,30 @@ class ModelCatalogService:
         db: AsyncSession,
         key: str,
         payload: ModelCategoryUpdate,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> ModelCategoryItem:
         category = await ModelCategoryRepository(db).get_by_key(key)
         if category is None:
             raise NotFoundException("category not found")
-        for field, value in payload.model_dump(exclude_unset=True).items():
+        changed = payload.model_dump(exclude_unset=True)
+        for field, value in changed.items():
             setattr(category, field, value)
+        if actor_admin_id is not None and changed:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="update_model_category",
+                resource_type="model_category",
+                resource_id=key,
+                status="success",
+                after_data=changed,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         await db.refresh(category)
         return ModelCatalogService._category_item(category)
@@ -252,6 +331,10 @@ class ModelCatalogService:
     async def create_model(
         db: AsyncSession,
         payload: SupportedModelCreate,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> SupportedModelDetail:
         model_repo = SupportedModelRepository(db)
         if await model_repo.get_by_slug(payload.slug, active_only=False):
@@ -276,6 +359,19 @@ class ModelCatalogService:
         )
         ModelCatalogService._replace_categories(model, categories)
         model_repo.add(model)
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="create_supported_model",
+                resource_type="supported_model",
+                resource_id=payload.slug,
+                status="success",
+                after_data=payload.model_dump(),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()
         return await ModelCatalogService.get_model_by_slug(db, payload.slug, active_only=False)
 
@@ -284,6 +380,10 @@ class ModelCatalogService:
         db: AsyncSession,
         slug: str,
         payload: SupportedModelUpdate,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> SupportedModelDetail:
         model_repo = SupportedModelRepository(db)
         model = await model_repo.get_by_slug(slug, active_only=False)
@@ -301,13 +401,48 @@ class ModelCatalogService:
             ModelCatalogService._replace_categories(model, categories)
         for field, value in data.items():
             setattr(model, field, value)
+        if actor_admin_id is not None:
+            changed = payload.model_dump(exclude_unset=True)
+            if changed:
+                await AdminAuditService.record(
+                    db,
+                    actor_admin_id=actor_admin_id,
+                    target_admin_id=None,
+                    action="update_supported_model",
+                    resource_type="supported_model",
+                    resource_id=slug,
+                    status="success",
+                    after_data=changed,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
         await db.commit()
         return await ModelCatalogService.get_model_by_slug(db, slug, active_only=False)
 
     @staticmethod
-    async def disable_model(db: AsyncSession, slug: str) -> None:
+    async def disable_model(
+        db: AsyncSession,
+        slug: str,
+        *,
+        actor_admin_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> None:
         model = await SupportedModelRepository(db).get_by_slug(slug, active_only=False)
         if model is None:
             raise NotFoundException("model not found")
         model.is_active = False
+        if actor_admin_id is not None:
+            await AdminAuditService.record(
+                db,
+                actor_admin_id=actor_admin_id,
+                target_admin_id=None,
+                action="disable_supported_model",
+                resource_type="supported_model",
+                resource_id=slug,
+                status="success",
+                after_data={"is_active": False},
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
         await db.commit()

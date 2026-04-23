@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
 from common.api import PaginatedResponse
@@ -77,55 +77,63 @@ class SupportedModelDetail(SupportedModelItem):
 
 
 class ModelVendorCreate(BaseModel):
-    slug: str = Field(..., min_length=1, max_length=80)
+    slug: str = Field(..., min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     name: str = Field(..., min_length=1, max_length=120)
     logo_url: str | None = Field(default=None, max_length=512)
     is_active: bool = True
-    sort_order: int = 0
+    sort_order: int = Field(default=0, ge=0, le=9999)
 
 
 class ModelVendorUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     logo_url: str | None = Field(default=None, max_length=512)
     is_active: bool | None = None
-    sort_order: int | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=9999)
 
 
 class ModelCategoryCreate(BaseModel):
-    key: str = Field(..., min_length=1, max_length=80)
+    key: str = Field(..., min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     name: str = Field(..., min_length=1, max_length=120)
-    sort_order: int = 0
+    sort_order: int = Field(default=0, ge=0, le=9999)
     is_active: bool = True
 
 
 class ModelCategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    sort_order: int | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=9999)
     is_active: bool | None = None
 
 
 class SupportedModelCreate(BaseModel):
-    slug: str = Field(..., min_length=1, max_length=120)
+    slug: str = Field(..., min_length=1, max_length=120, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     name: str = Field(..., min_length=1, max_length=160)
     vendor_slug: str = Field(..., min_length=1, max_length=80)
     summary: str | None = Field(default=None, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=5000)
     price_input_per_m_fen: int | None = Field(default=None, ge=0)
     price_output_per_m_fen: int | None = Field(default=None, ge=0)
-    capability_tags: list[str] = Field(default_factory=list)
+    capability_tags: list[str] = Field(default_factory=list, max_length=20)
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
     is_reasoning_model: bool = False
     is_active: bool = True
-    sort_order: int = 0
-    category_keys: list[str] = Field(default_factory=list)
+    sort_order: int = Field(default=0, ge=0, le=9999)
+    category_keys: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("capability_tags")
+    @classmethod
+    def validate_capability_tags(cls, v: list[str]) -> list[str]:
+        for tag in v:
+            if len(tag) > 50:
+                raise ValueError("each capability tag must be <= 50 characters")
+        return v
 
 
 class SupportedModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     vendor_slug: str | None = Field(default=None, min_length=1, max_length=80)
     summary: str | None = Field(default=None, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=5000)
     price_input_per_m_fen: int | None = Field(default=None, ge=0)
     price_output_per_m_fen: int | None = Field(default=None, ge=0)
     capability_tags: list[str] | None = None
@@ -133,8 +141,26 @@ class SupportedModelUpdate(BaseModel):
     max_output_tokens: int | None = Field(default=None, gt=0)
     is_reasoning_model: bool | None = None
     is_active: bool | None = None
-    sort_order: int | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=9999)
     category_keys: list[str] | None = None
+
+    @field_validator("capability_tags")
+    @classmethod
+    def validate_capability_tags(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            if len(v) > 20:
+                raise ValueError("capability_tags must have at most 20 items")
+            for tag in v:
+                if len(tag) > 50:
+                    raise ValueError("each capability tag must be <= 50 characters")
+        return v
+
+    @field_validator("category_keys")
+    @classmethod
+    def validate_category_keys(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None and len(v) > 20:
+            raise ValueError("category_keys must have at most 20 items")
+        return v
 
 
 class ModelVendorListResponse(AdminBaseResponse):

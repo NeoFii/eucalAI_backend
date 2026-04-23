@@ -26,6 +26,7 @@ class AdminAuditService:
         "admin_login_failed",
         "admin_login_locked",
         "admin_login_unlocked",
+        "admin_change_password",
     )
     CATEGORY_ACTIONS = {
         "governance": GOVERNANCE_ACTIONS,
@@ -37,6 +38,21 @@ class AdminAuditService:
             "topup_user",
             "adjust_user_balance",
             "disable_user_api_key",
+        ),
+        "invitation": (
+            "generate_invitation_codes",
+            "enable_invitation_code",
+            "disable_invitation_code",
+            "update_invitation_code",
+        ),
+        "model_catalog": (
+            "create_model_vendor",
+            "update_model_vendor",
+            "create_model_category",
+            "update_model_category",
+            "create_supported_model",
+            "update_supported_model",
+            "disable_supported_model",
         ),
     }
 

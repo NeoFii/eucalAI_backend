@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -11,7 +11,7 @@ from common.api import PaginatedResponse
 
 
 class GenerateVoucherCodesRequest(BaseModel):
-    amount: int = Field(..., gt=0, description="Voucher amount (fen)")
+    amount: int = Field(..., gt=0, le=1_000_000, description="Voucher amount (fen)")
     count: int = Field(..., ge=1, le=1000, description="Number of codes to generate")
     starts_at: datetime = Field(..., description="Validity start")
     expires_at: datetime = Field(..., description="Validity end")
@@ -21,6 +21,10 @@ class GenerateVoucherCodesRequest(BaseModel):
     def validate_window(self):
         if self.starts_at >= self.expires_at:
             raise ValueError("starts_at must be earlier than expires_at")
+        from common.utils.timezone import now as tz_now
+
+        if self.starts_at < tz_now() - timedelta(days=1):
+            raise ValueError("starts_at must not be more than 1 day in the past")
         return self
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Generic, Sequence, TypeVar
 
 from common.core.exceptions import ValidationException
@@ -34,7 +34,7 @@ class ListParams:
         if self.time_field is None:
             return None, None
 
-        effective_end = self.end or default_end or datetime.utcnow()
+        effective_end = self.end or default_end or datetime.now(timezone.utc)
         effective_start = self.start or (effective_end - timedelta(days=default_days))
         if effective_start >= effective_end:
             raise ValidationException(detail="开始时间必须早于结束时间")

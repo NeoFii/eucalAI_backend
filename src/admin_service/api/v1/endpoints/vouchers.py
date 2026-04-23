@@ -1,12 +1,19 @@
-"""Admin-facing voucher redemption-code management endpoints."""
+"""Admin-facing voucher redemption-code management endpoints (facade over user-service).
+
+These endpoints proxy voucher operations to user-service via the gateway layer.
+They belong to the admin control-plane facade, not the admin domain proper.
+"""
 # ruff: noqa: B008
 
 from __future__ import annotations
 
+import json
+import logging
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_service.dependencies import get_db_session
+from admin_service.dependencies import get_db_session, get_request_meta
 from admin_service.gateway import UserManagementGateway
 from admin_service.models import AdminUser
 from admin_service.policies import require_active_admin, require_super_admin
@@ -23,14 +30,22 @@ from admin_service.schemas.voucher import (
 from admin_service.services.audit_service import AdminAuditService
 from common.api import PaginatedResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/vouchers", tags=["voucher-management"])
 _gateway = UserManagementGateway()
 
 
-def _request_meta(request: Request) -> tuple[str | None, str | None]:
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    return ip_address, user_agent
+async def _safe_audit_commit(db: AsyncSession, **audit_kwargs) -> None:
+    try:
+        await AdminAuditService.record(db, **audit_kwargs)
+        await db.commit()
+    except Exception:
+        logger.critical(
+            "Audit commit failed after successful gateway operation: %s",
+            json.dumps(audit_kwargs, default=str),
+        )
+        await db.rollback()
 
 
 @router.post("", response_model=VoucherCodeCreateResponse, summary="Generate voucher codes")
@@ -48,8 +63,8 @@ async def generate_voucher_codes(
         operator_uid=current_admin.uid,
         remark=payload.remark,
     )
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
+    ip_address, user_agent = get_request_meta(request)
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -67,7 +82,6 @@ async def generate_voucher_codes(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return VoucherCodeCreateResponse(
         data=VoucherCodeCreateData(
             items=[CreatedVoucherCodeItem(**item) for item in data["items"]]
@@ -118,8 +132,8 @@ async def disable_voucher_code(
     db: AsyncSession = Depends(get_db_session),
 ) -> VoucherOperationResponse:
     await _gateway.disable_voucher_code(code_id, operator_uid=current_admin.uid)
-    ip_address, user_agent = _request_meta(request)
-    await AdminAuditService.record(
+    ip_address, user_agent = get_request_meta(request)
+    await _safe_audit_commit(
         db,
         actor_admin_id=current_admin.id,
         target_admin_id=None,
@@ -130,5 +144,4 @@ async def disable_voucher_code(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    await db.commit()
     return VoucherOperationResponse(message="禁用成功")

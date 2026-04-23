@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_service.dependencies import get_db_session
@@ -14,6 +14,7 @@ from admin_service.schemas.model_catalog import (
     SupportedModelResponse,
 )
 from admin_service.services.model_catalog_service import ModelCatalogService
+from admin_service.utils.parsing import parse_comma_separated
 from common.api import PaginatedResponse
 
 router = APIRouter(tags=["model-catalog"])
@@ -64,13 +65,13 @@ async def list_model_categories(
 @router.get("/models", response_model=SupportedModelListResponse, summary="List models")
 async def list_supported_models(
     category: str | None = None,
-    vendors: str | None = None,
-    q: str | None = None,
+    vendors: str | None = Query(default=None, max_length=500),
+    q: str | None = Query(default=None, max_length=200),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db_session),
 ) -> SupportedModelListResponse:
-    vendor_list = [item.strip() for item in (vendors or "").split(",") if item.strip()]
+    vendor_list = parse_comma_separated(vendors)
     items, total = await ModelCatalogService.list_models(
         db,
         category=category,
@@ -87,7 +88,7 @@ async def list_supported_models(
 
 @router.get("/models/{slug}", response_model=SupportedModelResponse, summary="Get model detail")
 async def get_supported_model(
-    slug: str,
+    slug: str = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=120),
     db: AsyncSession = Depends(get_db_session),
 ) -> SupportedModelResponse:
     return SupportedModelResponse(
