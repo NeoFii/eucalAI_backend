@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 
 from common.internal import (
-    InternalServiceError,
+    InternalCircuitOpenError,
+    InternalServiceUnavailableError,
     get_internal_json,
 )
 
@@ -27,6 +28,6 @@ class AdminConfigGateway:
                 timeout=settings.config_fetch_timeout_seconds,
                 allow_404=True,
             )
-        except InternalServiceError:
-            logger.warning("failed to fetch routing config from admin-service", exc_info=True)
+        except (InternalServiceUnavailableError, InternalCircuitOpenError):
+            logger.warning("admin-service unavailable, will use fallback", exc_info=True)
             return None

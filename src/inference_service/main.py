@@ -17,6 +17,7 @@ from inference_service.config import (
     InferenceSettings,
     load_model_paths,
 )
+from inference_service.schemas.errors import InferenceUnavailableError
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_ROUTER_ASSETS = _BACKEND_ROOT / "deploy" / "router"
@@ -38,19 +39,19 @@ def _default_asset(name: str, override_env: str) -> str:
 
 def get_engine() -> Any:
     if _engine is None:
-        raise RuntimeError("router engine not initialized")
+        raise InferenceUnavailableError("router engine not initialized")
     return _engine
 
 
 def get_runtime_store() -> Any:
     if _config_manager is None:
-        raise RuntimeError("config manager not initialized")
+        raise InferenceUnavailableError("config manager not initialized")
     return _config_manager
 
 
 def get_config_manager() -> Any:
     if _config_manager is None:
-        raise RuntimeError("config manager not initialized")
+        raise InferenceUnavailableError("config manager not initialized")
     return _config_manager
 
 
@@ -81,7 +82,7 @@ def create_app(
     log_dir: str | None = None,
     settings: InferenceSettings | None = None,
 ) -> FastAPI:
-    global _engine, _runtime_store, _settings
+    global _engine, _config_manager, _settings
 
     _settings = settings or InferenceSettings.from_env()
     runtime_config_path = (

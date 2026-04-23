@@ -13,6 +13,8 @@ from router_service.utils.runtime_config import (
     normalize_runtime_config,
 )
 
+from common.internal import InternalServiceResponseError
+
 _logger = logging.getLogger("router_service")
 
 
@@ -48,6 +50,12 @@ class ConfigManager:
         admin_config = None
         try:
             admin_config = await AdminConfigGateway.fetch_active_config(self._settings)
+        except InternalServiceResponseError as exc:
+            if exc.status_code in (401, 403):
+                raise RuntimeError(
+                    f"admin-service rejected credentials (HTTP {exc.status_code}): {exc.detail}"
+                ) from exc
+            _logger.warning("admin-service returned error, trying local fallback", exc_info=True)
         except Exception:
             _logger.warning("failed to fetch config from admin-service", exc_info=True)
 
@@ -120,6 +128,13 @@ class ConfigManager:
                 self._last_updated_at = datetime.now(timezone.utc)
             except asyncio.CancelledError:
                 raise
+            except InternalServiceResponseError as exc:
+                if exc.status_code in (401, 403):
+                    _logger.error("admin credentials rejected (HTTP %s), using cached config", exc.status_code)
+                else:
+                    _logger.warning("config refresh failed (HTTP %s), keeping current config", exc.status_code, exc_info=True)
+                if self._config_source == "admin":
+                    self._config_source = "cached_previous"
             except Exception:
                 if self._config_source == "admin":
                     self._config_source = "cached_previous"

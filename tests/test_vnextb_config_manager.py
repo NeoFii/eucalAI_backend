@@ -86,7 +86,56 @@ def local_config_file(tmp_path):
     return str(path)
 
 
-# PLACEHOLDER_TESTS
+from common.internal import InternalServiceResponseError, InternalServiceUnavailableError
+
+
+# ── Finding 1: 403 fail fast + unavailable fallback tests ──
+
+
+async def test_router_startup_403_fail_fast(local_config_file):
+    from router_service.services.config_manager import ConfigManager
+
+    exc = InternalServiceResponseError(
+        "forbidden", target_service="admin-service",
+        path="/active/full", status_code=403, detail="caller not allowed",
+    )
+    cm = ConfigManager(settings=FakeRouterSettings(), runtime_config_path=local_config_file)
+    with patch("router_service.gateway_admin.AdminConfigGateway.fetch_active_config", new_callable=AsyncMock, side_effect=exc):
+        with pytest.raises(RuntimeError, match="rejected credentials"):
+            await cm.start()
+
+
+async def test_inference_startup_403_fail_fast(tmp_path):
+    from inference_service.services.config_manager import ConfigManager
+
+    cfg_path = tmp_path / "runtime_config.json"
+    cfg_path.write_text(json.dumps(build_default_runtime_config()), encoding="utf-8")
+
+    exc = InternalServiceResponseError(
+        "forbidden", target_service="admin-service",
+        path="/active/inference", status_code=403, detail="caller not allowed",
+    )
+    cm = ConfigManager(settings=FakeInferenceSettings(), runtime_config_path=str(cfg_path))
+    with patch("inference_service.gateway.AdminConfigGateway.fetch_active_config", new_callable=AsyncMock, side_effect=exc):
+        with pytest.raises(RuntimeError, match="rejected credentials"):
+            await cm.start()
+
+
+async def test_router_startup_unavailable_fallback_local(local_config_file):
+    from router_service.services.config_manager import ConfigManager
+
+    exc = InternalServiceUnavailableError(
+        "connection refused", target_service="admin-service",
+        path="/active/full",
+    )
+    cm = ConfigManager(settings=FakeRouterSettings(), runtime_config_path=local_config_file)
+    with patch("router_service.gateway_admin.AdminConfigGateway.fetch_active_config", new_callable=AsyncMock, side_effect=exc):
+        await cm.start()
+    try:
+        assert cm.config_source == "local_fallback"
+        assert cm.load() is not None
+    finally:
+        await cm.stop()
 
 
 async def test_router_startup_admin_success(local_config_file):

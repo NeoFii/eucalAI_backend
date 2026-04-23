@@ -130,6 +130,8 @@ def log_routing_decision(
     config_source: str | None = None,
     error_code: str | None = None,
     router_trace_id: str | None = None,
+    inference_config_version: int | None = None,
+    inference_config_source: str | None = None,
 ) -> None:
     record: Dict[str, Any] = {
         "request_id": request_id,
@@ -145,6 +147,8 @@ def log_routing_decision(
         "is_stream": is_stream,
         "config_version": config_version,
         "config_source": config_source,
+        "inference_config_version": inference_config_version,
+        "inference_config_source": inference_config_source,
     }
     if fallback_routes:
         record["fallback_routes"] = fallback_routes

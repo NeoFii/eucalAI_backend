@@ -58,6 +58,10 @@ async def route_and_resolve(
         if classify_result.success:
             route_result = classify_result.data
             selected_model = route_result["selected_model"]
+            inference_cv = route_result.get("config_version")
+            inference_cs = route_result.get("config_source")
+            route_meta["inference_config_version"] = inference_cv
+            route_meta["inference_config_source"] = inference_cs
 
             log_routing_decision(
                 request_id=request_id,
@@ -74,6 +78,8 @@ async def route_and_resolve(
                 fallback_routes=route_result.get("fallback_routes", []),
                 config_version=route_meta["config_version"],
                 config_source=route_meta["config_source"],
+                inference_config_version=inference_cv,
+                inference_config_source=inference_cs,
             )
         else:
             error_code = classify_result.error_code or "unavailable"
