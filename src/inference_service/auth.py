@@ -5,7 +5,9 @@ from __future__ import annotations
 import hmac
 import logging
 
-from fastapi import Header, HTTPException
+from fastapi import Header
+
+from inference_service.schemas.errors import InferenceAuthError, InferenceUnavailableError
 
 logger = logging.getLogger("inference_service")
 
@@ -23,9 +25,9 @@ def require_inference_secret(
                 "INFERENCE_SERVICE_SECRET not set — classify endpoint UNPROTECTED (dev mode)"
             )
             return ""
-        raise HTTPException(status_code=503, detail="inference service not configured")
+        raise InferenceUnavailableError("inference service not configured")
     if not x_inference_secret or not hmac.compare_digest(
         x_inference_secret.encode("utf-8"), expected.encode("utf-8")
     ):
-        raise HTTPException(status_code=403, detail="forbidden")
+        raise InferenceAuthError("forbidden")
     return x_inference_secret

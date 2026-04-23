@@ -133,6 +133,10 @@ class InferenceSettings:
     model_paths_config: str = ""
     runtime_config_path: str = ""
     log_dir: str = "logs"
+    admin_service_url: str = "http://127.0.0.1:8001"
+    internal_secret: str = ""
+    config_refresh_interval_seconds: int = 60
+    config_fetch_timeout_seconds: float = 5.0
 
     @classmethod
     def from_env(cls) -> "InferenceSettings":
@@ -144,4 +148,14 @@ class InferenceSettings:
             model_paths_config=os.getenv("ROUTER_MODEL_PATHS", ""),
             runtime_config_path=os.getenv("ROUTER_RUNTIME_CONFIG", ""),
             log_dir=os.getenv("INFERENCE_LOG_DIR", "logs"),
+            admin_service_url=os.getenv(
+                "ADMIN_SERVICE_URL", "http://127.0.0.1:8001"
+            ),
+            internal_secret=os.getenv("INTERNAL_SECRET", ""),
+            config_refresh_interval_seconds=int(
+                os.getenv("CONFIG_REFRESH_INTERVAL_SECONDS", "60")
+            ),
+            config_fetch_timeout_seconds=float(
+                os.getenv("CONFIG_FETCH_TIMEOUT_SECONDS", "5.0")
+            ),
         )

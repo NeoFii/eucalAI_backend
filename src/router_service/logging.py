@@ -126,6 +126,10 @@ def log_routing_decision(
     messages_count: int = 0,
     is_stream: bool = False,
     fallback_routes: list[str] | None = None,
+    config_version: int | None = None,
+    config_source: str | None = None,
+    error_code: str | None = None,
+    router_trace_id: str | None = None,
 ) -> None:
     record: Dict[str, Any] = {
         "request_id": request_id,
@@ -139,9 +143,15 @@ def log_routing_decision(
         "input_preview": (input_preview or "")[:300],
         "messages_count": messages_count,
         "is_stream": is_stream,
+        "config_version": config_version,
+        "config_source": config_source,
     }
     if fallback_routes:
         record["fallback_routes"] = fallback_routes
+    if error_code:
+        record["error_code"] = error_code
+    if router_trace_id:
+        record["router_trace_id"] = router_trace_id
     get_routing_logger().info(record)
 
 
@@ -158,6 +168,9 @@ def log_upstream_call(
     is_stream: bool = False,
     response_preview: str = "",
     error: str | None = None,
+    config_version: int | None = None,
+    config_source: str | None = None,
+    router_trace_id: str | None = None,
 ) -> None:
     record: Dict[str, Any] = {
         "request_id": request_id,
@@ -170,7 +183,11 @@ def log_upstream_call(
         "latency_ms": round(latency_ms, 1) if latency_ms is not None else None,
         "is_stream": is_stream,
         "response_preview": (response_preview or "")[:300],
+        "config_version": config_version,
+        "config_source": config_source,
     }
     if error:
         record["error"] = str(error)[:500]
+    if router_trace_id:
+        record["router_trace_id"] = router_trace_id
     get_upstream_logger().info(record)

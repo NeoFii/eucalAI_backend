@@ -30,6 +30,7 @@ def create_app(
     runtime_config_path: str | None = None,
     log_dir: str | None = None,
 ) -> FastAPI:
+    from router_service.services.config_manager import ConfigManager
     from router_service.services.inference_client import InferenceClient
     from router_service.settings import RouterSettings
 
@@ -51,16 +52,23 @@ def create_app(
         circuit_breaker_cooldown=settings.internal_http_circuit_breaker_cooldown_seconds,
     )
 
+    config_manager = ConfigManager(
+        settings=settings,
+        runtime_config_path=runtime_config_path,
+    )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info("initializing router gateway...")
+        await config_manager.start()
         init_globals(
-            runtime_config_path=runtime_config_path,
+            config_manager=config_manager,
             settings=settings,
             inference_client=inference_client,
         )
         logger.info("router gateway ready")
         yield
+        await config_manager.stop()
         await inference_client.close()
         logger.info("shutting down")
 
@@ -69,6 +77,10 @@ def create_app(
         version="1.0.0",
         lifespan=lifespan,
     )
+
+    from common.observability import install_observability
+    install_observability(app, service_name="router_service")
+
     app.include_router(meta.router)
     app.include_router(chat.router)
     app.include_router(completions.router)

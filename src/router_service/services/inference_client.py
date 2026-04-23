@@ -5,13 +5,23 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 import httpx
-from fastapi import HTTPException
+
+from common.observability import REQUEST_ID_HEADER, get_request_id
 
 logger = logging.getLogger("router_service")
 
+
+@dataclass
+class ClassifyResult:
+    success: bool
+    data: Dict[str, Any] | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    http_status: int | None = None
 
 class InferenceClient:
     """Async HTTP client that calls inference-service for routing decisions.
@@ -43,14 +53,16 @@ class InferenceClient:
             timeout=httpx.Timeout(timeout),
         )
 
-    def _check_circuit_breaker(self) -> None:
+    def _check_circuit_breaker(self) -> ClassifyResult | None:
         if self._cb_failures >= self._cb_threshold:
             if time.monotonic() < self._cb_open_until:
-                raise HTTPException(
-                    status_code=503,
-                    detail="inference service circuit breaker open",
+                return ClassifyResult(
+                    success=False,
+                    error_code="circuit_open",
+                    error_message="inference service circuit breaker open",
                 )
             self._cb_failures = 0
+        return None
 
     def _record_success(self) -> None:
         self._cb_failures = 0
@@ -68,12 +80,17 @@ class InferenceClient:
         self,
         messages: List[Dict[str, Any]],
         request_id: str | None = None,
-    ) -> Dict[str, Any]:
-        self._check_circuit_breaker()
+    ) -> ClassifyResult:
+        cb_result = self._check_circuit_breaker()
+        if cb_result is not None:
+            return cb_result
 
         headers: Dict[str, str] = {}
         if self._secret:
             headers["X-Inference-Secret"] = self._secret
+        rid = get_request_id()
+        if rid:
+            headers[REQUEST_ID_HEADER] = rid
 
         payload: Dict[str, Any] = {"messages": messages}
         if request_id:
@@ -89,10 +106,20 @@ class InferenceClient:
                     json=payload,
                     headers=headers,
                 )
-                if resp.status_code < 500:
-                    resp.raise_for_status()
+                if resp.status_code < 400:
                     self._record_success()
-                    return resp.json()
+                    return ClassifyResult(success=True, data=resp.json(), http_status=resp.status_code)
+
+                parsed_error = self._parse_error_response(resp)
+                if resp.status_code < 500:
+                    self._record_success()
+                    return ClassifyResult(
+                        success=False,
+                        error_code=parsed_error[0],
+                        error_message=parsed_error[1],
+                        http_status=resp.status_code,
+                    )
+
                 last_exc = httpx.HTTPStatusError(
                     f"Server error {resp.status_code}",
                     request=resp.request,
@@ -102,17 +129,15 @@ class InferenceClient:
                     "inference-service returned %s (attempt %d/%d)",
                     resp.status_code, attempt + 1, attempts,
                 )
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
+                if attempt == attempts - 1:
                     self._record_failure()
-                    logger.error(
-                        "inference-service returned %s: %s",
-                        exc.response.status_code, exc.response.text[:300],
+                    return ClassifyResult(
+                        success=False,
+                        error_code=parsed_error[0],
+                        error_message=parsed_error[1],
+                        http_status=resp.status_code,
                     )
-                    raise HTTPException(
-                        status_code=exc.response.status_code,
-                        detail=exc.response.text[:200],
-                    ) from exc
+            except httpx.HTTPStatusError as exc:
                 last_exc = exc
                 logger.warning(
                     "inference-service returned %s (attempt %d/%d)",
@@ -130,9 +155,21 @@ class InferenceClient:
 
         self._record_failure()
         logger.error("inference-service failed after %d attempts: %s", attempts, last_exc)
-        raise HTTPException(
-            status_code=503, detail="inference service unavailable"
-        ) from last_exc
+        return ClassifyResult(
+            success=False,
+            error_code="unavailable",
+            error_message="inference service unavailable",
+        )
+
+    @staticmethod
+    def _parse_error_response(resp: httpx.Response) -> tuple[str, str]:
+        try:
+            body = resp.json()
+            if isinstance(body, dict) and "error_code" in body:
+                return body["error_code"], body.get("message", "")
+        except (ValueError, KeyError):
+            pass
+        return "unavailable", resp.text[:200] if resp.text else "unknown error"
 
     async def close(self) -> None:
         await self._client.aclose()

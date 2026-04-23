@@ -23,7 +23,7 @@ _DEFAULT_ROUTER_ASSETS = _BACKEND_ROOT / "deploy" / "router"
 
 # Global singletons
 _engine: Optional[Any] = None
-_runtime_store: Optional[Any] = None
+_config_manager: Optional[Any] = None
 _settings: Optional[InferenceSettings] = None
 
 logger = logging.getLogger("inference_service")
@@ -43,9 +43,15 @@ def get_engine() -> Any:
 
 
 def get_runtime_store() -> Any:
-    if _runtime_store is None:
-        raise RuntimeError("runtime store not initialized")
-    return _runtime_store
+    if _config_manager is None:
+        raise RuntimeError("config manager not initialized")
+    return _config_manager
+
+
+def get_config_manager() -> Any:
+    if _config_manager is None:
+        raise RuntimeError("config manager not initialized")
+    return _config_manager
 
 
 def get_settings() -> InferenceSettings:
@@ -94,20 +100,27 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        global _engine, _runtime_store
+        global _engine, _config_manager
+        from inference_service.services.config_manager import ConfigManager
         from inference_service.services.router_engine import HybridIntegratedDifficultyRouter
-        from inference_service.utils.runtime_config import RuntimeConfigStore
 
         logger.info("initializing inference engine...")
         model_paths = load_model_paths(model_paths_config)
-        _runtime_store = RuntimeConfigStore(runtime_config_path)
-        _runtime_store.ensure_exists()
+
+        config_mgr = ConfigManager(
+            settings=_settings,
+            runtime_config_path=runtime_config_path,
+        )
+        await config_mgr.start()
+        _config_manager = config_mgr
+
         _engine = HybridIntegratedDifficultyRouter(
             model_paths,
-            runtime_config=_runtime_store.load(),
+            runtime_config=config_mgr.load(),
         )
         logger.info("inference engine ready")
         yield
+        await config_mgr.stop()
         logger.info("shutting down")
 
     from inference_service.api import classify
@@ -117,6 +130,12 @@ def create_app(
         version="1.0.0",
         lifespan=lifespan,
     )
+
+    from common.observability import install_observability
+    from inference_service.error_handlers import install_error_handlers
+    install_observability(app, service_name="inference_service")
+    install_error_handlers(app)
+
     app.include_router(classify.router)
 
     @app.get("/ready")

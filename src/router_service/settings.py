@@ -20,6 +20,9 @@ class RouterSettings:
     internal_http_retry_backoff_seconds: float = 0.2
     internal_http_circuit_breaker_threshold: int = 3
     internal_http_circuit_breaker_cooldown_seconds: float = 30.0
+    admin_service_url: str = "http://127.0.0.1:8001"
+    config_refresh_interval_seconds: int = 60
+    config_fetch_timeout_seconds: float = 5.0
 
     @classmethod
     def from_env(cls) -> "RouterSettings":
@@ -41,5 +44,14 @@ class RouterSettings:
             ),
             internal_http_circuit_breaker_cooldown_seconds=float(
                 os.getenv("INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS", "30.0")
+            ),
+            admin_service_url=os.getenv(
+                "ADMIN_SERVICE_URL", "http://127.0.0.1:8001"
+            ),
+            config_refresh_interval_seconds=int(
+                os.getenv("CONFIG_REFRESH_INTERVAL_SECONDS", "60")
+            ),
+            config_fetch_timeout_seconds=float(
+                os.getenv("CONFIG_FETCH_TIMEOUT_SECONDS", "5.0")
             ),
         )

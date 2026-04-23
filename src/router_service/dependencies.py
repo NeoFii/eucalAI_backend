@@ -14,13 +14,13 @@ from common.internal import InternalServiceError, InternalServiceResponseError
 from router_service.gateway import UserIdentityGateway, ValidatedApiKey
 
 if TYPE_CHECKING:
+    from router_service.services.config_manager import ConfigManager
     from router_service.services.inference_client import InferenceClient
     from router_service.settings import RouterSettings
-    from router_service.utils.runtime_config import RuntimeConfigStore
 
 # Global singletons — initialized in lifespan
 _inference_client: Optional["InferenceClient"] = None
-_runtime_store: Optional["RuntimeConfigStore"] = None
+_config_manager: Optional["ConfigManager"] = None
 _settings: Optional["RouterSettings"] = None
 
 # API key cache: sha256(raw_key) -> ValidatedApiKey
@@ -32,23 +32,25 @@ _api_key_cache: cachetools.TTLCache[str, ValidatedApiKey] = cachetools.TTLCache(
 
 def init_globals(
     *,
-    runtime_config_path: str,
+    config_manager: "ConfigManager",
     settings: "RouterSettings",
     inference_client: "InferenceClient",
 ) -> None:
-    global _inference_client, _runtime_store, _settings
-    from router_service.utils.runtime_config import RuntimeConfigStore
+    global _inference_client, _config_manager, _settings
 
     _settings = settings
     _inference_client = inference_client
-    _runtime_store = RuntimeConfigStore(runtime_config_path)
-    _runtime_store.ensure_exists()
+    _config_manager = config_manager
 
 
-def get_runtime_store() -> "RuntimeConfigStore":
-    if _runtime_store is None:
-        raise RuntimeError("runtime store not initialized")
-    return _runtime_store
+def get_config_manager() -> "ConfigManager":
+    if _config_manager is None:
+        raise RuntimeError("config manager not initialized")
+    return _config_manager
+
+
+def get_runtime_store() -> "ConfigManager":
+    return get_config_manager()
 
 
 def get_inference_client() -> "InferenceClient":

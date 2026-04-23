@@ -13,11 +13,31 @@ from inference_service.config import (
     FIVEWAY_DEFAULT_WEIGHTS,
     FIVEWAY_ROUTE_ORDER,
 )
-from inference_service.utils.scoring import parse_score_bands
 
 DEFAULT_ROUTER_ALIAS = "auto"
 
 _ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def parse_score_bands(raw: str) -> List[Tuple[float, float, int]]:
+    bands: List[Tuple[float, float, int]] = []
+    for item in raw.split(","):
+        left, _, right = item.partition(":")
+        if not left or not right:
+            continue
+        tier = int(right.strip())
+        if "-" in left:
+            start_raw, _, end_raw = left.partition("-")
+            start = float(start_raw.strip())
+            end = float(end_raw.strip())
+        else:
+            start = end = float(left.strip())
+        if start > end:
+            raise ValueError("score band start must be <= end")
+        bands.append((start, end, tier))
+    if not bands:
+        raise ValueError("score bands must not be empty")
+    return bands
 _logger = logging.getLogger("inference_service")
 
 
@@ -195,3 +215,72 @@ class RuntimeConfigStore:
             self._cached = config
             self._mtime = mtime
             return config
+
+
+def normalize_inference_config(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize config for inference-service: strips model_providers, no ${VAR} resolution."""
+    route_order = raw.get("route_order") or list(FIVEWAY_ROUTE_ORDER)
+    if route_order != list(FIVEWAY_ROUTE_ORDER):
+        raise ValueError(f"route_order must exactly match {FIVEWAY_ROUTE_ORDER}")
+
+    weights_raw = raw.get("weights", dict(FIVEWAY_DEFAULT_WEIGHTS))
+    if isinstance(weights_raw, list):
+        if len(weights_raw) != 5:
+            raise ValueError("weights list must contain exactly 5 numbers")
+        weights = dict(zip(FIVEWAY_ROUTE_ORDER, [float(x) for x in weights_raw]))
+    elif isinstance(weights_raw, dict):
+        weights = {}
+        for name in FIVEWAY_ROUTE_ORDER:
+            if name not in weights_raw:
+                raise ValueError(f"weights is missing route: {name}")
+            weights[name] = float(weights_raw[name])
+    else:
+        raise ValueError("weights must be a dict or a list")
+    if any(value < 0 for value in weights.values()):
+        raise ValueError("weights must be non-negative")
+    if sum(weights.values()) <= 0:
+        raise ValueError("weights sum must be greater than 0")
+
+    score_bands_value = raw.get("score_bands")
+    if not score_bands_value:
+        raise ValueError("score_bands must not be empty")
+    if isinstance(score_bands_value, list):
+        score_bands: List[Tuple[float, float, int]] = []
+        for item in score_bands_value:
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                raise ValueError("score_bands list items must be [start, end, tier]")
+            score_bands.append((float(item[0]), float(item[1]), int(item[2])))
+        if not score_bands:
+            raise ValueError("score bands must not be empty")
+        pieces = []
+        for start, end, tier in score_bands:
+            pieces.append(f"{start}-{end}:{tier}" if start != end else f"{start}:{tier}")
+        score_bands_raw = ",".join(pieces)
+    else:
+        score_bands_raw = str(score_bands_value).strip()
+        score_bands = parse_score_bands(score_bands_raw)
+
+    tier_map_raw = raw.get("tier_model_map")
+    if not tier_map_raw or not isinstance(tier_map_raw, dict):
+        raise ValueError("tier_model_map must be a non-empty dict")
+    tier_model_map: Dict[int, str] = {}
+    for key, value in tier_map_raw.items():
+        tier = int(key)
+        model_name = str(value).strip()
+        if not model_name:
+            raise ValueError("tier_model_map values must not be empty")
+        tier_model_map[tier] = model_name
+    if set(tier_model_map) != {1, 2, 3, 4, 5}:
+        raise ValueError("tier_model_map must define tiers 1..5")
+
+    router_alias = str(raw.get("router_alias", DEFAULT_ROUTER_ALIAS)).strip() or DEFAULT_ROUTER_ALIAS
+
+    return {
+        "router_alias": router_alias,
+        "route_order": list(FIVEWAY_ROUTE_ORDER),
+        "weights": weights,
+        "score_bands_raw": score_bands_raw,
+        "score_bands": score_bands,
+        "tier_model_map": tier_model_map,
+        "model_providers": {},
+    }

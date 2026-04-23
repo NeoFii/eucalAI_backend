@@ -10,6 +10,7 @@ import litellm
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
+from common.observability import get_request_id
 from router_service.dependencies import require_api_key
 from router_service.logging import log_upstream_call
 from router_service.schemas.requests import CompletionRequest
@@ -56,16 +57,20 @@ async def completions(
         raise HTTPException(status_code=400, detail="stream not supported for /v1/completions")
 
     messages = _extract_messages_from_prompt(request.prompt)
-    request_id = f"completion-{uuid.uuid4().hex[:12]}"
+    request_id = get_request_id() or uuid.uuid4().hex
+    router_trace_id = f"completion-{uuid.uuid4().hex[:12]}"
     input_preview = str(request.prompt)[:300]
 
-    selected_model, target_info, route_result = await route_and_resolve(
+    selected_model, target_info, route_result, route_meta = await route_and_resolve(
         requested_model=str(request.model).strip(),
         messages=messages,
         request_id=request_id,
         input_preview=input_preview,
         messages_count=len(messages),
     )
+
+    config_version = route_meta.get("config_version")
+    config_source = route_meta.get("config_source", "")
 
     forward_payload = request.model_dump(
         mode="python",
@@ -97,6 +102,9 @@ async def completions(
             status_code=502, ok=False,
             latency_ms=upstream_latency_ms,
             error=sanitize_error(exc),
+            config_version=config_version,
+            config_source=config_source,
+            router_trace_id=router_trace_id,
         )
         raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
@@ -113,6 +121,9 @@ async def completions(
         api_base=target_info["api_base"],
         status_code=200, ok=True,
         latency_ms=upstream_latency_ms,
+        config_version=config_version,
+        config_source=config_source,
+        router_trace_id=router_trace_id,
     )
 
     return JSONResponse(
@@ -120,5 +131,7 @@ async def completions(
         headers={
             "X-Router-Selected-Model": selected_model,
             "X-Router-Provider": target_info["provider_slug"],
+            "X-Router-Config-Version": str(config_version) if config_version is not None else "local",
+            "X-Router-Config-Source": config_source,
         },
     )

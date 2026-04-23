@@ -33,3 +33,6 @@ class ClassifyResponse(BaseModel):
     tier_model_map: Dict[int, str]
     score_bands_raw: str
     fallback_routes: List[str] = Field(default_factory=list)
+    config_version: Optional[int] = None
+    config_source: Optional[str] = None
+    latency_ms: Optional[float] = None

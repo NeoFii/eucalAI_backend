@@ -10,6 +10,7 @@ import litellm
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from common.observability import get_request_id
 from router_service.dependencies import require_api_key
 from router_service.logging import get_app_logger, log_upstream_call
 from router_service.schemas.requests import ChatCompletionRequest
@@ -28,7 +29,8 @@ async def chat_completions(
 ):
     is_stream = request.stream
     requested_model = str(request.model).strip()
-    request_id = f"chat-{uuid.uuid4().hex[:12]}"
+    request_id = get_request_id() or uuid.uuid4().hex
+    router_trace_id = f"chat-{uuid.uuid4().hex[:12]}"
 
     input_preview = ""
     if request.messages:
@@ -39,7 +41,7 @@ async def chat_completions(
         if not input_preview:
             input_preview = stringify_message_content(request.messages[-1].get("content", ""))
 
-    selected_model, target_info, route_result = await route_and_resolve(
+    selected_model, target_info, route_result, route_meta = await route_and_resolve(
         requested_model=requested_model,
         messages=request.messages,
         request_id=request_id,
@@ -47,6 +49,9 @@ async def chat_completions(
         messages_count=len(request.messages),
         is_stream=is_stream,
     )
+
+    config_version = route_meta.get("config_version")
+    config_source = route_meta.get("config_source", "")
 
     forward_payload = request.model_dump(
         mode="python",
@@ -79,6 +84,9 @@ async def chat_completions(
             latency_ms=upstream_latency_ms,
             is_stream=is_stream,
             error=sanitize_error(exc),
+            config_version=config_version,
+            config_source=config_source,
+            router_trace_id=router_trace_id,
         )
         raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
@@ -86,6 +94,8 @@ async def chat_completions(
     headers = {
         "X-Router-Selected-Model": selected_model,
         "X-Router-Provider": target_info["provider_slug"],
+        "X-Router-Config-Version": str(config_version) if config_version is not None else "local",
+        "X-Router-Config-Source": config_source,
     }
 
     if is_stream:
@@ -122,6 +132,9 @@ async def chat_completions(
                     latency_ms=final_latency,
                     is_stream=True,
                     response_preview=collected_content[:300],
+                    config_version=config_version,
+                    config_source=config_source,
+                    router_trace_id=router_trace_id,
                 )
 
         return StreamingResponse(
@@ -161,6 +174,9 @@ async def chat_completions(
         latency_ms=upstream_latency_ms,
         is_stream=False,
         response_preview=resp_preview,
+        config_version=config_version,
+        config_source=config_source,
+        router_trace_id=router_trace_id,
     )
 
     return JSONResponse(content=response_payload, headers=headers)
