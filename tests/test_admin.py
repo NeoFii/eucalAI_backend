@@ -55,27 +55,6 @@ class TestAdminModels:
         assert admin.is_active is True
         assert admin.is_super_admin is True
 
-    def test_invitation_code_model_and_properties(self):
-        from admin_service.models import InvitationCode
-
-        code = InvitationCode(
-            code="TEST123",
-            status=0,
-            created_by=1,
-            expires_at=datetime.now() + timedelta(days=7),
-        )
-
-        assert InvitationCode.__tablename__ == "invitation_codes"
-        assert code.is_valid is True
-        assert code.is_used is False
-        assert code.is_disabled is False
-
-    def test_invitation_code_rejects_removed_legacy_kwargs(self):
-        from admin_service.models import InvitationCode
-
-        with pytest.raises(TypeError):
-            InvitationCode(code="TEST123", type="register")
-
 
 class TestAdminUtils:
     def test_password_strength_check(self):
@@ -95,30 +74,11 @@ class TestAdminSchemas:
         req = AdminLoginRequest(email="admin@example.com", password="Password123!")
         assert req.email == "admin@example.com"
 
-    def test_generate_invitation_code_request(self):
-        from admin_service.schemas import GenerateInvitationCodeRequest
-
-        req = GenerateInvitationCodeRequest(quantity=5, expires_days=7, max_uses=1)
-        assert req.quantity == 5
-        assert req.expires_days == 7
-
-
 class TestAdminServices:
     def test_auth_service_import(self):
         from admin_service.services.auth_service import AdminAuthService
 
         assert AdminAuthService is not None
-
-    def test_invitation_service_import(self):
-        from admin_service.services.invitation_service import InvitationCodeService
-
-        assert InvitationCodeService is not None
-
-    def test_generate_code(self):
-        from admin_service.services.invitation_service import InvitationCodeService
-
-        code = InvitationCodeService.generate_code(length=16)
-        assert len(code) == 16
 
 
 class TestAdminDependencies:

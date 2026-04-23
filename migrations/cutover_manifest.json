@@ -15,7 +15,6 @@
       "owned_tables": [
         "admin_users",
         "admin_audit_logs",
-        "invitation_codes",
         "model_vendors",
         "model_categories",
         "supported_models",
@@ -27,18 +26,13 @@
       "internal_dependencies": [
         "user-service"
       ],
-      "external_reference_columns": {
-        "invitation_codes": [
-          "used_by"
-        ]
-      },
+      "external_reference_columns": {},
       "preconditions": [
         "ADMIN_DATABASE_URL points to an admin-owned schema or database",
         "bootstrap super-admin credentials are valid if bootstrap is enabled"
       ],
       "post_cutover_checks": [
-        "admin login and audit log writes succeed",
-        "invitation code consume and release internal endpoints succeed"
+        "admin login and audit log writes succeed"
       ]
     },
     {
@@ -57,7 +51,6 @@
         "topup_orders",
         "api_call_logs",
         "usage_stats",
-        "invitation_release_outbox",
         "voucher_redemption_codes"
       ],
       "owned_views": [],
@@ -76,8 +69,7 @@
         ]
       },
       "preconditions": [
-        "USER_DATABASE_URL points to a user-owned schema or database",
-        "admin-service invitation internal endpoints are reachable"
+        "USER_DATABASE_URL points to a user-owned schema or database"
       ],
       "post_cutover_checks": [
         "register/login/refresh/logout flows succeed",

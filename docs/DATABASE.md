@@ -4,7 +4,7 @@ The active backend owns two MySQL schemas.
 
 | Schema | Owner | Purpose |
 | --- | --- | --- |
-| `eucal_ai_admin` | admin domain | administrators, audit logs, invitation codes, model catalog, routing configs, provider credentials |
+| `eucal_ai_admin` | admin domain | administrators, audit logs, model catalog, routing configs, provider credentials |
 | `eucal_ai_user` | user domain | users, sessions, API keys, billing ledger, usage stats, voucher redemption codes |
 
 Router and inference are DB-less.

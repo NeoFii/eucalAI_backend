@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 __all__ = [
-    "AdminInvitationGateway",
     "require_active_user",
 ]
 
 
 def __getattr__(name: str):
-    if name == "AdminInvitationGateway":
-        from user_service import gateway
-
-        return getattr(gateway, name)
     if name == "require_active_user":
         from user_service import policies
 

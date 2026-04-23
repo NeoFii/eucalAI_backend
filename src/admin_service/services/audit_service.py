@@ -39,12 +39,6 @@ class AdminAuditService:
             "adjust_user_balance",
             "disable_user_api_key",
         ),
-        "invitation": (
-            "generate_invitation_codes",
-            "enable_invitation_code",
-            "disable_invitation_code",
-            "update_invitation_code",
-        ),
         "model_catalog": (
             "create_model_vendor",
             "update_model_vendor",

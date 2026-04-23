@@ -13,8 +13,7 @@ from sqlalchemy import select
 from common.utils.timezone import now
 from user_service.config import settings
 from user_service.db import close_db, create_engine, get_db_context, init_session_factory
-from user_service.gateway import AdminInvitationGateway
-from user_service.models import EmailVerificationCode, InvitationReleaseOutbox
+from user_service.models import EmailVerificationCode
 from user_service.services.usage_stat_service import UsageStatService
 
 logger = logging.getLogger(__name__)
@@ -59,51 +58,6 @@ async def aggregate_usage_stats(ctx: dict, stat_hour_iso: str | None = None) -> 
         await UsageStatService.aggregate_hour(db, stat_hour)
 
 
-async def retry_invitation_release_outbox(ctx: dict) -> None:
-    del ctx
-    gateway = AdminInvitationGateway()
-    async with get_db_context() as db:
-        items = list(
-            (
-                await db.execute(
-                    select(InvitationReleaseOutbox)
-                    .where(InvitationReleaseOutbox.retry_count < settings.INVITATION_RELEASE_MAX_RETRIES)
-                    .order_by(InvitationReleaseOutbox.retry_count.asc(), InvitationReleaseOutbox.updated_at.asc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-        success, fail = 0, 0
-        for item in items:
-            try:
-                released = await gateway.release_invitation_code(
-                    item.code,
-                    int(item.used_by_uid),
-                )
-                if released:
-                    await db.delete(item)
-                    success += 1
-                else:
-                    item.retry_count += 1
-                    item.last_error = "release_invitation_code returned false"
-                    fail += 1
-                await db.commit()
-            except Exception as exc:
-                await db.rollback()
-                try:
-                    await db.refresh(item)
-                    item.retry_count += 1
-                    item.last_error = str(exc)[:255]
-                    await db.commit()
-                except Exception:
-                    logger.error("Failed to update retry_count for outbox id=%s", item.id)
-                fail += 1
-                logger.warning("Invitation release failed: code=%s error=%s", item.code, exc)
-        if items:
-            logger.info("Invitation release batch: %d succeeded, %d failed", success, fail)
-
-
 async def cleanup_expired_verification_codes(ctx: dict) -> None:
     del ctx
     cutoff = now() - timedelta(days=settings.VERIFICATION_CODE_RETENTION_DAYS)
@@ -129,12 +83,10 @@ def get_worker_settings_kwargs() -> dict:
     return {
         "functions": [
             aggregate_usage_stats,
-            retry_invitation_release_outbox,
             cleanup_expired_verification_codes,
         ],
         "cron_jobs": [
             cron(aggregate_usage_stats, minute=0),
-            cron(retry_invitation_release_outbox, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
             cron(cleanup_expired_verification_codes, hour=3, minute=0),
         ],
         "redis_settings": build_redis_settings(),

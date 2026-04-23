@@ -57,7 +57,6 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
 
     # admin internal contracts — must stay under /api/v1/internal/ for HMAC callers
     assert any(p.startswith("/api/v1/internal/admins") for p in paths_by_prefix)
-    assert any(p.startswith("/api/v1/internal/invitation-codes") for p in paths_by_prefix)
     # admin public routes are mounted under /api/v1/admin/ to avoid /auth collision
     assert any(p.startswith("/api/v1/admin/auth") for p in paths_by_prefix)
     # user public routes (public /api/v1/auth/* belongs to user)

@@ -8,7 +8,6 @@ SERVICE_OWNED_OBJECTS = {
     "admin": {
         "admin_users",
         "admin_audit_logs",
-        "invitation_codes",
         "model_vendors",
         "model_categories",
         "supported_models",
@@ -26,7 +25,6 @@ SERVICE_OWNED_OBJECTS = {
         "topup_orders",
         "api_call_logs",
         "usage_stats",
-        "invitation_release_outbox",
     },
 }
 

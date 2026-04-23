@@ -63,12 +63,6 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
         lazy="selectin",
     )
 
-    created_invitation_codes = relationship(
-        "InvitationCode",
-        foreign_keys="InvitationCode.created_by",
-        back_populates="creator",
-        lazy="noload",
-    )
     audit_logs = relationship(
         "AdminAuditLog",
         foreign_keys="AdminAuditLog.actor_admin_id",

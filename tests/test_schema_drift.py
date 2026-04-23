@@ -25,7 +25,6 @@ OWNED_SCHEMAS = {
         "tables": [
             "admin_users",
             "admin_audit_logs",
-            "invitation_codes",
             "model_vendors",
             "model_categories",
             "supported_models",
@@ -47,7 +46,6 @@ OWNED_SCHEMAS = {
             "topup_orders",
             "api_call_logs",
             "usage_stats",
-            "invitation_release_outbox",
         ],
         "views": [],
         "base": user_db.Base,

@@ -11,12 +11,11 @@ references only.
 | user | `migrations/user_service` | `scripts/sql/user_schema.sql` | `USER_DATABASE_URL` |
 
 Admin-owned objects include `admin_users`, `admin_audit_logs`,
-`invitation_codes`, `model_vendors`, `model_categories`, `supported_models`,
+`model_vendors`, `model_categories`, `supported_models`,
 `supported_model_category_map`, `routing_configs`, and `provider_credentials`.
 
 User-owned objects include `users`, `user_api_keys`,
-`voucher_redemption_codes`, `usage_stats`, billing ledger tables, and
-invitation outbox tables.
+`voucher_redemption_codes`, `usage_stats`, and billing ledger tables.
 
 ## Bootstrap Order
 

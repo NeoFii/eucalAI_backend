@@ -19,18 +19,13 @@ def _source(path: str) -> str:
 
 
 def test_admin_schema_modules_are_split_and_export_real_types():
-    from admin_service.schemas import AdminLoginRequest, GenerateInvitationCodeRequest
+    from admin_service.schemas import AdminLoginRequest
     from admin_service.schemas.admin_user import CreateAdminRequest
     from admin_service.schemas.audit_log import AdminAuditLogItem
     from admin_service.schemas.auth import AdminLoginRequest as AuthLoginRequest
-    from admin_service.schemas.invitation import (
-        GenerateInvitationCodeRequest as InvitationGenerateRequest,
-    )
 
     assert AdminLoginRequest is AuthLoginRequest
-    assert GenerateInvitationCodeRequest is InvitationGenerateRequest
     assert AuthLoginRequest.__module__ == "admin_service.schemas.auth"
-    assert InvitationGenerateRequest.__module__ == "admin_service.schemas.invitation"
     assert CreateAdminRequest.__module__ == "admin_service.schemas.admin_user"
     assert AdminAuditLogItem.__module__ == "admin_service.schemas.audit_log"
 
@@ -59,7 +54,6 @@ def test_admin_services_use_repositories_for_database_queries():
     for path in [
         "services/auth_service.py",
         "services/management_service.py",
-        "services/invitation_service.py",
         "services/audit_service.py",
     ]:
         source = _source(path)

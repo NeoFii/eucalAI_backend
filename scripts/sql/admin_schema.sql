@@ -54,26 +54,6 @@ CREATE TABLE IF NOT EXISTS `admin_audit_logs` (
     CONSTRAINT `fk_admin_audit_target` FOREIGN KEY (`target_admin_id`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Admin audit logs';
 
-CREATE TABLE IF NOT EXISTS `invitation_codes` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-    `code` VARCHAR(64) NOT NULL COMMENT 'Invitation code',
-    `status` SMALLINT NOT NULL DEFAULT 0 COMMENT '0=unused 1=used 2=disabled',
-    `created_by` BIGINT NULL COMMENT 'Creator admin id',
-    `used_by` BIGINT NULL COMMENT 'Used-by user UID',
-    `used_at` DATETIME NULL COMMENT 'Used at',
-    `expires_at` DATETIME NULL COMMENT 'Expires at',
-    `remark` TEXT NULL COMMENT 'Remark',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_invitation_codes_code` (`code`),
-    KEY `idx_invitation_codes_status` (`status`),
-    KEY `idx_invitation_codes_created_by` (`created_by`),
-    KEY `idx_invitation_codes_used_by` (`used_by`),
-    KEY `idx_invitation_codes_created_at` (`created_at`),
-    CONSTRAINT `fk_invitation_codes_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Invitation codes';
-
 CREATE TABLE IF NOT EXISTS `model_vendors` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
     `slug` VARCHAR(80) NOT NULL COMMENT 'Vendor slug',

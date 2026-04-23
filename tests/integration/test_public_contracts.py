@@ -5,11 +5,10 @@ import pytest
 
 def test_service_package_roots_expose_only_final_public_contracts():
     from admin_service import UserStatsGateway, require_super_admin
-    from user_service import AdminInvitationGateway, require_active_user
+    from user_service import require_active_user
 
     assert UserStatsGateway.__module__ == "admin_service.gateway"
     assert require_super_admin.__module__ == "admin_service.policies"
-    assert AdminInvitationGateway.__module__ == "user_service.gateway"
     assert require_active_user.__module__ == "user_service.policies"
 
 

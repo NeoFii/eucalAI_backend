@@ -15,7 +15,6 @@ from user_service.utils.password import check_password_strength
 class RegisterRequest(BaseModel):
     """User registration request."""
 
-    invitation_code: str = Field(..., min_length=1, max_length=64, description="Invitation code")
     email: EmailStr = Field(..., description="Login email")
     password: str = Field(..., min_length=8, max_length=72, description="Password")
     confirm_password: str = Field(..., description="Confirm password")

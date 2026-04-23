@@ -32,10 +32,8 @@ from common.utils import (
 from common.utils.jwt import decode_token, get_token_jti
 from common.utils.timezone import now
 from user_service.config import settings
-from user_service.gateway import AdminInvitationGateway
-from user_service.models import InvitationReleaseOutbox, User, UserSession
+from user_service.models import User, UserSession
 from user_service.repositories import (
-    InvitationReleaseOutboxRepository,
     SessionRepository,
     UserRepository,
 )
@@ -53,15 +51,9 @@ _DUMMY_HASH = hash_password("dummy-timing-equalizer")
 class AuthService:
     """认证服务类"""
 
-    _admin_gateway = AdminInvitationGateway()
-
     @staticmethod
     async def register(db: AsyncSession, data: RegisterRequest) -> User:
-        """
-        用户注册
-
-        通过内部 API 调用管理服务验证并核销邀请码
-        """
+        """用户注册"""
         email = normalize_email(data.email)
         user_repo = UserRepository(db)
 
@@ -83,13 +75,8 @@ class AuthService:
         # 生成雪花 ID 作为 uid
         uid = generate_snowflake_id()
 
-        # 通过内部 API 验证并核销邀请码
-        await AuthService._admin_gateway.consume_invitation_code(data.invitation_code, uid)
-
-        # 哈希密码
         password_hash = hash_password(data.password)
 
-        # 创建用户
         user = User(
             uid=uid,
             email=email,
@@ -100,31 +87,7 @@ class AuthService:
 
         user_repo.add(user)
         email_service.mark_code_used(code_record)
-        try:
-            await db.commit()
-        except Exception as exc:
-            await db.rollback()
-            try:
-                released = await AuthService._admin_gateway.release_invitation_code(
-                    data.invitation_code, uid
-                )
-                if not released:
-                    AuthService._queue_invitation_release(
-                        db,
-                        code=data.invitation_code,
-                        used_by_uid=uid,
-                        last_error="release_invitation_code returned false",
-                    )
-                    await db.commit()
-            except Exception as release_exc:
-                AuthService._queue_invitation_release(
-                    db,
-                    code=data.invitation_code,
-                    used_by_uid=uid,
-                    last_error=str(release_exc),
-                )
-                await db.commit()
-            raise exc
+        await db.commit()
         await db.refresh(user)
 
         logger.info("用户注册成功: uid=%s", user.uid)
@@ -341,22 +304,6 @@ class AuthService:
         sessions = await session_repo.list_active_for_user(user_id)
         for session in sessions:
             session_repo.revoke(session)
-
-    @staticmethod
-    def _queue_invitation_release(
-        db: AsyncSession,
-        *,
-        code: str,
-        used_by_uid: int,
-        last_error: str,
-    ) -> None:
-        InvitationReleaseOutboxRepository(db).add(
-            InvitationReleaseOutbox(
-                code=code,
-                used_by_uid=used_by_uid,
-                last_error=last_error,
-            )
-        )
 
     @staticmethod
     async def login_with_code(

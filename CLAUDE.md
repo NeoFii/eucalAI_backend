@@ -14,7 +14,7 @@ All packages live under `src/`. Typical deployment uses `backend-app` (merged co
 |---------|--------|------|---------|
 | backend-app | `backend_app.main:app` | 8001 | Merged admin + user + testing control plane |
 | user-service | `user_service` | 8000 | Registration, login, password |
-| admin-service | `admin_service` | 8001 | Admin auth, super-admin, invite codes, audit (standalone mode) |
+| admin-service | `admin_service` | 8001 | Admin auth, super-admin, audit (standalone mode) |
 | testing-service | `testing_service` | 8002 | Model catalog, providers, quotes, benchmark (standalone mode) |
 | router-service | `router_service` | 8003 | CPU gateway: API key auth, routing via inference-svc, upstream forwarding. No DB, no ML deps. |
 | inference-service | `inference_service` | 8004 | GPU inference: Qwen backbone + 5 CG-TabM routers. No DB. |

@@ -81,7 +81,7 @@ def _clear_auth_cookies(response: Response) -> None:
     response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
     summary="用户注册",
-    description="通过邀请码、邮箱和密码注册新用户",
+    description="通过邮箱和密码注册新用户",
 )
 async def register(
     request: RegisterRequest,

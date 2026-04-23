@@ -58,17 +58,11 @@ def test_service_local_pagination_shims_are_removed():
     admin_audit_schemas = (SRC_ROOT / "admin_service" / "schemas" / "audit_log.py").read_text(
         encoding="utf-8"
     )
-    admin_invitation_schemas = (
-        SRC_ROOT / "admin_service" / "schemas" / "invitation.py"
-    ).read_text(encoding="utf-8")
-
     assert "class ListResponse" not in user_common
     assert "class AdminListResponseData" not in admin_user_schemas
     assert "class AdminAuditLogListData" not in admin_audit_schemas
-    assert "class InvitationCodeListResponseData" not in admin_invitation_schemas
     assert "PaginatedResponse" in admin_user_schemas
     assert "PaginatedResponse" in admin_audit_schemas
-    assert "PaginatedResponse" in admin_invitation_schemas
 
 
 def test_remaining_service_and_endpoint_database_queries_are_in_repositories():
@@ -85,10 +79,6 @@ def test_remaining_service_and_endpoint_database_queries_are_in_repositories():
 
 def test_gateway_implementations_share_base_gateway():
     expected_markers = {
-        SRC_ROOT / "user_service" / "gateway.py": [
-            "class AdminInvitationGatewayInterface",
-            "class AdminInvitationGateway(BaseGateway, AdminInvitationGatewayInterface):",
-        ],
         SRC_ROOT / "router_service" / "gateway.py": [
             "from common.gateway.base import BaseGateway",
             "class UserIdentityGateway(BaseGateway):",

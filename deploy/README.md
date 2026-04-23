@@ -42,7 +42,6 @@ router-service  -> user-service      (API key validation, call logs)
 router-service  -> admin-service     (routing config)
 router-service  -> inference-service (classification)
 inference-service -> admin-service   (routing config)
-user-service    -> admin-service     (invitation consume/release)
 admin-service   -> user-service      (admin user-management data)
 ```
 

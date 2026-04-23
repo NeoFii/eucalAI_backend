@@ -349,53 +349,6 @@ class ApiKeyIpNotAllowedException(ApiKeyException):
         )
 
 
-# ==================== 邀请码相关异常 ====================
-
-class InvitationCodeException(RegistrationException):
-    """
-    邀请码异常基类
-    """
-
-    def __init__(self, detail: str, code: str = "invitation_code_error"):
-        super().__init__(detail=detail, code=code)
-
-
-class InvalidInvitationCodeException(InvitationCodeException):
-    """
-    邀请码无效异常（不存在）
-    """
-
-    def __init__(self, detail: str = "邀请码无效"):
-        super().__init__(detail=detail, code="invalid_invitation_code")
-
-
-class InvitationCodeUsedException(InvitationCodeException):
-    """
-    邀请码已被使用异常
-    """
-
-    def __init__(self, detail: str = "邀请码已被使用"):
-        super().__init__(detail=detail, code="invitation_code_used")
-
-
-class InvitationCodeDisabledException(InvitationCodeException):
-    """
-    邀请码已弃用异常
-    """
-
-    def __init__(self, detail: str = "邀请码已失效"):
-        super().__init__(detail=detail, code="invitation_code_disabled")
-
-
-class InvitationCodeExpiredException(InvitationCodeException):
-    """
-    邀请码已过期异常
-    """
-
-    def __init__(self, detail: str = "邀请码已过期"):
-        super().__init__(detail=detail, code="invitation_code_expired")
-
-
 # ==================== 服务间调用异常 ====================
 
 class ServiceUnavailableException(APIException):

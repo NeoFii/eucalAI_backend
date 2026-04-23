@@ -38,7 +38,6 @@ from admin_service.api.v1.endpoints import (
     admin_users as admin_users_endpoint,
     auth as admin_auth_endpoint,
     internal as admin_internal_endpoint,
-    invitation as admin_invitation_endpoint,
     model_catalog as admin_model_catalog_endpoint,
     model_catalog_admin as admin_model_catalog_admin_endpoint,
     routing_config as admin_routing_config_endpoint,
@@ -76,15 +75,12 @@ def _build_admin_public_api_router() -> APIRouter:
     URLs (admin/auth/login etc.); internal HMAC endpoints stay unmoved so that
     user clients keep working without changes.
 
-    ``dashboard.py`` is intentionally omitted: it is legacy and ``/dashboard/
-    stats`` is canonically served by ``invitation.py`` (which admin_service's
-    own api_router also relies on).
+    ``dashboard.py`` is intentionally omitted: it is legacy.
     """
     router = APIRouter(prefix="/api/v1/admin")
     router.include_router(admin_auth_endpoint.router)
     router.include_router(admin_users_endpoint.router)
     router.include_router(admin_audit_logs_endpoint.router)
-    router.include_router(admin_invitation_endpoint.router)
     router.include_router(admin_vouchers_endpoint.router)
     router.include_router(admin_model_catalog_admin_endpoint.router)
     router.include_router(admin_routing_config_endpoint.router)
@@ -94,8 +90,8 @@ def _build_admin_public_api_router() -> APIRouter:
 
 def _build_admin_internal_api_router() -> APIRouter:
     """Admin internal HMAC endpoints remain at ``/api/v1/internal/admins`` and
-    ``/api/v1/internal/invitation-codes`` so that HMAC callers in user
-    services keep working without code changes.
+    ``/api/v1/internal/routing-config`` so that HMAC callers keep working
+    without code changes.
     """
     router = APIRouter(prefix="/api/v1")
     router.include_router(admin_internal_endpoint.router)

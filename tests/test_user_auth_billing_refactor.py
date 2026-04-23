@@ -73,12 +73,6 @@ async def test_require_active_user_rejects_pending_user(monkeypatch):
         await require_active_user(current_user=pending_user)
 
 
-def test_gateway_module_exports_admin_invitation_gateway():
-    from user_service.gateway import AdminInvitationGateway
-
-    assert AdminInvitationGateway is not None
-
-
 def test_auth_and_billing_schema_modules_export_current_types():
     from user_service.schemas.auth import RegisterRequest
     from user_service.schemas.billing import (

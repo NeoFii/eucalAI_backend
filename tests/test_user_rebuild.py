@@ -1059,6 +1059,5 @@ def test_user_worker_settings_expose_jobs_and_crons():
     assert hasattr(WorkerSettings, "redis_settings")
     assert {fn.__name__ for fn in WorkerSettings.functions} == {
         "aggregate_usage_stats",
-        "retry_invitation_release_outbox",
         "cleanup_expired_verification_codes",
     }

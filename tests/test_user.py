@@ -98,20 +98,17 @@ class TestUserSchemas:
         from user_service.schemas import RegisterRequest
 
         req = RegisterRequest(
-            invitation_code="INVITE123",
             email="test@example.com",
             password="StrongPassword123!",
             confirm_password="StrongPassword123!",
             verification_code="123456",
         )
         assert req.email == "test@example.com"
-        assert req.invitation_code == "INVITE123"
 
     def test_register_request_normalizes_email(self):
         from user_service.schemas import RegisterRequest
 
         req = RegisterRequest(
-            invitation_code="INVITE123",
             email="  Test@Example.com  ",
             password="StrongPassword123!",
             confirm_password="StrongPassword123!",
@@ -133,7 +130,6 @@ class TestUserSchemas:
 
         with pytest.raises(ValidationError, match="Password must contain at least one uppercase letter"):
             RegisterRequest(
-                invitation_code="INVITE123",
                 email="test@example.com",
                 password="weakpass1!",
                 confirm_password="weakpass1!",
@@ -220,174 +216,6 @@ class TestUserServices:
         assert "select(" not in source
         assert "db.delete(" not in source
         assert "db.add(" not in source
-
-    @pytest.mark.asyncio
-    async def test_register_persists_invitation_release_outbox_when_release_fails(
-        self, monkeypatch
-    ):
-        from user_service.models import InvitationReleaseOutbox
-        from user_service.schemas import RegisterRequest
-        from user_service.services.auth_service import AuthService
-
-        class ScalarResult:
-            def scalar_one_or_none(self):
-                return None
-
-        async def fake_get_valid_code_or_raise(_db, email, code, purpose):
-            assert (email, code, purpose) == ("user@example.com", "123456", "register")
-            return SimpleNamespace(used_at=None, error_count=0)
-
-        async def fake_consume_invitation_code(code, used_by_uid):
-            assert (code, used_by_uid) == ("invite-code", 84)
-
-        async def fail_release_invitation_code(code, used_by_uid):
-            assert (code, used_by_uid) == ("invite-code", 84)
-            raise RuntimeError("release failed")
-
-        monkeypatch.setattr(
-            "user_service.services.auth_service.email_service.get_valid_code_or_raise",
-            fake_get_valid_code_or_raise,
-        )
-        monkeypatch.setattr(
-            "user_service.services.auth_service.AuthService._admin_gateway.consume_invitation_code",
-            fake_consume_invitation_code,
-        )
-        monkeypatch.setattr(
-            "user_service.services.auth_service.AuthService._admin_gateway.release_invitation_code",
-            fail_release_invitation_code,
-        )
-        monkeypatch.setattr(
-            "user_service.utils.password.check_password_strength",
-            lambda password, lang="zh": (True, ""),
-        )
-        monkeypatch.setattr("user_service.services.auth_service.generate_snowflake_id", lambda: 84)
-
-        class FakeSession:
-            def __init__(self):
-                self.added = []
-                self.rollback_called = False
-                self.commit_calls = 0
-
-            async def execute(self, _statement):
-                return ScalarResult()
-
-            def add(self, obj):
-                self.added.append(obj)
-
-            async def commit(self):
-                self.commit_calls += 1
-                if self.commit_calls == 1:
-                    raise RuntimeError("commit failed")
-
-            async def rollback(self):
-                self.rollback_called = True
-
-            async def refresh(self, _obj):
-                raise AssertionError("refresh should not be called")
-
-        db = FakeSession()
-        request = RegisterRequest(
-            invitation_code="invite-code",
-            email="user@example.com",
-            password="StrongPassword123!",
-            confirm_password="StrongPassword123!",
-            verification_code="123456",
-        )
-
-        with pytest.raises(RuntimeError, match="commit failed"):
-            await AuthService.register(db, request)
-
-        outbox_entries = [obj for obj in db.added if isinstance(obj, InvitationReleaseOutbox)]
-        assert len(outbox_entries) == 1
-        assert outbox_entries[0].code == "invite-code"
-        assert outbox_entries[0].used_by_uid == 84
-        assert outbox_entries[0].last_error == "release failed"
-        assert db.rollback_called is True
-        assert db.commit_calls == 2
-
-    @pytest.mark.asyncio
-    async def test_register_persists_invitation_release_outbox_when_release_returns_false(
-        self, monkeypatch
-    ):
-        from user_service.models import InvitationReleaseOutbox
-        from user_service.schemas import RegisterRequest
-        from user_service.services.auth_service import AuthService
-
-        class ScalarResult:
-            def scalar_one_or_none(self):
-                return None
-
-        async def fake_get_valid_code_or_raise(_db, email, code, purpose):
-            assert (email, code, purpose) == ("user@example.com", "123456", "register")
-            return SimpleNamespace(used_at=None, error_count=0)
-
-        async def fake_consume_invitation_code(code, used_by_uid):
-            assert (code, used_by_uid) == ("invite-code", 84)
-
-        async def false_release_invitation_code(code, used_by_uid):
-            assert (code, used_by_uid) == ("invite-code", 84)
-            return False
-
-        monkeypatch.setattr(
-            "user_service.services.auth_service.email_service.get_valid_code_or_raise",
-            fake_get_valid_code_or_raise,
-        )
-        monkeypatch.setattr(
-            "user_service.services.auth_service.AuthService._admin_gateway.consume_invitation_code",
-            fake_consume_invitation_code,
-        )
-        monkeypatch.setattr(
-            "user_service.services.auth_service.AuthService._admin_gateway.release_invitation_code",
-            false_release_invitation_code,
-        )
-        monkeypatch.setattr(
-            "user_service.utils.password.check_password_strength",
-            lambda password, lang="zh": (True, ""),
-        )
-        monkeypatch.setattr("user_service.services.auth_service.generate_snowflake_id", lambda: 84)
-
-        class FakeSession:
-            def __init__(self):
-                self.added = []
-                self.rollback_called = False
-                self.commit_calls = 0
-
-            async def execute(self, _statement):
-                return ScalarResult()
-
-            def add(self, obj):
-                self.added.append(obj)
-
-            async def commit(self):
-                self.commit_calls += 1
-                if self.commit_calls == 1:
-                    raise RuntimeError("commit failed")
-
-            async def rollback(self):
-                self.rollback_called = True
-
-            async def refresh(self, _obj):
-                raise AssertionError("refresh should not be called")
-
-        db = FakeSession()
-        request = RegisterRequest(
-            invitation_code="invite-code",
-            email="user@example.com",
-            password="StrongPassword123!",
-            confirm_password="StrongPassword123!",
-            verification_code="123456",
-        )
-
-        with pytest.raises(RuntimeError, match="commit failed"):
-            await AuthService.register(db, request)
-
-        outbox_entries = [obj for obj in db.added if isinstance(obj, InvitationReleaseOutbox)]
-        assert len(outbox_entries) == 1
-        assert outbox_entries[0].code == "invite-code"
-        assert outbox_entries[0].used_by_uid == 84
-        assert "returned false" in outbox_entries[0].last_error
-        assert db.rollback_called is True
-        assert db.commit_calls == 2
 
     @pytest.mark.asyncio
     async def test_verify_email_rejects_disabled_user(self, monkeypatch):
@@ -1098,7 +926,6 @@ class TestUserAPI:
         response = Response()
         result = await register(
             RegisterRequest(
-                invitation_code="INVITE123",
                 email="user@example.com",
                 password="StrongPassword123!",
                 confirm_password="StrongPassword123!",

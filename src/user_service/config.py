@@ -36,7 +36,6 @@ class Settings(BaseServiceSettings):
     USER_WORKER_CONCURRENCY: int = 5
     USER_JOB_TIMEOUT_SECONDS: int = 300
     VERIFICATION_CODE_RETENTION_DAYS: int = 7
-    INVITATION_RELEASE_MAX_RETRIES: int = 5
 
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

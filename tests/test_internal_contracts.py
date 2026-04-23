@@ -10,13 +10,6 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from common.core.exceptions import (
-    InvalidInvitationCodeException,
-    InvitationCodeDisabledException,
-    InvitationCodeExpiredException,
-    InvitationCodeUsedException,
-)
-
 os.environ["INTERNAL_SECRET"] = "test_internal_secret_32chars_long!"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
 
@@ -377,75 +370,6 @@ def test_signed_internal_request_rejects_expired_timestamp():
     assert response.json()["detail"] == "Invalid internal secret"
 
 
-def test_admin_internal_invitation_endpoints_require_secret_and_delegate(monkeypatch):
-    from admin_service.api.v1.endpoints import internal
-    from common.internal import build_internal_headers
-    from admin_service.dependencies import get_db_session
-
-    events = {}
-    app = FastAPI()
-    app.include_router(internal.router, prefix="/api/v1")
-
-    async def _fake_db():
-        yield object()
-
-    async def fake_consume(db, code, used_by):
-        events["consume"] = (db, code, used_by)
-
-    async def fake_release(db, code, used_by):
-        events["release"] = (db, code, used_by)
-        return True
-
-    monkeypatch.setattr(
-        "admin_service.api.v1.endpoints.internal.InvitationCodeService.verify_and_use",
-        fake_consume,
-    )
-    monkeypatch.setattr(
-        "admin_service.api.v1.endpoints.internal.InvitationCodeService.release",
-        fake_release,
-    )
-
-    app.dependency_overrides[get_db_session] = _fake_db
-    client = TestClient(app)
-
-    forbidden = client.post(
-        "/api/v1/internal/invitation-codes/consume",
-        headers={"X-Untrusted-Header": "wrong-secret"},
-        json={"code": "INVITE", "used_by_uid": 42},
-    )
-    assert forbidden.status_code == 403
-
-    consume = client.post(
-        "/api/v1/internal/invitation-codes/consume",
-        headers=build_internal_headers(
-            secret=_admin_internal_secret(),
-            caller_service="user-service",
-            method="POST",
-            path="/api/v1/internal/invitation-codes/consume",
-            json_body={"code": "INVITE", "used_by_uid": 42},
-        ),
-        json={"code": "INVITE", "used_by_uid": 42},
-    )
-    assert consume.status_code == 200
-    assert consume.json() == {"consumed": True}
-    assert events["consume"][1:] == ("INVITE", 42)
-
-    release = client.post(
-        "/api/v1/internal/invitation-codes/release",
-        headers=build_internal_headers(
-            secret=_admin_internal_secret(),
-            caller_service="user-service",
-            method="POST",
-            path="/api/v1/internal/invitation-codes/release",
-            json_body={"code": "INVITE", "used_by_uid": 42},
-        ),
-        json={"code": "INVITE", "used_by_uid": 42},
-    )
-    assert release.status_code == 200
-    assert release.json() == {"released": True}
-    assert events["release"][1:] == ("INVITE", 42)
-
-
 def test_internal_request_signature_covers_query_string():
     from common.internal import build_internal_headers
 
@@ -485,52 +409,6 @@ def test_internal_request_signature_covers_query_string():
     )
     assert tampered.status_code == 403
     assert tampered.json()["detail"] == "Invalid internal secret"
-
-
-@pytest.mark.parametrize(
-    ("exception_factory", "expected_status", "expected_detail"),
-    [
-        (lambda: InvalidInvitationCodeException("invalid"), 404, "invalid"),
-        (lambda: InvitationCodeUsedException("used"), 409, "used"),
-        (lambda: InvitationCodeDisabledException("disabled"), 403, "disabled"),
-        (lambda: InvitationCodeExpiredException("expired"), 410, "expired"),
-    ],
-)
-def test_admin_internal_invitation_consume_maps_domain_errors(monkeypatch, exception_factory, expected_status, expected_detail):
-    from admin_service.api.v1.endpoints import internal
-    from admin_service.dependencies import get_db_session
-    from common.internal import build_internal_headers
-
-    app = FastAPI()
-    app.include_router(internal.router, prefix="/api/v1")
-
-    async def _fake_db():
-        yield object()
-
-    async def fake_consume(_db, _code, _used_by):
-        raise exception_factory()
-
-    app.dependency_overrides[get_db_session] = _fake_db
-    monkeypatch.setattr(
-        "admin_service.api.v1.endpoints.internal.InvitationCodeService.verify_and_use",
-        fake_consume,
-    )
-
-    client = TestClient(app)
-    response = client.post(
-        "/api/v1/internal/invitation-codes/consume",
-        headers=build_internal_headers(
-            secret=_admin_internal_secret(),
-            caller_service="user-service",
-            method="POST",
-            path="/api/v1/internal/invitation-codes/consume",
-            json_body={"code": "INVITE", "used_by_uid": 42},
-        ),
-        json={"code": "INVITE", "used_by_uid": 42},
-    )
-
-    assert response.status_code == expected_status
-    assert response.json()["detail"] == expected_detail
 
 
 @pytest.mark.asyncio
@@ -607,11 +485,11 @@ async def test_post_internal_json_sends_json_body(monkeypatch):
 
         async def request(self, method, url, headers, json, params):
             assert method == "POST"
-            assert url == "http://identity/api/v1/internal/invitation-codes/consume"
+            assert url == "http://identity/api/v1/internal/users/1/status"
             assert headers["X-Internal-Service"] == "user-service"
             assert "X-Internal-Timestamp" in headers
             assert "X-Internal-Signature" in headers
-            assert json == {"code": "INVITE", "used_by_uid": 1}
+            assert json == {"status": 1}
             assert params is None
             return FakeResponse()
 
@@ -620,11 +498,11 @@ async def test_post_internal_json_sends_json_body(monkeypatch):
     payload = await internal.post_internal_json(
         base_url="http://identity",
         target_service="admin-service",
-        path="/api/v1/internal/invitation-codes/consume",
+        path="/api/v1/internal/users/1/status",
         secret="secret",
         caller_service="user-service",
         timeout=3.0,
-        json_body={"code": "INVITE", "used_by_uid": 1},
+        json_body={"status": 1},
     )
 
     assert payload == {"ok": True}
@@ -917,63 +795,6 @@ async def test_router_user_identity_gateway_maps_timeout(monkeypatch):
     monkeypatch.setattr("router_service.gateway.post_internal_json", fake_timeout)
     with pytest.raises(ServiceUnavailableException):
         await UserIdentityGateway.validate_api_key(api_key="sk-timeout")
-
-
-@pytest.mark.asyncio
-async def test_admin_invitation_client_maps_invitation_errors(monkeypatch):
-    from user_service.gateway import AdminInvitationGateway
-
-    request = httpx.Request("POST", "http://admin_service/api/v1/internal/invitation-codes/consume")
-
-    async def fake_used(**_kwargs):
-        response = httpx.Response(
-            409,
-            request=request,
-            json={"message": "Invitation code already used"},
-        )
-        raise httpx.HTTPStatusError("conflict", request=request, response=response)
-
-    monkeypatch.setattr("user_service.gateway.post_internal_json", fake_used)
-
-    with pytest.raises(Exception) as exc_info:
-        await AdminInvitationGateway().consume_invitation_code("INVITE", 1)
-
-    assert exc_info.type.__name__ == "InvitationCodeUsedException"
-
-
-@pytest.mark.asyncio
-async def test_admin_invitation_client_maps_internal_response_errors(monkeypatch):
-    from common.internal import InternalServiceResponseError
-    from user_service.gateway import AdminInvitationGateway
-
-    async def fake_used(**_kwargs):
-        raise InternalServiceResponseError(
-            "admin-service returned 409",
-            target_service="admin-service",
-            path="/api/v1/internal/invitation-codes/consume",
-            status_code=409,
-            detail="Invitation code already used",
-        )
-
-    monkeypatch.setattr("user_service.gateway.post_internal_json", fake_used)
-
-    with pytest.raises(Exception) as exc_info:
-        await AdminInvitationGateway().consume_invitation_code("INVITE", 1)
-
-    assert exc_info.type.__name__ == "InvitationCodeUsedException"
-
-
-@pytest.mark.asyncio
-async def test_admin_invitation_client_release_returns_flag(monkeypatch):
-    from user_service.gateway import AdminInvitationGateway
-
-    async def fake_release(**_kwargs):
-        return {"released": True}
-
-    monkeypatch.setattr("user_service.gateway.post_internal_json", fake_release)
-
-    released = await AdminInvitationGateway().release_invitation_code("INVITE", 1)
-    assert released is True
 
 
 def test_split_deployment_compose_and_dockerfile_expose_expected_services():
