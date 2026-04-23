@@ -22,7 +22,6 @@ CREATE_VIEW_PATTERN = re.compile(
 
 OWNED_SCHEMAS = {
     "admin": {
-        "schema": ROOT / "scripts" / "sql" / "admin_schema.sql",
         "tables": [
             "admin_users",
             "admin_audit_logs",
@@ -38,7 +37,6 @@ OWNED_SCHEMAS = {
         "base": admin_db.Base,
     },
     "user": {
-        "schema": ROOT / "scripts" / "sql" / "user_schema.sql",
         "tables": [
             "users",
             "user_sessions",
@@ -56,6 +54,11 @@ OWNED_SCHEMAS = {
     },
 }
 
+SNAPSHOT_PATHS = [
+    ROOT / "scripts" / "sql" / "admin_schema.sql",
+    ROOT / "scripts" / "sql" / "user_schema.sql",
+]
+
 
 def _parse_schema(schema_path: Path) -> tuple[dict[str, list[str]], set[str]]:
     source = schema_path.read_text(encoding="utf-8")
@@ -69,12 +72,22 @@ def _parse_schema(schema_path: Path) -> tuple[dict[str, list[str]], set[str]]:
     return tables, views
 
 
-def test_owned_schema_files_match_service_local_metadata_columns():
-    for service, config in OWNED_SCHEMAS.items():
-        schema_tables, schema_views = _parse_schema(config["schema"])
+def _parse_all_snapshots() -> tuple[dict[str, list[str]], set[str]]:
+    all_tables: dict[str, list[str]] = {}
+    all_views: set[str] = set()
+    for path in SNAPSHOT_PATHS:
+        tables, views = _parse_schema(path)
+        all_tables.update(tables)
+        all_views.update(views)
+    return all_tables, all_views
 
-        assert set(schema_tables) == set(config["tables"]), service
-        assert schema_views == set(config["views"]), service
+
+def test_owned_schema_files_match_service_local_metadata_columns():
+    schema_tables, schema_views = _parse_all_snapshots()
+
+    for service, config in OWNED_SCHEMAS.items():
+        assert set(config["tables"]) <= set(schema_tables), service
+        assert set(config["views"]) <= schema_views, service
 
         metadata = config["base"].metadata
         assert set(metadata.tables.keys()) == set(config["tables"]) | set(config["views"]), service

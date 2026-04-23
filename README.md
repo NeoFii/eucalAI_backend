@@ -59,8 +59,8 @@ uv run migrate --service user-service upgrade head
 uv run bootstrap-databases
 ```
 
-`scripts/sql/*.sql` files are snapshots for operational reference; runtime code does
-not read them.
+`scripts/sql/*.sql` files are schema snapshots for operational reference only;
+runtime code does not read them.
 
 ## Running Locally
 
@@ -82,17 +82,14 @@ uv run start backend-app router-service
 
 ## Deployment
 
-The compose topology is:
+Production deployment uses split multi-host compose files under `deploy/`:
 
-- `backend-app` on `8001`
-- `router-service` on `8003`
-- `inference-svc` on `8004`
+- `deploy/docker-compose.backend.yml`
+- `deploy/docker-compose.router.yml`
+- `deploy/docker-compose.inference.yml`
 
-Health checks use `scripts/runtime_probe.py http-ready` against `/ready`.
-
-```bash
-docker compose -f deploy/docker-compose.yml up -d
-```
+See [deploy/README.md](/home/luofei/backend/deploy/README.md) for the final node layout,
+env files, startup order, and `api.eucal.ai` gateway entrypoint.
 
 ## Runtime Contracts
 

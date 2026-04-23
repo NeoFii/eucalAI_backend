@@ -13,6 +13,8 @@ SERVICE_OWNED_OBJECTS = {
         "model_categories",
         "supported_models",
         "supported_model_category_map",
+        "routing_configs",
+        "provider_credentials",
     },
     "user": {
         "users",
@@ -28,28 +30,33 @@ SERVICE_OWNED_OBJECTS = {
     },
 }
 
+SNAPSHOT_PATHS = {
+    "admin": ROOT / "scripts" / "sql" / "admin_schema.sql",
+    "user": ROOT / "scripts" / "sql" / "user_schema.sql",
+}
+
+
+def _read_all_snapshots() -> str:
+    return "\n".join(p.read_text(encoding="utf-8") for p in SNAPSHOT_PATHS.values())
+
 
 def test_schema_ownership_docs_and_files_exist():
     ownership_doc = (ROOT / "docs" / "schema-ownership.md").read_text(encoding="utf-8")
 
     assert "admin_schema.sql" in ownership_doc
-    assert "user_schema.sql" in ownership_doc
-    assert "init_tables.sql" in ownership_doc
     assert "admin_users" in ownership_doc
     assert "users" in ownership_doc
     assert "user_api_keys" in ownership_doc
     assert "bootstrap-databases" in ownership_doc
 
 
-def test_init_tables_sources_service_owned_schemas_in_order():
-    source = (ROOT / "scripts" / "sql" / "init_tables.sql").read_text(encoding="utf-8")
+def test_snapshots_exist_and_exclude_db_less_services():
+    source = _read_all_snapshots()
 
-    admin_pos = source.index("SOURCE scripts/sql/admin_schema.sql;")
-    user_pos = source.index("SOURCE scripts/sql/user_schema.sql;")
-
-    assert admin_pos < user_pos
-    # router-service has no database; init_tables must not source a router schema.
-    assert "SOURCE scripts/sql/router_schema.sql;" not in source
+    assert "CREATE TABLE IF NOT EXISTS `admin_users`" in source
+    assert "CREATE TABLE IF NOT EXISTS `users`" in source
+    assert "router_service" not in source
+    assert "inference_service" not in source
 
 
 def test_redundant_sql_files_have_been_removed():
@@ -73,10 +80,19 @@ def test_redundant_sql_files_have_been_removed():
 
 
 def test_sql_snapshots_only_reference_service_owned_tables():
-    for service_name, owned_objects in SERVICE_OWNED_OBJECTS.items():
-        source = (ROOT / "scripts" / "sql" / f"{service_name}_schema.sql").read_text(encoding="utf-8")
-        references = {match.group("table") for match in REFERENCE_PATTERN.finditer(source)}
-        assert references <= owned_objects, f"{service_name}: cross-service references found: {sorted(references - owned_objects)}"
+    source = _read_all_snapshots()
+    references = {match.group("table") for match in REFERENCE_PATTERN.finditer(source)}
+    allowed = set().union(*SERVICE_OWNED_OBJECTS.values())
+
+    assert references <= allowed, f"cross-service references found: {sorted(references - allowed)}"
+
+
+def test_snapshot_contains_all_owned_tables():
+    source = _read_all_snapshots()
+
+    for owned_objects in SERVICE_OWNED_OBJECTS.values():
+        for table_name in owned_objects:
+            assert f"CREATE TABLE IF NOT EXISTS `{table_name}`" in source, table_name
 
 
 def test_readme_uses_new_canonical_bootstrap_entrypoint():

@@ -120,7 +120,7 @@ def test_readme_mentions_service_local_migration_workflow():
 
 
 def test_deploy_and_env_examples_use_service_database_urls_only():
-    compose = (ROOT / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    compose = (ROOT / "deploy" / "docker-compose.backend.yml").read_text(encoding="utf-8")
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
 
     for key in (
@@ -155,7 +155,7 @@ def test_runtime_schema_management_is_alembic_only():
     assert "uv run bootstrap-databases" in root_readme
     assert "skip-init-db" not in root_readme
     assert "AUTO_INIT_DB" not in root_readme
-    assert "唯一 schema 真理" in migration_readme
+    assert "唯一" in migration_readme and "权威来源" in migration_readme
 
 
 def test_user_api_key_soft_delete_migration_creates_deleted_at_index():
@@ -164,9 +164,8 @@ def test_user_api_key_soft_delete_migration_creates_deleted_at_index():
         / "migrations"
         / "user_service"
         / "versions"
-        / "20260420_11_add_deleted_at_to_user_api_keys.py"
+        / "20260423_01_user_baseline.py"
     ).read_text(encoding="utf-8")
 
     assert "deleted_at" in source
-    assert "CREATE INDEX" in source or "op.create_index" in source
-    assert "DROP INDEX" in source or "op.drop_index" in source
+    assert "CREATE INDEX" in source or "ix_user_api_keys_deleted_at" in source

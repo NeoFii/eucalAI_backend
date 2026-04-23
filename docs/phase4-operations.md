@@ -1,15 +1,15 @@
 # Phase 4 Operations
 
-Phase 4 runtime operations now cover the active backend-app, router-service, and
-inference-service topology.
+Phase 4 runtime operations now cover the split deployment topology documented in
+`deploy/README.md`.
 
 ## Compose Orchestration
 
-`deploy/docker-compose.yml` starts:
+The deploy directory now provides:
 
-- backend-app
-- router-service
-- inference-svc
+- `deploy/docker-compose.backend.yml`
+- `deploy/docker-compose.router.yml`
+- `deploy/docker-compose.inference.yml`
 
 All compose health checks use `/ready` through `scripts/runtime_probe.py http-ready`.
 
@@ -20,13 +20,15 @@ This dependency probe section lists the runtime checks used during incidents.
 Use these probes during incidents:
 
 ```bash
+python scripts/runtime_probe.py http-ready --port 8000
 python scripts/runtime_probe.py http-ready --port 8001
+python scripts/runtime_probe.py worker-ready --database-url-env USER_DATABASE_URL --redis-url-env USER_QUEUE_REDIS_URL
 python scripts/runtime_probe.py http-ready --port 8003
 python scripts/runtime_probe.py http-ready --port 8004
 ```
 
-The backend-app probe validates admin and user database availability. Router and
-inference probes validate their own service readiness without database checks.
+The backend probes validate the standalone admin/user services plus the user worker.
+Router and inference probes validate their own service readiness without database checks.
 
 ## Environment Checks
 

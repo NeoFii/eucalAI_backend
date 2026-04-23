@@ -976,18 +976,28 @@ async def test_admin_invitation_client_release_returns_flag(monkeypatch):
     assert released is True
 
 
-def test_compose_and_dockerfile_include_router_without_removed_queue_runtime():
+def test_split_deployment_compose_and_dockerfile_expose_expected_services():
     repo_root = Path(__file__).resolve().parent.parent
-    compose = (repo_root / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    backend_compose = (repo_root / "deploy" / "docker-compose.backend.yml").read_text(
+        encoding="utf-8"
+    )
+    router_compose = (repo_root / "deploy" / "docker-compose.router.yml").read_text(
+        encoding="utf-8"
+    )
+    inference_compose = (
+        repo_root / "deploy" / "docker-compose.inference.yml"
+    ).read_text(encoding="utf-8")
     dockerfile = (repo_root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
     removed_worker = "testing" + "-worker"
     removed_queue_env = "BENCHMARK" + "_QUEUE_REDIS_URL"
 
-    # Post-consolidation: admin/user live under backend-app.
-    assert "backend-app:" in compose
-    assert "router-service:" in compose
-    assert removed_worker + ":" not in compose
-    assert removed_queue_env not in compose
+    assert "user-service:" in backend_compose
+    assert "admin-service:" in backend_compose
+    assert "user-worker:" in backend_compose
+    assert "router-service:" in router_compose
+    assert "inference-service:" in inference_compose
+    assert removed_worker + ":" not in backend_compose
+    assert removed_queue_env not in backend_compose
     # src/ layout: services are COPY'd from src/ into /app in the image.
     assert "src/router_service" in dockerfile
     assert "scripts" in dockerfile

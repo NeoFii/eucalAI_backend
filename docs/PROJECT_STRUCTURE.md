@@ -19,17 +19,21 @@ scripts/
   check_service_environment.py
   migrate.py
   runtime_probe.py
+  seed_routing_config.py
   start_services.py
-  sql/
-    admin_schema.sql
-    user_schema.sql
-    init_tables.sql
 
 deploy/
+  README.md
   Dockerfile
   Dockerfile.inference
   Dockerfile.router-cpu
-  docker-compose.yml
+  docker-compose.backend.yml
+  docker-compose.router.yml
+  docker-compose.inference.yml
+  docker-compose.local-infra.yml
+  env/
+  init-db.sql
+  schema.snapshot.sql
   router/
 ```
 

@@ -63,10 +63,10 @@ def test_alembic_database_url_supports_percent_encoded_passwords():
 def test_docs_and_scripts_describe_alembic_as_only_schema_path():
     migration_readme = (ROOT / "migrations" / "README.md").read_text(encoding="utf-8")
     root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    compose = (ROOT / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    compose = (ROOT / "deploy" / "docker-compose.backend.yml").read_text(encoding="utf-8")
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
 
-    assert "schema 真理" in migration_readme
+    assert "唯一" in migration_readme and "权威来源" in migration_readme
     assert "AUTO_INIT_DB" not in root_readme
     assert "skip-init-db" not in root_readme
     assert "AUTO_INIT_DB" not in compose

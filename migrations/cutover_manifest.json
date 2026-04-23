@@ -19,7 +19,9 @@
         "model_vendors",
         "model_categories",
         "supported_models",
-        "supported_model_category_map"
+        "supported_model_category_map",
+        "routing_configs",
+        "provider_credentials"
       ],
       "owned_views": [],
       "internal_dependencies": [
@@ -55,7 +57,8 @@
         "topup_orders",
         "api_call_logs",
         "usage_stats",
-        "invitation_release_outbox"
+        "invitation_release_outbox",
+        "voucher_redemption_codes"
       ],
       "owned_views": [],
       "internal_dependencies": [

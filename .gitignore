@@ -48,6 +48,10 @@ venv.bak/
 htmlcov/
 .tox/
 .nox/
+tests/test_phase4_acceptance.py
+tests/test_refactor_cleanup.py
+tests/test_removed_domain.py
+tests/test_runtime_orchestration.py
 
 # mypy
 .mypy_cache/

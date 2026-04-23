@@ -1,0 +1,44 @@
+# GPU node: inference-service only.
+
+services:
+  inference-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.inference
+    restart: unless-stopped
+    environment:
+      ROUTER_MODEL_PATHS: "/app/deploy/router/model_paths.json"
+      ROUTER_RUNTIME_CONFIG: "/app/deploy/router/runtime_config.json"
+      ADMIN_SERVICE_URL: ${ADMIN_SERVICE_URL:-http://10.0.0.10:8001}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me}
+      INFERENCE_SERVICE_SECRET: ${INFERENCE_SERVICE_SECRET:-change-me}
+      INFERENCE_PORT: "8004"
+      INFERENCE_LOG_DIR: "/app/logs"
+      CONFIG_REFRESH_INTERVAL_SECONDS: ${CONFIG_REFRESH_INTERVAL_SECONDS:-60}
+      CONFIG_FETCH_TIMEOUT_SECONDS: ${CONFIG_FETCH_TIMEOUT_SECONDS:-5}
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/uvicorn", "inference_service.main:app", "--host", "0.0.0.0", "--port", "8004", "--workers", "1"]
+    ports:
+      - "8004:8004"
+    volumes:
+      - inference_logs:/app/logs
+      - ${MODEL_WEIGHTS_HOST_PATH:-/srv/eucal/models}:/app/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8004"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  inference_logs:
+    name: eucal_inference_logs
+

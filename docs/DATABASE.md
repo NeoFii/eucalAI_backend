@@ -4,8 +4,8 @@ The active backend owns two MySQL schemas.
 
 | Schema | Owner | Purpose |
 | --- | --- | --- |
-| `eucal_ai_admin` | admin domain | administrators, audit logs, invitation codes |
-| `eucal_ai_user` | user domain | users, sessions, API keys, billing ledger, usage stats |
+| `eucal_ai_admin` | admin domain | administrators, audit logs, invitation codes, model catalog, routing configs, provider credentials |
+| `eucal_ai_user` | user domain | users, sessions, API keys, billing ledger, usage stats, voucher redemption codes |
 
 Router and inference are DB-less.
 
@@ -27,6 +27,5 @@ uv run bootstrap-databases
 
 ## Snapshots
 
-`scripts/sql/admin_schema.sql` and `scripts/sql/user_schema.sql` are snapshots for
-operational review. They are not used by runtime startup and are not the source of
-truth.
+`deploy/schema.snapshot.sql` is a combined schema snapshot for operational review.
+It is not used by runtime startup and is not the source of truth.

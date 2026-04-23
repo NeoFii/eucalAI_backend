@@ -60,7 +60,6 @@ bootstrap-super-admin = "admin_service.bootstrap_superadmin:main"
 bootstrap-databases = "scripts.bootstrap_service_databases:main"
 check-env = "scripts.check_service_environment:main"
 migrate = "scripts.migrate:main"
-phase2-cutover = "scripts.phase2_cutover:main"
 seed-routing-config = "scripts.seed_routing_config:main"
 
 [build-system]

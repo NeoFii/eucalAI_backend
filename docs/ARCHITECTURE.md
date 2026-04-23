@@ -17,8 +17,8 @@ local domain debugging. They are not part of the default startup set.
 
 | Domain | Package | Database | Tables |
 | --- | --- | --- | --- |
-| admin | `src/admin_service` | `ADMIN_DATABASE_URL` | `admin_users`, `admin_audit_logs`, `invitation_codes` |
-| user | `src/user_service` | `USER_DATABASE_URL` | `users`, `user_sessions`, `email_verification_codes`, `user_api_keys`, `balance_transactions`, `topup_orders`, `api_call_logs`, `usage_stats`, `invitation_release_outbox` |
+| admin | `src/admin_service` | `ADMIN_DATABASE_URL` | `admin_users`, `admin_audit_logs`, `invitation_codes`, `model_vendors`, `model_categories`, `supported_models`, `supported_model_category_map`, `routing_configs`, `provider_credentials` |
+| user | `src/user_service` | `USER_DATABASE_URL` | `users`, `user_sessions`, `email_verification_codes`, `user_api_keys`, `balance_transactions`, `topup_orders`, `api_call_logs`, `usage_stats`, `invitation_release_outbox`, `voucher_redemption_codes` |
 
 Router and inference do not own schemas. Router uses file-based runtime config under
 `deploy/router/`.
