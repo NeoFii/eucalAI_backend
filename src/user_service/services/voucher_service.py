@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
-import secrets
-import string
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,11 +29,9 @@ class GeneratedVoucherCode:
 class VoucherService:
     """Manage system-generated voucher redemption codes."""
 
-    _CODE_ALPHABET = string.ascii_uppercase + string.digits
-
     @staticmethod
     def normalize_code(raw_code: str) -> str:
-        return raw_code.strip().upper()
+        return raw_code.strip().lower()
 
     @staticmethod
     def hash_code(raw_code: str) -> str:
@@ -43,11 +40,7 @@ class VoucherService:
 
     @staticmethod
     def _generate_plain_code() -> str:
-        chunks = [
-            "".join(secrets.choice(VoucherService._CODE_ALPHABET) for _ in range(4))
-            for _ in range(3)
-        ]
-        return "VC-" + "-".join(chunks)
+        return uuid.uuid4().hex
 
     @staticmethod
     async def generate_codes(
