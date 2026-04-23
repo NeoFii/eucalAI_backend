@@ -65,7 +65,7 @@ def get_settings() -> "RouterSettings":
     return _settings
 
 
-def _extract_client_ip(request: Request) -> str | None:
+def extract_client_ip(request: Request) -> str | None:
     forwarded_for = request.headers.get("x-forwarded-for", "")
     if forwarded_for:
         first_hop = forwarded_for.split(",", 1)[0].strip()
@@ -119,7 +119,7 @@ async def require_api_key(
         principal = await UserIdentityGateway.validate_api_key(
             api_key=raw_key,
             model=await _extract_requested_model(request),
-            client_ip=_extract_client_ip(request),
+            client_ip=extract_client_ip(request),
         )
     except InternalServiceResponseError as exc:
         if exc.status_code == 404:

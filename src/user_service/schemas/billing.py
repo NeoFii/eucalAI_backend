@@ -88,6 +88,8 @@ class ApiCallLogItem(DateTimeModel):
     request_id: str
     api_key_id: Optional[int] = None
     model_name: str
+    selected_model: Optional[str] = None
+    provider_slug: Optional[str] = None
     prompt_tokens: int
     completion_tokens: int
     cached_tokens: int
@@ -96,6 +98,10 @@ class ApiCallLogItem(DateTimeModel):
     status: int
     duration_ms: Optional[int] = None
     is_stream: bool
+    routing_tier: Optional[int] = None
+    config_version: Optional[int] = None
+    config_source: Optional[str] = None
+    router_trace_id: Optional[str] = None
     error_code: Optional[str] = None
     error_msg: Optional[str] = None
     created_at: datetime

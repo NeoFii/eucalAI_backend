@@ -12,6 +12,14 @@ from router_service.dependencies import get_config_manager, get_inference_client
 from router_service.logging import log_routing_decision
 from router_service.services.upstream import resolve_model_provider_target
 
+
+class RoutingError(HTTPException):
+    """HTTPException subclass carrying a stable error_code for call-log recording."""
+
+    def __init__(self, status_code: int, *, error_code: str, detail: str):
+        super().__init__(status_code=status_code, detail=detail)
+        self.error_code = error_code
+
 _SENSITIVE_RE = re.compile(
     r"((?:key|token|secret|password|auth)[=:]\S{0,60}|https?://\S+)",
     re.IGNORECASE,
@@ -86,8 +94,9 @@ async def route_and_resolve(
             route_meta["error_code"] = error_code
 
             if error_code in _DIRECT_ERROR_CODES:
-                raise HTTPException(
+                raise RoutingError(
                     status_code=_DIRECT_ERROR_CODES[error_code],
+                    error_code=f"inference_{error_code}",
                     detail=classify_result.error_message or f"inference error: {error_code}",
                 )
 
@@ -111,13 +120,18 @@ async def route_and_resolve(
                     error_code=error_code,
                 )
             else:
-                raise HTTPException(
+                raise RoutingError(
                     status_code=503,
+                    error_code="no_fallback",
                     detail="inference service unavailable and no fallback model available",
                 )
 
     elif requested_model not in config["model_providers"]:
-        raise HTTPException(status_code=404, detail=f"unsupported model: {requested_model}")
+        raise RoutingError(
+            status_code=404,
+            error_code="model_not_found",
+            detail=f"unsupported model: {requested_model}",
+        )
 
     target_info = resolve_model_provider_target(selected_model, config["model_providers"])
     return selected_model, target_info, route_result, route_meta

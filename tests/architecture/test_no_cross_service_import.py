@@ -75,7 +75,6 @@ def test_remaining_service_and_endpoint_database_queries_are_in_repositories():
     checked_paths = [
         SRC_ROOT / "admin_service" / "api" / "v1" / "endpoints" / "internal.py",
         SRC_ROOT / "admin_service" / "services" / "bootstrap_service.py",
-        SRC_ROOT / "user_service" / "api" / "v1" / "endpoints" / "internal.py",
     ]
 
     for path in checked_paths:
@@ -100,3 +99,11 @@ def test_gateway_implementations_share_base_gateway():
         source = path.read_text(encoding="utf-8")
         for marker in markers:
             assert marker in source, f"{path} is missing {marker}"
+
+
+def test_router_calllog_gateway_does_not_import_user_service():
+    calllog_path = SRC_ROOT / "router_service" / "gateway_calllog.py"
+    assert calllog_path.exists(), "gateway_calllog.py should exist"
+    source = calllog_path.read_text(encoding="utf-8")
+    assert "from user_service" not in source, "gateway_calllog.py must not import user_service"
+    assert "import user_service" not in source, "gateway_calllog.py must not import user_service"

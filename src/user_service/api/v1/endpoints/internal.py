@@ -1,12 +1,15 @@
 """Internal user-service endpoints."""
 
 import hashlib
+import logging
 from datetime import datetime
 
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams
@@ -15,6 +18,7 @@ from common.utils import hash_password
 from common.utils.timezone import now
 from user_service.config import settings
 from user_service.dependencies import get_db_session
+from user_service.models.api_call_log import ApiCallLog
 from user_service.repositories.user_repository import UserRepository
 from user_service.services.api_key_service import ApiKeyService
 from user_service.services.auth_service import AuthService
@@ -23,11 +27,18 @@ from user_service.services.topup_order_service import TopupOrderService
 from user_service.services.usage_stat_service import UsageStatService
 from user_service.services.voucher_service import VoucherService
 
+logger = logging.getLogger("user_service.internal")
+
 router = APIRouter(prefix="/internal", tags=["internal"])
 verify_internal_secret = build_internal_auth_dependency(
     settings.INTERNAL_SECRET,
     request_ttl_seconds=settings.INTERNAL_REQUEST_TTL_SECONDS,
     allowed_callers={"admin-service", "router-service"},
+)
+verify_router_only = build_internal_auth_dependency(
+    settings.INTERNAL_SECRET,
+    request_ttl_seconds=settings.INTERNAL_REQUEST_TTL_SECONDS,
+    allowed_callers={"router-service"},
 )
 
 
@@ -165,6 +176,17 @@ class InternalUsageLogItem(BaseModel):
     request_id: str
     api_key_id: int | None = None
     model_name: str
+    selected_model: str | None = None
+    provider_slug: str | None = None
+    upstream_model: str | None = None
+    config_version: int | None = None
+    config_source: str | None = None
+    inference_config_version: int | None = None
+    inference_config_source: str | None = None
+    routing_tier: int | None = None
+    score_source: str | None = None
+    router_trace_id: str | None = None
+    inference_error_code: str | None = None
     prompt_tokens: int
     completion_tokens: int
     cached_tokens: int
@@ -178,6 +200,7 @@ class InternalUsageLogItem(BaseModel):
     ip: str | None = None
     cost_detail: dict | None = None
     created_at: datetime
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -568,6 +591,7 @@ async def list_usage_logs(
     page_size: int = Query(20, ge=1, le=100),
     user_id: int | None = None,
     model_name: str | None = None,
+    request_id: str | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     _: None = Depends(verify_internal_secret),
@@ -580,7 +604,7 @@ async def list_usage_logs(
         params.end = end
         params.validate_time_range(default_end=now(), default_days=30)
     result = await UsageStatService.list_usage_logs(
-        db, params=params, user_id=user_id, model_name=model_name,
+        db, params=params, user_id=user_id, model_name=model_name, request_id=request_id,
     )
     return InternalUsageLogListResponse(
         items=[InternalUsageLogItem.model_validate(log) for log in result.items],
@@ -609,3 +633,141 @@ async def list_usage_stats(
         db, start=params.start, end=params.end, user_id=user_id, model_name=model_name,
     )
     return [InternalUsageStatItem.model_validate(s) for s in items]
+
+
+# ---------------------------------------------------------------------------
+# Call-log write endpoints (router-service only)
+# ---------------------------------------------------------------------------
+
+
+class InternalCreateCallLogRequest(BaseModel):
+    request_id: str = Field(max_length=64)
+    user_id: int
+    api_key_id: int | None = None
+    model_name: str = Field(max_length=64)
+    selected_model: str | None = Field(None, max_length=64)
+    provider_slug: str | None = Field(None, max_length=32)
+    upstream_model: str | None = Field(None, max_length=64)
+    is_stream: bool = False
+    ip: str | None = Field(None, max_length=45)
+    config_version: int | None = None
+    config_source: str | None = Field(None, max_length=32)
+    inference_config_version: int | None = None
+    inference_config_source: str | None = Field(None, max_length=32)
+    routing_tier: int | None = None
+    score_source: str | None = Field(None, max_length=32)
+    router_trace_id: str | None = Field(None, max_length=64)
+    inference_error_code: str | None = Field(None, max_length=32)
+    status: int = 0
+
+
+class InternalUpdateCallLogRequest(BaseModel):
+    status: int | None = None
+    selected_model: str | None = Field(None, max_length=64)
+    provider_slug: str | None = Field(None, max_length=32)
+    upstream_model: str | None = Field(None, max_length=64)
+    config_version: int | None = None
+    config_source: str | None = Field(None, max_length=32)
+    inference_config_version: int | None = None
+    inference_config_source: str | None = Field(None, max_length=32)
+    routing_tier: int | None = None
+    score_source: str | None = Field(None, max_length=32)
+    router_trace_id: str | None = Field(None, max_length=64)
+    inference_error_code: str | None = Field(None, max_length=32)
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    cached_tokens: int | None = None
+    total_tokens: int | None = None
+    duration_ms: int | None = None
+    error_code: str | None = Field(None, max_length=32)
+    error_msg: str | None = Field(None, max_length=1024)
+    cost: int | None = None
+    cost_detail: dict | None = None
+
+
+_CALL_LOG_UPDATE_FIELDS = {
+    "status", "selected_model", "provider_slug", "upstream_model",
+    "config_version", "config_source", "inference_config_version",
+    "inference_config_source", "routing_tier", "score_source",
+    "router_trace_id", "inference_error_code", "prompt_tokens",
+    "completion_tokens", "cached_tokens", "total_tokens", "duration_ms",
+    "error_code", "error_msg", "cost", "cost_detail",
+}
+
+
+@router.post("/call-logs", summary="Create API call log")
+async def create_call_log(
+    body: InternalCreateCallLogRequest,
+    _: None = Depends(verify_router_only),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    existing = (
+        await db.execute(
+            select(ApiCallLog).where(ApiCallLog.request_id == body.request_id)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return {"id": int(existing.id), "request_id": existing.request_id}
+
+    log = ApiCallLog(
+        request_id=body.request_id,
+        user_id=body.user_id,
+        api_key_id=body.api_key_id,
+        model_name=body.model_name,
+        selected_model=body.selected_model,
+        provider_slug=body.provider_slug,
+        upstream_model=body.upstream_model,
+        is_stream=body.is_stream,
+        ip=body.ip,
+        config_version=body.config_version,
+        config_source=body.config_source,
+        inference_config_version=body.inference_config_version,
+        inference_config_source=body.inference_config_source,
+        routing_tier=body.routing_tier,
+        score_source=body.score_source,
+        router_trace_id=body.router_trace_id,
+        inference_error_code=body.inference_error_code,
+        status=body.status,
+        created_at=now(),
+        updated_at=now(),
+    )
+    db.add(log)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = (
+            await db.execute(
+                select(ApiCallLog).where(ApiCallLog.request_id == body.request_id)
+            )
+        ).scalar_one()
+        return {"id": int(existing.id), "request_id": existing.request_id}
+    await db.refresh(log)
+    return {"id": int(log.id), "request_id": log.request_id}
+
+
+@router.patch("/call-logs/{request_id}", summary="Update API call log")
+async def update_call_log(
+    request_id: str = Path(max_length=64),
+    body: InternalUpdateCallLogRequest = ...,
+    _: None = Depends(verify_router_only),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    log = (
+        await db.execute(
+            select(ApiCallLog).where(ApiCallLog.request_id == request_id)
+        )
+    ).scalar_one_or_none()
+    if log is None:
+        raise HTTPException(status_code=404, detail="call log not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    if "error_msg" in updates and updates["error_msg"] is not None:
+        updates["error_msg"] = updates["error_msg"][:512]
+
+    for field_name, value in updates.items():
+        if field_name in _CALL_LOG_UPDATE_FIELDS:
+            setattr(log, field_name, value)
+    log.updated_at = now()
+    await db.commit()
+    return {"ok": True}

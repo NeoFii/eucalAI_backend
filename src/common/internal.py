@@ -488,3 +488,38 @@ async def post_internal_json(
         circuit_breaker_threshold=circuit_breaker_threshold,
         circuit_breaker_cooldown_seconds=circuit_breaker_cooldown_seconds,
     )
+
+
+async def patch_internal_json(
+    *,
+    base_url: str,
+    target_service: str,
+    path: str,
+    secret: str,
+    caller_service: str,
+    timeout: float,
+    json_body: dict,
+    query_params: dict | list[tuple[str, object]] | None = None,
+    allow_404: bool = False,
+    max_retries: int = 1,
+    retry_backoff_seconds: float = 0.2,
+    circuit_breaker_threshold: int = 3,
+    circuit_breaker_cooldown_seconds: float = 30.0,
+) -> dict | None:
+    """Perform a canonical internal PATCH request and decode JSON."""
+    return await request_internal_json(
+        method="PATCH",
+        base_url=base_url,
+        target_service=target_service,
+        path=path,
+        secret=secret,
+        caller_service=caller_service,
+        timeout=timeout,
+        json_body=json_body,
+        query_params=query_params,
+        allow_404=allow_404,
+        max_retries=max_retries,
+        retry_backoff_seconds=retry_backoff_seconds,
+        circuit_breaker_threshold=circuit_breaker_threshold,
+        circuit_breaker_cooldown_seconds=circuit_breaker_cooldown_seconds,
+    )

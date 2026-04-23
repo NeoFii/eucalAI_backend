@@ -7,14 +7,16 @@ import time
 import uuid
 
 import litellm
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from common.observability import get_request_id
-from router_service.dependencies import require_api_key
+from router_service.dependencies import extract_client_ip, get_settings, require_api_key
+from router_service.gateway import ValidatedApiKey
+from router_service.gateway_calllog import CallLogGateway
 from router_service.logging import get_app_logger, log_upstream_call
 from router_service.schemas.requests import ChatCompletionRequest
-from router_service.services.routing import route_and_resolve, sanitize_error
+from router_service.services.routing import RoutingError, route_and_resolve, sanitize_error
 from router_service.services.upstream import strip_think_tags
 from router_service.utils.text import stringify_message_content
 
@@ -25,12 +27,14 @@ logger = get_app_logger()
 @router.post("/v1/chat/completions")
 async def chat_completions(
     request: ChatCompletionRequest,
-    _: str = Depends(require_api_key),
+    raw_request: Request,
+    principal: ValidatedApiKey = Depends(require_api_key),
 ):
     is_stream = request.stream
     requested_model = str(request.model).strip()
     request_id = get_request_id() or uuid.uuid4().hex
     router_trace_id = f"chat-{uuid.uuid4().hex[:12]}"
+    settings = get_settings()
 
     input_preview = ""
     if request.messages:
@@ -41,17 +45,59 @@ async def chat_completions(
         if not input_preview:
             input_preview = stringify_message_content(request.messages[-1].get("content", ""))
 
-    selected_model, target_info, route_result, route_meta = await route_and_resolve(
-        requested_model=requested_model,
-        messages=request.messages,
+    t_start = time.monotonic()
+    create_result = await CallLogGateway.create_call_log(
+        settings=settings,
         request_id=request_id,
-        input_preview=input_preview,
-        messages_count=len(request.messages),
+        user_id=principal.user_id,
+        api_key_id=principal.id,
+        model_name=requested_model,
         is_stream=is_stream,
+        ip=extract_client_ip(raw_request),
+        status=0,
     )
+    call_log_created = create_result is not None
+
+    try:
+        selected_model, target_info, route_result, route_meta = await route_and_resolve(
+            requested_model=requested_model,
+            messages=request.messages,
+            request_id=request_id,
+            input_preview=input_preview,
+            messages_count=len(request.messages),
+            is_stream=is_stream,
+        )
+    except RoutingError as exc:
+        if call_log_created:
+            await CallLogGateway.update_call_log(
+                settings=settings,
+                request_id=request_id,
+                status=2,
+                error_code=exc.error_code,
+                error_msg=str(exc.detail)[:512],
+                duration_ms=int((time.monotonic() - t_start) * 1000),
+            )
+        raise
 
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
+
+    if call_log_created:
+        await CallLogGateway.update_call_log(
+            settings=settings,
+            request_id=request_id,
+            selected_model=selected_model,
+            provider_slug=target_info["provider_slug"],
+            upstream_model=target_info["upstream_model"],
+            config_version=config_version,
+            config_source=config_source,
+            inference_config_version=route_meta.get("inference_config_version"),
+            inference_config_source=route_meta.get("inference_config_source"),
+            routing_tier=(route_result or {}).get("routing_tier"),
+            score_source=(route_result or {}).get("score_source"),
+            router_trace_id=router_trace_id,
+            inference_error_code=route_meta.get("error_code"),
+        )
 
     forward_payload = request.model_dump(
         mode="python",
@@ -88,6 +134,15 @@ async def chat_completions(
             config_source=config_source,
             router_trace_id=router_trace_id,
         )
+        if call_log_created:
+            await CallLogGateway.update_call_log(
+                settings=settings,
+                request_id=request_id,
+                status=2,
+                error_code="upstream_error",
+                error_msg=sanitize_error(exc)[:512],
+                duration_ms=int((time.monotonic() - t_start) * 1000),
+            )
         raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
 
@@ -136,6 +191,15 @@ async def chat_completions(
                     config_source=config_source,
                     router_trace_id=router_trace_id,
                 )
+                if call_log_created:
+                    final_status = 1 if stream_ok else 4
+                    await CallLogGateway.update_call_log(
+                        settings=settings,
+                        request_id=request_id,
+                        status=final_status,
+                        duration_ms=int((time.monotonic() - t_start) * 1000),
+                        error_code="client_aborted" if not stream_ok else None,
+                    )
 
         return StreamingResponse(
             _stream_sse(),
@@ -178,5 +242,18 @@ async def chat_completions(
         config_source=config_source,
         router_trace_id=router_trace_id,
     )
+
+    if call_log_created:
+        usage = response_payload.get("usage") or {}
+        await CallLogGateway.update_call_log(
+            settings=settings,
+            request_id=request_id,
+            status=1,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            cached_tokens=usage.get("cached_tokens", 0),
+            total_tokens=usage.get("total_tokens", 0),
+            duration_ms=int((time.monotonic() - t_start) * 1000),
+        )
 
     return JSONResponse(content=response_payload, headers=headers)

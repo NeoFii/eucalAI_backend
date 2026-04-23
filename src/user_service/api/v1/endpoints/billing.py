@@ -159,8 +159,7 @@ async def list_topup_orders(
     "/usage",
     response_model=ApiResponse[list[UsageStatItem]],
     summary="List usage stats",
-    description="NOT YET WIRED: router-service does not produce usage data yet. Returns empty results.",
-    deprecated=True,
+    description="Hourly aggregate usage stats. Token and cost data may be partial (stream tokens and cost not yet populated).",
 )
 async def list_usage_stats(
     start: datetime | None = None,
@@ -190,8 +189,6 @@ async def list_usage_stats(
     "/usage/logs",
     response_model=ApiResponse[PaginatedResponse[ApiCallLogItem]],
     summary="List usage logs",
-    description="NOT YET WIRED: router-service does not produce call logs yet. Returns empty results.",
-    deprecated=True,
 )
 async def list_usage_logs(
     page: int = Query(1, ge=1),
@@ -200,6 +197,7 @@ async def list_usage_logs(
     end: datetime | None = None,
     model_name: str | None = None,
     api_key_id: int | None = None,
+    request_id: str | None = None,
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
@@ -217,6 +215,7 @@ async def list_usage_logs(
         user_id=int(current_user.id),
         model_name=model_name,
         api_key_id=api_key_id,
+        request_id=request_id,
     )
     return {
         "code": 200,

@@ -105,12 +105,14 @@ class UsageStatService:
         user_id: int | None = None,
         api_key_id: int | None = None,
         model_name: str | None = None,
+        request_id: str | None = None,
     ) -> PaginatedResult[ApiCallLog]:
         return await UsageStatRepository(db).list_usage_logs(
             params=params,
             user_id=user_id,
             api_key_id=api_key_id,
             model_name=model_name,
+            request_id=request_id,
         )
 
     @staticmethod

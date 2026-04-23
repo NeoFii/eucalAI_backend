@@ -286,6 +286,7 @@ async def list_usage_logs(
     page_size: int = Query(20, ge=1, le=100),
     user_id: int | None = None,
     model_name: str | None = None,
+    request_id: str | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     _current_admin: AdminUser = Depends(require_active_admin),
@@ -295,6 +296,7 @@ async def list_usage_logs(
         page_size=page_size,
         user_id=user_id,
         model_name=model_name,
+        request_id=request_id,
         start=start.isoformat() if start else None,
         end=end.isoformat() if end else None,
     )

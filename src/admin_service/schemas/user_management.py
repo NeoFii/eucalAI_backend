@@ -134,6 +134,9 @@ class UserUsageLogItem(DateTimeModel):
     request_id: str
     api_key_id: Optional[int] = None
     model_name: str
+    selected_model: Optional[str] = None
+    provider_slug: Optional[str] = None
+    upstream_model: Optional[str] = None
     prompt_tokens: int
     completion_tokens: int
     cached_tokens: int
@@ -142,11 +145,20 @@ class UserUsageLogItem(DateTimeModel):
     status: int
     duration_ms: Optional[int] = None
     is_stream: bool
+    config_version: Optional[int] = None
+    config_source: Optional[str] = None
+    inference_config_version: Optional[int] = None
+    inference_config_source: Optional[str] = None
+    routing_tier: Optional[int] = None
+    score_source: Optional[str] = None
+    router_trace_id: Optional[str] = None
+    inference_error_code: Optional[str] = None
     error_code: Optional[str] = None
     error_msg: Optional[str] = None
     ip: Optional[str] = None
     cost_detail: Optional[dict[str, Any]] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 class UserUsageLogListResponse(AdminBaseResponse):

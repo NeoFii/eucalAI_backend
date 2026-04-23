@@ -235,6 +235,7 @@ class UserManagementGateway(BaseGateway):
         model_name: str | None = None,
         start: str | None = None,
         end: str | None = None,
+        request_id: str | None = None,
     ) -> dict:
         try:
             qp: dict = {"page": page, "page_size": page_size}
@@ -246,6 +247,8 @@ class UserManagementGateway(BaseGateway):
                 qp["start"] = start
             if end:
                 qp["end"] = end
+            if request_id:
+                qp["request_id"] = request_id
             return await get_internal_json(
                 path="/api/v1/internal/usage/logs",
                 query_params=qp,

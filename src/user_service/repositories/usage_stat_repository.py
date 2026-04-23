@@ -63,8 +63,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         user_id: int | None,
         api_key_id: int | None,
         model_name: str | None,
+        request_id: str | None = None,
     ) -> PaginatedResult[ApiCallLog]:
         query = select(ApiCallLog)
+        if request_id is not None:
+            query = query.where(ApiCallLog.request_id == request_id)
         if user_id is not None:
             query = query.where(ApiCallLog.user_id == user_id)
         if api_key_id is not None:
