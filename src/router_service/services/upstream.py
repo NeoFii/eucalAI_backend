@@ -3,7 +3,33 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
+from urllib.parse import urlparse
+
+_BLOCKED_HOSTS = frozenset({
+    "localhost", "127.0.0.1", "0.0.0.0", "::1",
+    "metadata.google.internal", "169.254.169.254",
+})
+
+
+def _validate_upstream_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"upstream URL must use http/https, got: {parsed.scheme}")
+    hostname = (parsed.hostname or "").lower()
+    if hostname in _BLOCKED_HOSTS:
+        raise ValueError(f"upstream URL targets blocked host: {hostname}")
+    if hostname.startswith("10.") or hostname.startswith("192.168."):
+        raise ValueError(f"upstream URL targets private network: {hostname}")
+    if hostname.startswith("172."):
+        parts = hostname.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+                if 16 <= second <= 31:
+                    raise ValueError(f"upstream URL targets private network: {hostname}")
+            except ValueError:
+                pass
 
 
 def normalize_api_base(value: str) -> str:
@@ -34,6 +60,7 @@ def resolve_model_provider_target(
         raise ValueError(f"missing api base for logical model {logical_model}")
     if not upstream_model:
         raise ValueError(f"missing upstream model for logical model {logical_model}")
+    _validate_upstream_url(api_base)
 
     return {
         "logical_model": logical_model,

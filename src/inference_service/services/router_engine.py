@@ -7,8 +7,9 @@ Accepts chat messages, returns routing decision (no upstream invocation).
 from __future__ import annotations
 
 import gc
+import math
 import os
-import pickle
+import pickle as _pickle
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -55,6 +56,38 @@ import logging
 
 logger = logging.getLogger("inference_service")
 
+_SCALER_ALLOWED_MODULES = frozenset({
+    "sklearn.preprocessing._data",
+    "sklearn.preprocessing",
+    "sklearn.base",
+    "sklearn.utils._tags",
+    "sklearn.utils._set_output",
+    "numpy",
+    "numpy.core.multiarray",
+    "numpy.core._multiarray_umath",
+    "numpy._core.multiarray",
+    "numpy._core._multiarray_umath",
+    "builtins",
+    "collections",
+})
+
+
+class _RestrictedScalerUnpickler(_pickle.Unpickler):
+    """Unpickler that only allows sklearn scaler and numpy classes."""
+
+    def find_class(self, module: str, name: str) -> type:
+        if module in _SCALER_ALLOWED_MODULES:
+            return super().find_class(module, name)
+        raise _pickle.UnpicklingError(
+            f"blocked unpickle of {module}.{name} — "
+            f"add module to _SCALER_ALLOWED_MODULES if this is a legitimate sklearn/numpy dependency"
+        )
+
+
+def _safe_load_scaler(path: str) -> Any:
+    with open(path, "rb") as f:
+        return _RestrictedScalerUnpickler(f).load()
+
 
 def _ensure_special_tokens_map(model_dir: str):
     import json
@@ -94,11 +127,6 @@ def _build_input_text(tokenizer, raw_text_or_chat):
 
 
 def release_memory(*objs):
-    for obj in objs:
-        try:
-            del obj
-        except Exception:
-            pass
     gc.collect()
     if torch.cuda.is_available():
         try:
@@ -157,10 +185,14 @@ class HybridIntegratedDifficultyRouter:
             router_path = model_paths.get_model_path(name)
             heads = model_paths.get_heads(name)
 
-            with open(scaler_path, "rb") as f:
-                scaler = pickle.load(f)
+            try:
+                scaler = _safe_load_scaler(scaler_path)
+            except _pickle.UnpicklingError as exc:
+                raise RuntimeError(
+                    f"failed to load scaler {scaler_path}: {exc}"
+                ) from exc
             router_model = CGTabMRegressor(input_dim=self.cg_input_dim, token_dim=self.head_dim).to(self.device)
-            bundle = torch.load(router_path, map_location=self.device)
+            bundle = torch.load(router_path, map_location=self.device, weights_only=True)
             if isinstance(bundle, dict) and "model_state_dict" in bundle:
                 router_model.load_state_dict(bundle["model_state_dict"])
             else:
@@ -174,16 +206,51 @@ class HybridIntegratedDifficultyRouter:
         self.proto_label_order = list(PROTO_LABEL_ORDER)
         self.proto_temperature = 0.2
         if model_paths.proto_artifact and os.path.exists(model_paths.proto_artifact):
-            bundle = np.load(model_paths.proto_artifact, allow_pickle=True)
+            try:
+                bundle = np.load(model_paths.proto_artifact, allow_pickle=False)
+            except ValueError:
+                logger.warning(
+                    "proto artifact requires pickle — loading with allow_pickle=True: %s",
+                    model_paths.proto_artifact,
+                )
+                bundle = np.load(model_paths.proto_artifact, allow_pickle=True)
             self.proto_prototypes = bundle["prototypes"].astype(np.float32)
             self.proto_label_order = [str(x) for x in bundle["label_order"].tolist()]
             self.proto_temperature = float(bundle["temperature"][0])
+
+            if self.proto_prototypes.shape[0] != len(self.proto_label_order):
+                raise ValueError(
+                    f"proto artifact mismatch: prototypes has {self.proto_prototypes.shape[0]} rows "
+                    f"but label_order has {len(self.proto_label_order)} entries"
+                )
+            if self.proto_temperature <= 0:
+                raise ValueError(f"proto temperature must be > 0, got {self.proto_temperature}")
+            expected_labels = set(PROTO_LABEL_ORDER)
+            actual_labels = set(self.proto_label_order)
+            if actual_labels != expected_labels:
+                raise ValueError(
+                    f"proto label_order mismatch: expected {expected_labels}, got {actual_labels}"
+                )
+
             self.proto_enabled = True
             logger.info("loaded proto artifact: %s", model_paths.proto_artifact)
         else:
             logger.warning("proto artifact not found; proto weighting disabled")
 
         logger.info("all router components loaded")
+
+        # Verify hook target is accessible on the loaded model
+        first_layer = next(iter(next(iter(self._routers.values()))[2]))[0]
+        try:
+            self.model_paths.get_hook_target(
+                self.model.model if hasattr(self.model, "model") else self.model,
+                first_layer,
+            )
+        except (AttributeError, IndexError, KeyError) as exc:
+            raise RuntimeError(
+                f"hook target template '{self.model_paths._hook_target_template}' "
+                f"is incompatible with loaded model architecture: {exc}"
+            ) from exc
 
     def _resolve_runtime_config(self, runtime_config: Dict[str, Any] | None = None) -> Dict[str, Any]:
         if runtime_config is None:
@@ -214,7 +281,8 @@ class HybridIntegratedDifficultyRouter:
             return hook
 
         for layer_idx in all_target_layers:
-            h = base_llm.layers[layer_idx].self_attn.o_proj.register_forward_hook(get_hook(layer_idx))
+            target_module = self.model_paths.get_hook_target(base_llm, layer_idx)
+            h = target_module.register_forward_hook(get_hook(layer_idx))
             hooks.append(h)
 
         try:
@@ -241,7 +309,11 @@ class HybridIntegratedDifficultyRouter:
         pred = router_model(feats_tensor)
         if pred.dim() == 3:
             pred = pred.mean(dim=1)
-        return float(pred.item())
+        result = float(pred.item())
+        if not math.isfinite(result):
+            logger.error("CG-TabM returned non-finite value: %s, falling back to 1.0", result)
+            return 1.0
+        return result
 
     @torch.no_grad()
     def _embed_semantic_text_for_proto(self, semantic_text: str) -> np.ndarray:
@@ -308,73 +380,85 @@ class HybridIntegratedDifficultyRouter:
         score_bands_raw = config["score_bands_raw"]
         tier_model_map = config["tier_model_map"]
 
-        # Build inputs
-        shared_tool = shared_record_from_chat_messages(messages, request_id=request_id)
-        other_full_chat, other_full_debug_text = build_full_llm_input_for_chat_messages(messages)
+        fallback_routes: List[str] = []
 
-        tool_canonical_text = shared_tool["canonical_text"]
+        try:
+            # Build inputs
+            shared_tool = shared_record_from_chat_messages(messages, request_id=request_id)
+            other_full_chat, other_full_debug_text = build_full_llm_input_for_chat_messages(messages)
 
-        # Get all heads needed
-        swe_scaler, swe_router, swe_heads = self._routers["swe"]
-        tool_scaler, tool_router, tool_heads = self._routers["tool"]
-        gaia_scaler, gaia_router, gaia_heads = self._routers["gaia"]
-        task_scaler, task_router, task_heads = self._routers["task"]
-        prog_scaler, prog_router, prog_heads = self._routers["prog"]
+            tool_canonical_text = shared_tool["canonical_text"]
 
-        # Forward pass
-        tool_cache = self._run_with_heads(tool_canonical_text, [tool_heads])
-        cache_other = self._run_with_heads(other_full_chat, [swe_heads, gaia_heads, task_heads, prog_heads])
+            # Get all heads needed
+            swe_scaler, swe_router, swe_heads = self._routers["swe"]
+            tool_scaler, tool_router, tool_heads = self._routers["tool"]
+            gaia_scaler, gaia_router, gaia_heads = self._routers["gaia"]
+            task_scaler, task_router, task_heads = self._routers["task"]
+            prog_scaler, prog_router, prog_heads = self._routers["prog"]
 
-        raw_swe = self._forward_cgtabm(cache_other, swe_scaler, swe_router, swe_heads)
-        raw_tool = self._forward_cgtabm(tool_cache, tool_scaler, tool_router, tool_heads)
-        raw_gaia = self._forward_cgtabm(cache_other, gaia_scaler, gaia_router, gaia_heads)
-        raw_task = self._forward_cgtabm(cache_other, task_scaler, task_router, task_heads)
-        raw_prog = self._forward_cgtabm(cache_other, prog_scaler, prog_router, prog_heads)
+            # Forward pass
+            tool_cache = self._run_with_heads(tool_canonical_text, [tool_heads])
+            cache_other = self._run_with_heads(other_full_chat, [swe_heads, gaia_heads, task_heads, prog_heads])
 
-        swe_0_2, _ = normalize_route(ROUTE_ERROR, raw_swe)
-        tool_0_2, _ = normalize_route(ROUTE_TOOL, raw_tool)
-        gaia_0_2, _ = normalize_route(ROUTE_GENERAL, raw_gaia)
-        task_0_2, _ = normalize_route(ROUTE_TASK, raw_task)
-        prog_0_2, _ = normalize_route(ROUTE_CODE, raw_prog)
+            raw_swe = self._forward_cgtabm(cache_other, swe_scaler, swe_router, swe_heads)
+            raw_tool = self._forward_cgtabm(tool_cache, tool_scaler, tool_router, tool_heads)
+            raw_gaia = self._forward_cgtabm(cache_other, gaia_scaler, gaia_router, gaia_heads)
+            raw_task = self._forward_cgtabm(cache_other, task_scaler, task_router, task_heads)
+            raw_prog = self._forward_cgtabm(cache_other, prog_scaler, prog_router, prog_heads)
 
-        fiveway_scores_0_2 = {
-            ROUTE_ERROR: swe_0_2,
-            ROUTE_TOOL: tool_0_2,
-            ROUTE_GENERAL: gaia_0_2,
-            ROUTE_TASK: task_0_2,
-            ROUTE_CODE: prog_0_2,
-        }
-        config_total_score_0_10, weighted_components = compute_weighted_total_score_0_10(
-            fiveway_scores_0_2, weights,
-        )
+            raw_scores = {
+                ROUTE_ERROR: raw_swe, ROUTE_TOOL: raw_tool,
+                ROUTE_GENERAL: raw_gaia, ROUTE_TASK: raw_task, ROUTE_CODE: raw_prog,
+            }
+            for route_name, raw_val in raw_scores.items():
+                if not math.isfinite(raw_val):
+                    fallback_routes.append(route_name)
 
-        # Proto weighting
-        d_vec_0_2 = np.array([swe_0_2, tool_0_2, gaia_0_2, task_0_2, prog_0_2], dtype=np.float32)
-        proto_info = self._compute_proto_weighting(messages, d_vec_0_2)
+            swe_0_2, _ = normalize_route(ROUTE_ERROR, raw_swe)
+            tool_0_2, _ = normalize_route(ROUTE_TOOL, raw_tool)
+            gaia_0_2, _ = normalize_route(ROUTE_GENERAL, raw_gaia)
+            task_0_2, _ = normalize_route(ROUTE_TASK, raw_task)
+            prog_0_2, _ = normalize_route(ROUTE_CODE, raw_prog)
 
-        if proto_info and proto_info.get("weighted_score_0_2") is not None:
-            final_score_raw = float(proto_info["weighted_score_0_2"])
-            total_score_0_10 = scale_final_score_to_0_10(final_score_raw)
-            final_score_source = FINAL_SCORE_SOURCE
-        else:
-            final_score_raw = config_total_score_0_10 / 5.0
-            total_score_0_10 = config_total_score_0_10
-            final_score_source = "runtime_weighted_0_10_fallback"
+            fiveway_scores_0_2 = {
+                ROUTE_ERROR: swe_0_2,
+                ROUTE_TOOL: tool_0_2,
+                ROUTE_GENERAL: gaia_0_2,
+                ROUTE_TASK: task_0_2,
+                ROUTE_CODE: prog_0_2,
+            }
+            config_total_score_0_10, weighted_components = compute_weighted_total_score_0_10(
+                fiveway_scores_0_2, weights,
+            )
 
-        routing_tier = resolve_score_band(total_score_0_10, score_bands)
-        selected_model = tier_model_map[routing_tier]
+            # Proto weighting
+            d_vec_0_2 = np.array([swe_0_2, tool_0_2, gaia_0_2, task_0_2, prog_0_2], dtype=np.float32)
+            proto_info = self._compute_proto_weighting(messages, d_vec_0_2)
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+            if proto_info and proto_info.get("weighted_score_0_2") is not None:
+                final_score_raw = float(proto_info["weighted_score_0_2"])
+                total_score_0_10 = scale_final_score_to_0_10(final_score_raw)
+                final_score_source = FINAL_SCORE_SOURCE
+            else:
+                final_score_raw = config_total_score_0_10 / 5.0
+                total_score_0_10 = config_total_score_0_10
+                final_score_source = "runtime_weighted_0_10_fallback"
 
-        return {
-            "request_id": request_id,
-            "scores_0_2": {k: round(v, 4) for k, v in fiveway_scores_0_2.items()},
-            "proto_weighted_0_2": round(proto_info["weighted_score_0_2"], 4) if proto_info else None,
-            "total_score_0_10": round(total_score_0_10, 4),
-            "score_source": final_score_source,
-            "routing_tier": routing_tier,
-            "selected_model": selected_model,
-            "tier_model_map": tier_model_map,
-            "score_bands_raw": score_bands_raw,
-        }
+            routing_tier = resolve_score_band(total_score_0_10, score_bands)
+            selected_model = tier_model_map[routing_tier]
+
+            return {
+                "request_id": request_id,
+                "scores_0_2": {k: round(v, 4) for k, v in fiveway_scores_0_2.items()},
+                "proto_weighted_0_2": round(proto_info["weighted_score_0_2"], 4) if proto_info else None,
+                "total_score_0_10": round(total_score_0_10, 4),
+                "score_source": final_score_source,
+                "routing_tier": routing_tier,
+                "selected_model": selected_model,
+                "tier_model_map": tier_model_map,
+                "score_bands_raw": score_bands_raw,
+                "fallback_routes": fallback_routes,
+            }
+        finally:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()

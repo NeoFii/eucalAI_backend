@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+
+from fastapi import HTTPException
 
 from common.gateway.base import BaseGateway
 from common.internal import post_internal_json
 
 IDENTITY_TIMEOUT_SECONDS = 3.0
+logger = logging.getLogger("router_service")
 
 
 @dataclass(slots=True)
@@ -52,11 +56,17 @@ class UserIdentityGateway(BaseGateway):
             circuit_breaker_threshold=settings.internal_http_circuit_breaker_threshold,
             circuit_breaker_cooldown_seconds=settings.internal_http_circuit_breaker_cooldown_seconds,
         )
-        return ValidatedApiKey(
-            id=int(payload["id"]),
-            user_id=int(payload["user_id"]),
-            name=payload["name"],
-        )
+        try:
+            return ValidatedApiKey(
+                id=int(payload["id"]),
+                user_id=int(payload["user_id"]),
+                name=payload["name"],
+            )
+        except (KeyError, ValueError, TypeError) as exc:
+            logger.error("malformed user-service response: %s", exc)
+            raise HTTPException(
+                status_code=502, detail="invalid response from user-service"
+            ) from exc
 
 
 __all__ = ["UserIdentityGateway", "ValidatedApiKey"]

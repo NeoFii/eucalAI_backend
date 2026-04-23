@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import threading
 from typing import Any, Dict, List, Tuple
 
@@ -14,6 +16,21 @@ from inference_service.config import (
 from inference_service.utils.scoring import parse_score_bands
 
 DEFAULT_ROUTER_ALIAS = "auto"
+
+_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_logger = logging.getLogger("inference_service")
+
+
+def _resolve_env_vars(value: str) -> str:
+    """Replace ${VAR} references with environment variable values."""
+    def _replace(m: re.Match) -> str:
+        env_val = os.environ.get(m.group(1))
+        if env_val is None:
+            raise ValueError(
+                f"environment variable {m.group(1)} is not set (referenced in runtime config)"
+            )
+        return env_val
+    return _ENV_VAR_RE.sub(_replace, value)
 
 
 def build_default_runtime_config() -> Dict[str, Any]:
@@ -111,10 +128,15 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
                 raise ValueError(f"model_providers[{model_name}] missing {key}")
         model_providers[str(model_name).strip()] = {
             "provider_slug": str(prov["provider_slug"]).strip(),
-            "api_key": str(prov["api_key"]).strip(),
-            "api_base": str(prov["api_base"]).strip(),
+            "api_key": _resolve_env_vars(str(prov["api_key"]).strip()),
+            "api_base": _resolve_env_vars(str(prov["api_base"]).strip()),
             "upstream_model": str(prov["upstream_model"]).strip(),
         }
+        resolved_key = model_providers[str(model_name).strip()]["api_key"]
+        if not resolved_key or "${" in resolved_key:
+            raise ValueError(
+                f"model_providers[{model_name}].api_key resolved to empty or unresolved value"
+            )
 
     return {
         "router_alias": router_alias,
@@ -158,9 +180,18 @@ class RuntimeConfigStore:
         with self._lock:
             if self._cached is not None and self._mtime == mtime:
                 return self._cached
-            with open(self.path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            config = normalize_runtime_config(raw)
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                config = normalize_runtime_config(raw)
+            except Exception:
+                if self._cached is not None:
+                    _logger.warning(
+                        "failed to reload %s, using last valid config", self.path,
+                        exc_info=True,
+                    )
+                    return self._cached
+                raise
             self._cached = config
             self._mtime = mtime
             return config

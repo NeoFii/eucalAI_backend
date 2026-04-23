@@ -36,4 +36,5 @@ def classify(
         selected_model=result["selected_model"],
         tier_model_map=result["tier_model_map"],
         score_bands_raw=result["score_bands_raw"],
+        fallback_routes=result.get("fallback_routes", []),
     )

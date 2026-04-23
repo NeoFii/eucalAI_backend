@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -10,6 +11,8 @@ from inference_service.config import FIVEWAY_ROUTE_ORDER, NORMALIZE_RANGES
 
 
 def minmax_scale_to_0_2(score: float, min_val: float, max_val: float) -> float:
+    if not math.isfinite(score):
+        return 1.0
     if max_val <= min_val:
         return 1.0
     clipped = max(min_val, min(max_val, float(score)))

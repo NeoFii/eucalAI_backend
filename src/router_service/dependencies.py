@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
+import cachetools
 from fastapi import Header, HTTPException, Request
 
 from common.core.exceptions import ServiceUnavailableException
@@ -23,9 +23,11 @@ _inference_client: Optional["InferenceClient"] = None
 _runtime_store: Optional["RuntimeConfigStore"] = None
 _settings: Optional["RouterSettings"] = None
 
-# API key cache: sha256(raw_key) -> (ValidatedApiKey, expire_monotonic)
+# API key cache: sha256(raw_key) -> ValidatedApiKey
 _API_KEY_CACHE_TTL = 60.0
-_api_key_cache: Dict[str, Tuple[ValidatedApiKey, float]] = {}
+_api_key_cache: cachetools.TTLCache[str, ValidatedApiKey] = cachetools.TTLCache(
+    maxsize=10000, ttl=_API_KEY_CACHE_TTL,
+)
 
 
 def init_globals(
@@ -106,14 +108,10 @@ async def require_api_key(
 
     # Check cache first
     cache_key = hashlib.sha256(raw_key.encode()).hexdigest()
-    now = time.monotonic()
     cached = _api_key_cache.get(cache_key)
     if cached is not None:
-        principal, expires_at = cached
-        if now < expires_at:
-            request.state.api_key_principal = principal
-            return principal
-        del _api_key_cache[cache_key]
+        request.state.api_key_principal = cached
+        return cached
 
     try:
         principal = await UserIdentityGateway.validate_api_key(
@@ -132,7 +130,7 @@ async def require_api_key(
         raise HTTPException(status_code=503, detail="user-service unavailable") from exc
 
     # Cache successful validation
-    _api_key_cache[cache_key] = (principal, now + _API_KEY_CACHE_TTL)
+    _api_key_cache[cache_key] = principal
 
     request.state.api_key_principal = principal
     return principal

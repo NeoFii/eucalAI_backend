@@ -65,6 +65,8 @@ DEFAULT_INFERENCE_PORT = 8004
 class ModelPathsConfig:
     """Loads model file paths from model_paths.json."""
 
+    DEFAULT_HOOK_TARGET_TEMPLATE = "model.layers.{layer}.self_attn.o_proj"
+
     def __init__(self, config_path: str):
         with open(config_path, "r", encoding="utf-8") as f:
             raw: Dict[str, Any] = json.load(f)
@@ -73,6 +75,9 @@ class ModelPathsConfig:
         self.device: str = raw.get("device", "cuda:0")
         self.max_input_length: int = raw.get("max_input_length", 4096)
         self.proto_artifact: str = raw.get("proto_artifact", "")
+        self._hook_target_template: str = raw.get(
+            "hook_target_template", self.DEFAULT_HOOK_TARGET_TEMPLATE
+        )
 
         routers = raw.get("routers", {})
         self.routers: Dict[str, Dict[str, Any]] = {}
@@ -98,6 +103,16 @@ class ModelPathsConfig:
     def get_meta_path(self, name: str) -> str | None:
         return self.routers[name].get("meta")
 
+    def get_hook_target(self, base_model: Any, layer_idx: int) -> Any:
+        path = self._hook_target_template.replace("{layer}", str(layer_idx))
+        obj = base_model
+        for attr in path.split("."):
+            if attr.isdigit():
+                obj = obj[int(attr)]
+            else:
+                obj = getattr(obj, attr)
+        return obj
+
 
 def load_model_paths(config_path: str | None = None) -> ModelPathsConfig:
     if config_path is None:
@@ -114,6 +129,7 @@ class InferenceSettings:
     host: str = DEFAULT_INFERENCE_HOST
     port: int = DEFAULT_INFERENCE_PORT
     inference_secret: str = ""
+    allow_insecure_dev: bool = False
     model_paths_config: str = ""
     runtime_config_path: str = ""
     log_dir: str = "logs"
@@ -124,6 +140,7 @@ class InferenceSettings:
             host=os.getenv("INFERENCE_HOST", DEFAULT_INFERENCE_HOST),
             port=int(os.getenv("INFERENCE_PORT", str(DEFAULT_INFERENCE_PORT))),
             inference_secret=os.getenv("INFERENCE_SERVICE_SECRET", ""),
+            allow_insecure_dev=os.getenv("INFERENCE_ALLOW_INSECURE_DEV") == "1",
             model_paths_config=os.getenv("ROUTER_MODEL_PATHS", ""),
             runtime_config_path=os.getenv("ROUTER_RUNTIME_CONFIG", ""),
             log_dir=os.getenv("INFERENCE_LOG_DIR", "logs"),

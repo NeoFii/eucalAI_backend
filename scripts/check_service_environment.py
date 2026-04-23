@@ -166,6 +166,20 @@ def validate_environment(
                 "PROVIDER_SECRET_MASTER_KEY is empty; router-service will derive provider keys from JWT_SECRET_KEY"
             )
 
+    if "inference-service" in selected_services:
+        inference_secret = _get_env(env, "INFERENCE_SERVICE_SECRET")
+        allow_insecure = _get_env(env, "INFERENCE_ALLOW_INSECURE_DEV")
+        if not inference_secret:
+            if allow_insecure == "1":
+                result.warnings.append(
+                    "INFERENCE_ALLOW_INSECURE_DEV=1 — inference-service will run without auth"
+                )
+            else:
+                result.errors.append(
+                    "INFERENCE_SERVICE_SECRET is required for inference-service "
+                    "(set INFERENCE_ALLOW_INSECURE_DEV=1 to bypass for local development)"
+                )
+
     return result
 
 

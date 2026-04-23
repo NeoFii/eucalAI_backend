@@ -125,6 +125,7 @@ def log_routing_decision(
     input_preview: str = "",
     messages_count: int = 0,
     is_stream: bool = False,
+    fallback_routes: list[str] | None = None,
 ) -> None:
     record: Dict[str, Any] = {
         "request_id": request_id,
@@ -139,6 +140,8 @@ def log_routing_decision(
         "messages_count": messages_count,
         "is_stream": is_stream,
     }
+    if fallback_routes:
+        record["fallback_routes"] = fallback_routes
     get_routing_logger().info(record)
 
 

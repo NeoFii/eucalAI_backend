@@ -58,11 +58,39 @@ def test_validate_environment_accepts_db_less_router_and_inference_services():
         environ={
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
+            "INFERENCE_SERVICE_SECRET": "test-inference-secret",
         },
     )
 
     assert result.ok
     assert result.errors == []
+
+
+def test_validate_environment_rejects_missing_inference_secret():
+    result = validate_environment(
+        ["router-service", "inference-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
+        },
+    )
+
+    assert not result.ok
+    assert any("INFERENCE_SERVICE_SECRET" in e for e in result.errors)
+
+
+def test_validate_environment_allows_insecure_dev_for_inference():
+    result = validate_environment(
+        ["router-service", "inference-service"],
+        environ={
+            "JWT_SECRET_KEY": "x" * 32,
+            "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
+            "INFERENCE_ALLOW_INSECURE_DEV": "1",
+        },
+    )
+
+    assert result.ok
+    assert any("INFERENCE_ALLOW_INSECURE_DEV" in w for w in result.warnings)
 
 
 def test_validate_environment_validates_auth_cookie_settings():

@@ -69,6 +69,9 @@ services:
       INFERENCE_SERVICE_SECRET: "${INFERENCE_SERVICE_SECRET}"
       USER_SERVICE_URL: "http://backend-app:8001"
       INTERNAL_SECRET: ${INTERNAL_SECRET}
+      AUTODL_API_KEY: "${AUTODL_API_KEY}"
+      AIPING_API_KEY: "${AIPING_API_KEY}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       DEBUG: ${DEBUG:-false}
     command: ["/app/.venv/bin/uvicorn", "router_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "4"]
     ports:
@@ -94,11 +97,16 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.inference
     container_name: inference-svc
+    env_file:
+      - ../.env
     restart: unless-stopped
     environment:
       ROUTER_MODEL_PATHS: "/app/deploy/router/model_paths.json"
       ROUTER_RUNTIME_CONFIG: "/app/deploy/router/runtime_config.json"
       INFERENCE_SERVICE_SECRET: "${INFERENCE_SERVICE_SECRET}"
+      AUTODL_API_KEY: "${AUTODL_API_KEY}"
+      AIPING_API_KEY: "${AIPING_API_KEY}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       INFERENCE_PORT: "8004"
       INFERENCE_LOG_DIR: "/app/logs"
       CUDA_VISIBLE_DEVICES: "0"

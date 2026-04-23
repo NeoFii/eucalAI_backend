@@ -45,6 +45,10 @@ def create_app(
     inference_client = InferenceClient(
         base_url=settings.inference_service_url,
         secret=settings.inference_service_secret,
+        max_retries=settings.internal_http_max_retries,
+        retry_backoff=settings.internal_http_retry_backoff_seconds,
+        circuit_breaker_threshold=settings.internal_http_circuit_breaker_threshold,
+        circuit_breaker_cooldown=settings.internal_http_circuit_breaker_cooldown_seconds,
     )
 
     @asynccontextmanager
