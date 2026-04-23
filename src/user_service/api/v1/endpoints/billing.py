@@ -85,7 +85,7 @@ async def get_balance(
 )
 async def list_transactions(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=100),
     type: int | None = Query(None, ge=1, le=7),
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
@@ -115,7 +115,7 @@ async def list_transactions(
 )
 async def list_voucher_redemptions(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=100),
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
@@ -165,7 +165,7 @@ async def redeem_voucher_code(
 )
 async def list_topup_orders(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=100),
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:

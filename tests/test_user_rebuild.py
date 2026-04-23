@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import inspect
 import os
 from types import SimpleNamespace
 
@@ -609,6 +610,41 @@ async def test_billing_voucher_redemptions_endpoint_returns_masked_history(monke
     assert item.redeemed_at == datetime(2026, 5, 2, 12, 0, 0)
     assert "code_hash" not in item.model_dump()
     assert "code" not in item.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_billing_voucher_redemptions_endpoint_defaults_page_size_to_10(monkeypatch):
+    from common.db import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+
+    captured = {}
+    page_size_default = inspect.signature(billing.list_voucher_redemptions).parameters["page_size"].default.default
+
+    async def fake_list_user_redemptions(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[], total=0, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.VoucherService.list_user_redemptions",
+        fake_list_user_redemptions,
+        raising=False,
+    )
+
+    response = await billing.list_voucher_redemptions(
+        page=1,
+        page_size=page_size_default,
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert page_size_default == 10
+    assert response["data"]["page"] == 1
+    assert response["data"]["page_size"] == 10
+    assert captured["user_id"] == 7
+    assert captured["params"].page == 1
+    assert captured["params"].page_size == 10
+    assert captured["params"].order_by == "redeemed_at"
 
 
 def test_user_billing_response_schemas_do_not_expose_internal_ids():
@@ -1240,6 +1276,41 @@ async def test_balance_service_list_transactions_passes_type_filter(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_billing_transactions_endpoint_defaults_page_size_to_10(monkeypatch):
+    from common.db import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+
+    captured = {}
+    page_size_default = inspect.signature(billing.list_transactions).parameters["page_size"].default.default
+
+    async def fake_list_transactions(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[], total=0, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.BalanceService.list_transactions",
+        fake_list_transactions,
+    )
+
+    response = await billing.list_transactions(
+        page=1,
+        page_size=page_size_default,
+        type=None,
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert page_size_default == 10
+    assert response["data"]["page"] == 1
+    assert response["data"]["page_size"] == 10
+    assert captured["user_id"] == 7
+    assert captured["tx_type"] is None
+    assert captured["params"].page == 1
+    assert captured["params"].page_size == 10
+
+
+@pytest.mark.asyncio
 async def test_billing_transactions_endpoint_passes_type_filter(monkeypatch):
     from common.db import PaginatedResult
     from user_service.api.v1.endpoints import billing
@@ -1258,7 +1329,7 @@ async def test_billing_transactions_endpoint_passes_type_filter(monkeypatch):
 
     response = await billing.list_transactions(
         page=3,
-        page_size=10,
+        page_size=25,
         type=7,
         current_user=SimpleNamespace(id=7),
         db=object(),
@@ -1268,7 +1339,85 @@ async def test_billing_transactions_endpoint_passes_type_filter(monkeypatch):
     assert captured["user_id"] == 7
     assert captured["tx_type"] == 7
     assert captured["params"].page == 3
+    assert captured["params"].page_size == 25
+
+
+@pytest.mark.asyncio
+async def test_billing_topup_orders_endpoint_defaults_page_size_to_10(monkeypatch):
+    from common.db import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+    from user_service.models import TopupOrder
+
+    order = TopupOrder(
+        id=10,
+        user_id=7,
+        order_no="TP202604230001",
+        amount=500,
+        status=TopupOrder.STATUS_PAID,
+        payment_channel="manual",
+        paid_at=datetime(2026, 4, 23, 10, 0, 0),
+        created_at=datetime(2026, 4, 23, 9, 50, 0),
+        updated_at=datetime(2026, 4, 23, 10, 0, 0),
+    )
+    captured = {}
+    page_size_default = inspect.signature(billing.list_topup_orders).parameters["page_size"].default.default
+
+    async def fake_get_user_orders(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[order], total=1, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.TopupOrderService.get_user_orders",
+        fake_get_user_orders,
+    )
+
+    response = await billing.list_topup_orders(
+        page=1,
+        page_size=page_size_default,
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert page_size_default == 10
+    assert response["data"]["page"] == 1
+    assert response["data"]["page_size"] == 10
+    assert captured["user_id"] == 7
+    assert captured["params"].page == 1
     assert captured["params"].page_size == 10
+    assert captured["params"].order_by == "created_at"
+    assert response["data"]["items"][0].order_no == "TP202604230001"
+
+
+@pytest.mark.asyncio
+async def test_billing_topup_orders_endpoint_passes_explicit_page_size(monkeypatch):
+    from common.db import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+
+    captured = {}
+
+    async def fake_get_user_orders(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[], total=0, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.TopupOrderService.get_user_orders",
+        fake_get_user_orders,
+    )
+
+    response = await billing.list_topup_orders(
+        page=2,
+        page_size=25,
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert response["data"]["page"] == 2
+    assert response["data"]["page_size"] == 25
+    assert captured["user_id"] == 7
+    assert captured["params"].page == 2
+    assert captured["params"].page_size == 25
 
 
 @pytest.mark.asyncio
