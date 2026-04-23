@@ -67,7 +67,7 @@ async def _safe_audit_commit(
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: str | None = None,
+    search: str | None = Query(default=None, max_length=200),
     status: int | None = Query(None),
     _current_admin: AdminUser = Depends(require_active_admin),
 ) -> UserListResponse:

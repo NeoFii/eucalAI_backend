@@ -107,7 +107,7 @@ class ModelCategoryUpdate(BaseModel):
 class SupportedModelCreate(BaseModel):
     slug: str = Field(..., min_length=1, max_length=120, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     name: str = Field(..., min_length=1, max_length=160)
-    vendor_slug: str = Field(..., min_length=1, max_length=80)
+    vendor_slug: str = Field(..., min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     summary: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=5000)
     price_input_per_m_fen: int | None = Field(default=None, ge=0)
@@ -128,10 +128,23 @@ class SupportedModelCreate(BaseModel):
                 raise ValueError("each capability tag must be <= 50 characters")
         return v
 
+    @field_validator("category_keys")
+    @classmethod
+    def validate_category_keys(cls, v: list[str]) -> list[str]:
+        import re
+
+        _slug_re = re.compile(r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
+        for key in v:
+            if len(key) > 80:
+                raise ValueError("each category key must be <= 80 characters")
+            if not _slug_re.match(key):
+                raise ValueError(f"invalid category key format: {key!r}")
+        return v
+
 
 class SupportedModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
-    vendor_slug: str | None = Field(default=None, min_length=1, max_length=80)
+    vendor_slug: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     summary: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=5000)
     price_input_per_m_fen: int | None = Field(default=None, ge=0)
@@ -158,8 +171,17 @@ class SupportedModelUpdate(BaseModel):
     @field_validator("category_keys")
     @classmethod
     def validate_category_keys(cls, v: list[str] | None) -> list[str] | None:
-        if v is not None and len(v) > 20:
-            raise ValueError("category_keys must have at most 20 items")
+        if v is not None:
+            import re
+
+            _slug_re = re.compile(r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
+            if len(v) > 20:
+                raise ValueError("category_keys must have at most 20 items")
+            for key in v:
+                if len(key) > 80:
+                    raise ValueError("each category key must be <= 80 characters")
+                if not _slug_re.match(key):
+                    raise ValueError(f"invalid category key format: {key!r}")
         return v
 
 

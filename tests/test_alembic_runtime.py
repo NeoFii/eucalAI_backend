@@ -6,6 +6,10 @@ from pathlib import Path
 import pytest
 
 
+async def _async_noop(*args, **kwargs):
+    pass
+
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -128,6 +132,8 @@ async def test_backend_app_revision_mismatch_stops_before_admin_bootstrap(monkey
         fake_bootstrap,
     )
     monkeypatch.setattr("backend_app.lifecycle.configure_snowflake", lambda **_kwargs: None)
+    monkeypatch.setattr("backend_app.lifecycle.init_redis", _async_noop)
+    monkeypatch.setattr("backend_app.lifecycle.close_redis", _async_noop)
     monkeypatch.setattr("backend_app.lifecycle.admin_db.create_engine", lambda **_kwargs: None)
     monkeypatch.setattr("backend_app.lifecycle.user_db.create_engine", lambda **_kwargs: None)
     monkeypatch.setattr("backend_app.lifecycle.admin_db.init_session_factory", lambda: None)

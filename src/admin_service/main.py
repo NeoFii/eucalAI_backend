@@ -22,7 +22,7 @@ from common.db import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability, log_event
-from common.redis import close_redis, init_redis
+from common.redis import check_redis_ready, close_redis, init_redis
 from common.utils.snowflake import configure_snowflake
 
 configure_logging(settings.LOG_LEVEL)
@@ -101,6 +101,7 @@ async def readiness_check():
     return await build_readiness_response(
         service_name=settings.SERVICE_NAME,
         database_check=lambda: check_database_ready(get_engine),
+        redis_check=check_redis_ready,
     )
 
 

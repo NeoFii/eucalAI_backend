@@ -95,13 +95,26 @@ def test_backend_app_declares_health_and_ready_endpoints():
 
 def test_backend_app_ready_endpoint_executes_all_database_probes(monkeypatch):
     from backend_app import main
+    from backend_app import lifecycle as lifecycle_mod
 
     async def fake_check_database_ready(get_engine):
         return True, get_engine()
 
+    async def fake_check_redis_ready():
+        return True, None
+
+    async def fake_init_redis(url):
+        pass
+
+    async def fake_close_redis():
+        pass
+
     monkeypatch.setattr(main, "check_database_ready", fake_check_database_ready)
+    monkeypatch.setattr(main, "check_redis_ready", fake_check_redis_ready)
     monkeypatch.setattr(main, "admin_db", SimpleNamespace(get_engine=lambda: "admin"))
     monkeypatch.setattr(main, "user_db", SimpleNamespace(get_engine=lambda: "user"))
+    monkeypatch.setattr(lifecycle_mod, "init_redis", fake_init_redis)
+    monkeypatch.setattr(lifecycle_mod, "close_redis", fake_close_redis)
 
     client = TestClient(main.app)
     response = client.get("/ready")
@@ -117,7 +130,11 @@ def test_backend_app_ready_endpoint_executes_all_database_probes(monkeypatch):
                     "admin": {"ready": True, "error": "admin"},
                     "user": {"ready": True, "error": "user"},
                 },
-            }
+            },
+            "redis": {
+                "status": "ok",
+                "detail": None,
+            },
         },
     }
 

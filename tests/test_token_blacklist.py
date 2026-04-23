@@ -15,6 +15,10 @@ from common.utils.jwt import create_access_token, create_refresh_token, get_toke
 _JWT_SECRET = os.environ["JWT_SECRET_KEY"]
 
 
+async def _async_noop(*args, **kwargs):
+    pass
+
+
 class TestTokenBlacklist:
     """Unit tests for common.token_blacklist using a fake Redis."""
 
@@ -40,14 +44,16 @@ class TestTokenBlacklist:
         from common.token_blacklist import blacklist_token, is_token_blacklisted
 
         assert not await is_token_blacklisted("abc123")
-        await blacklist_token("abc123", 300)
+        result = await blacklist_token("abc123", 300)
+        assert result is True
         assert await is_token_blacklisted("abc123")
 
     @pytest.mark.asyncio
     async def test_zero_ttl_skipped(self):
         from common.token_blacklist import blacklist_token, is_token_blacklisted
 
-        await blacklist_token("expired", 0)
+        result = await blacklist_token("expired", 0)
+        assert result is False
         assert not await is_token_blacklisted("expired")
 
 
@@ -126,6 +132,61 @@ class TestAuthServiceRevocation:
         assert new_refresh is not None
 
     @pytest.mark.asyncio
+    async def test_change_password_blacklists_tokens(self, monkeypatch):
+        from admin_service.services.auth_service import AdminAuthService
+
+        access = create_access_token(
+            data={"uid": 1, "sub": "1"},
+            secret_key=_JWT_SECRET,
+            expire_minutes=15,
+        )
+        refresh = create_refresh_token(
+            data={"uid": 1, "sub": "1"},
+            secret_key=_JWT_SECRET,
+            expire_days=7,
+        )
+
+        from common.utils import hash_password
+
+        pw_hash = hash_password("OldPass123!")
+        fake_admin = type(
+            "Admin",
+            (),
+            {
+                "id": 1,
+                "uid": 1,
+                "password_hash": pw_hash,
+                "password_changed_at": None,
+            },
+        )()
+
+        committed = []
+
+        class FakeDb:
+            async def commit(self):
+                committed.append(True)
+
+        monkeypatch.setattr(
+            "admin_service.services.auth_service.AdminAuditService.record",
+            staticmethod(lambda *a, **kw: _async_noop()),
+        )
+
+        await AdminAuthService.change_password(
+            FakeDb(),
+            fake_admin,
+            "OldPass123!",
+            "NewSecure@456",
+            access_token_str=access,
+            refresh_token_str=refresh,
+        )
+
+        from common.token_blacklist import is_token_blacklisted
+
+        assert committed
+        assert await is_token_blacklisted(get_token_jti(access))
+        assert await is_token_blacklisted(get_token_jti(refresh))
+
+    @pytest.mark.asyncio
     async def test_refresh_rejects_blacklisted_token(self, monkeypatch):
         from common.core.exceptions import InvalidTokenException
         from common.token_blacklist import blacklist_token
@@ -141,3 +202,70 @@ class TestAuthServiceRevocation:
 
         with pytest.raises(InvalidTokenException):
             await AdminAuthService.refresh_access_token("db", refresh)
+
+
+class TestTokenBlacklistResilience:
+    """Verify graceful degradation when Redis is unavailable."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_redis_broken(self, monkeypatch):
+        class BrokenRedis:
+            async def set(self, *args, **kwargs):
+                raise ConnectionError("Redis down")
+
+            async def exists(self, *args, **kwargs):
+                raise ConnectionError("Redis down")
+
+        monkeypatch.setattr("common.token_blacklist.get_redis", lambda: BrokenRedis())
+
+    @pytest.mark.asyncio
+    async def test_is_token_blacklisted_returns_false_on_redis_error(self):
+        from common.token_blacklist import is_token_blacklisted
+
+        assert await is_token_blacklisted("any-hash") is False
+
+    @pytest.mark.asyncio
+    async def test_blacklist_token_returns_false_on_redis_error(self):
+        from common.token_blacklist import blacklist_token
+
+        result = await blacklist_token("any-hash", 300)
+        assert result is False
+
+
+class TestCheckRedisReady:
+    """Tests for the Redis readiness probe."""
+
+    @pytest.mark.asyncio
+    async def test_check_redis_ready_success(self, monkeypatch):
+        class FakeRedis:
+            async def ping(self):
+                return True
+
+        import common.redis as redis_mod
+
+        monkeypatch.setattr(redis_mod, "_redis", FakeRedis())
+        ok, detail = await redis_mod.check_redis_ready()
+        assert ok is True
+        assert detail is None
+
+    @pytest.mark.asyncio
+    async def test_check_redis_ready_failure(self, monkeypatch):
+        class BrokenRedis:
+            async def ping(self):
+                raise ConnectionError("refused")
+
+        import common.redis as redis_mod
+
+        monkeypatch.setattr(redis_mod, "_redis", BrokenRedis())
+        ok, detail = await redis_mod.check_redis_ready()
+        assert ok is False
+        assert "refused" in detail
+
+    @pytest.mark.asyncio
+    async def test_check_redis_ready_not_initialised(self, monkeypatch):
+        import common.redis as redis_mod
+
+        monkeypatch.setattr(redis_mod, "_redis", None)
+        ok, detail = await redis_mod.check_redis_ready()
+        assert ok is False
+        assert "not initialised" in detail.lower()

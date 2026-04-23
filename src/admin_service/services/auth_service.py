@@ -204,7 +204,8 @@ class AdminAuthService:
         )
 
         remaining = _remaining_ttl(refresh_token)
-        await blacklist_token(old_jti, remaining)
+        if not await blacklist_token(old_jti, remaining):
+            raise InvalidTokenException(detail="Token revocation failed, please retry")
 
         return new_access_token, new_refresh_token
 
@@ -221,6 +222,8 @@ class AdminAuthService:
         new_password: str,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
+        access_token_str: str | None = None,
+        refresh_token_str: str | None = None,
     ) -> None:
         """Change the admin password."""
         if not verify_password(old_password, admin.password_hash):
@@ -246,4 +249,15 @@ class AdminAuthService:
             user_agent=user_agent,
         )
         await db.commit()
+
+        for label, tok in (("access", access_token_str), ("refresh", refresh_token_str)):
+            if tok:
+                remaining = _remaining_ttl(tok)
+                if not await blacklist_token(get_token_jti(tok), remaining):
+                    logger.critical(
+                        "Failed to revoke %s token after password change: uid=%s",
+                        label,
+                        admin.uid,
+                    )
+
         logger.info("Admin password changed: uid=%s", admin.uid)

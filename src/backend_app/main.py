@@ -29,6 +29,7 @@ if _backend_dir not in sys.path:
 
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
+from common.redis import check_redis_ready
 from common.observability import configure_logging, install_observability
 
 from admin_service import db as admin_db
@@ -174,6 +175,7 @@ async def readiness_check():
     return await build_readiness_response(
         service_name=settings.SERVICE_NAME,
         database_check=_check_all_databases,
+        redis_check=check_redis_ready,
     )
 
 

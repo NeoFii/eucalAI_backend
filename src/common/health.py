@@ -24,18 +24,27 @@ async def build_readiness_response(
     *,
     service_name: str,
     database_check: Callable[[], Awaitable[tuple[bool, str | None]]],
+    redis_check: Callable[[], Awaitable[tuple[bool, str | None]]] | None = None,
 ) -> JSONResponse:
     """Build a canonical readiness response."""
     database_ok, database_detail = await database_check()
     ready = database_ok
+    checks: dict = {
+        "database": {
+            "status": "ok" if database_ok else "error",
+            "detail": database_detail,
+        }
+    }
+    if redis_check is not None:
+        redis_ok, redis_detail = await redis_check()
+        ready = ready and redis_ok
+        checks["redis"] = {
+            "status": "ok" if redis_ok else "error",
+            "detail": redis_detail,
+        }
     payload = {
         "status": "ready" if ready else "not_ready",
         "service": service_name,
-        "checks": {
-            "database": {
-                "status": "ok" if database_ok else "error",
-                "detail": database_detail,
-            }
-        },
+        "checks": checks,
     }
     return JSONResponse(status_code=200 if ready else 503, content=payload)

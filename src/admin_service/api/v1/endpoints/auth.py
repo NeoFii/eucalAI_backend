@@ -180,12 +180,16 @@ async def change_password(
     payload: AdminChangePasswordRequest,
     request: Request,
     response: Response,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    access_token_cookie: Optional[str] = Cookie(default=None, alias="access_token"),
+    refresh_token_cookie: Optional[str] = Cookie(default=None, alias="refresh_token"),
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminChangePasswordResponse:
     """Change the current admin password and clear cookies."""
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
+    raw_access = credentials.credentials if credentials else access_token_cookie
     await AdminAuthService.change_password(
         db,
         current_admin,
@@ -193,6 +197,8 @@ async def change_password(
         payload.new_password,
         ip_address=ip_address,
         user_agent=user_agent,
+        access_token_str=raw_access,
+        refresh_token_str=refresh_token_cookie,
     )
     _clear_auth_cookies(response)
     return AdminChangePasswordResponse(code=200, message="密码修改成功，请重新登录")
