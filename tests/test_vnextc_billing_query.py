@@ -8,7 +8,7 @@ os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret_32chars_long!")
 os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
 
 import pytest
-from pydantic import ConfigDict
+from fastapi import FastAPI
 
 from user_service.schemas.billing import ApiCallLogItem
 
@@ -73,8 +73,27 @@ def test_billing_usage_logs_accepts_request_id_param():
 
     sig = inspect.signature(list_usage_logs)
     assert "request_id" in sig.parameters, "list_usage_logs should accept request_id parameter"
+    assert "effective_model" in sig.parameters, "list_usage_logs should accept effective_model parameter"
 
 
 def test_billing_usage_stats_endpoint_not_deprecated():
     from user_service.api.v1.endpoints.billing import list_usage_stats
     assert list_usage_stats is not None
+
+
+def test_billing_usage_analytics_endpoint_registered():
+    from user_service.api.v1.endpoints import billing
+
+    app = FastAPI()
+    app.include_router(billing.router, prefix="/api/v1")
+
+    route_paths = {route.path for route in app.routes}
+    assert "/api/v1/billing/usage/analytics" in route_paths
+
+
+def test_billing_usage_analytics_accepts_range_param():
+    import inspect
+    from user_service.api.v1.endpoints.billing import list_usage_analytics
+
+    sig = inspect.signature(list_usage_analytics)
+    assert "range" in sig.parameters, "list_usage_analytics should accept a range parameter"

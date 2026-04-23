@@ -8,8 +8,25 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams, PaginatedResult
+from common.utils.timezone import now
 from user_service.models import ApiCallLog, UsageStat
 from user_service.repositories import UsageStatRepository
+from user_service.schemas.billing import (
+    UsageAnalyticsBucket,
+    UsageAnalyticsBucketCost,
+    UsageAnalyticsData,
+    UsageAnalyticsModel,
+    UsageAnalyticsOverview,
+    UsageAnalyticsRange,
+)
+
+
+_ANALYTICS_RANGES: dict[UsageAnalyticsRange, tuple[int, str]] = {
+    "8h": (8, "hour"),
+    "24h": (24, "hour"),
+    "7d": (7, "day"),
+    "30d": (30, "day"),
+}
 
 
 class UsageStatService:
@@ -105,6 +122,7 @@ class UsageStatService:
         user_id: int | None = None,
         api_key_id: int | None = None,
         model_name: str | None = None,
+        effective_model: str | None = None,
         request_id: str | None = None,
     ) -> PaginatedResult[ApiCallLog]:
         return await UsageStatRepository(db).list_usage_logs(
@@ -112,7 +130,82 @@ class UsageStatService:
             user_id=user_id,
             api_key_id=api_key_id,
             model_name=model_name,
+            effective_model=effective_model,
             request_id=request_id,
+        )
+
+    @staticmethod
+    async def get_usage_analytics(
+        db: AsyncSession,
+        *,
+        user_id: int,
+        range_name: UsageAnalyticsRange,
+    ) -> UsageAnalyticsData:
+        start, end, granularity = UsageStatService._build_usage_analytics_window(range_name, now())
+        logs = await UsageStatRepository(db).list_analytics_logs(user_id=user_id, start=start, end=end)
+
+        total_requests = len(logs)
+        success_requests = sum(1 for log in logs if log.status == ApiCallLog.STATUS_SUCCESS)
+        total_cost = sum(int(log.cost) for log in logs)
+
+        per_model: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"request_count": 0, "total_cost": 0}
+        )
+        per_bucket: dict[datetime, dict[str, int]] = {
+            bucket_start: {} for bucket_start in UsageStatService._iter_bucket_starts(start, end, granularity)
+        }
+
+        for log in logs:
+            effective_model = UsageStatService._resolve_effective_model(log)
+            bucket_start = UsageStatService._get_bucket_start(log.created_at, granularity)
+
+            per_model[effective_model]["request_count"] += 1
+            per_model[effective_model]["total_cost"] += int(log.cost)
+            bucket_costs = per_bucket.setdefault(bucket_start, {})
+            bucket_costs[effective_model] = bucket_costs.get(effective_model, 0) + int(log.cost)
+
+        models = [
+            UsageAnalyticsModel(
+                effective_model=model_name,
+                request_count=stats["request_count"],
+                request_share=stats["request_count"] / total_requests if total_requests else 0,
+                total_cost=stats["total_cost"],
+            )
+            for model_name, stats in sorted(
+                per_model.items(),
+                key=lambda item: (-item[1]["request_count"], -item[1]["total_cost"], item[0]),
+            )
+        ]
+
+        buckets = [
+            UsageAnalyticsBucket(
+                bucket_start=bucket_start,
+                label=UsageStatService._format_bucket_label(bucket_start, granularity),
+                costs=[
+                    UsageAnalyticsBucketCost(effective_model=model_name, total_cost=amount)
+                    for model_name, amount in sorted(
+                        per_bucket.get(bucket_start, {}).items(),
+                        key=lambda item: (-item[1], item[0]),
+                    )
+                ],
+            )
+            for bucket_start in UsageStatService._iter_bucket_starts(start, end, granularity)
+        ]
+
+        return UsageAnalyticsData(
+            range=range_name,
+            granularity=granularity,
+            start=start,
+            end=end,
+            currency="CNY",
+            overview=UsageAnalyticsOverview(
+                total_requests=total_requests,
+                success_requests=success_requests,
+                success_rate=success_requests / total_requests if total_requests else 0,
+                total_cost=total_cost,
+            ),
+            models=models,
+            buckets=buckets,
         )
 
     @staticmethod
@@ -125,3 +218,42 @@ class UsageStatService:
         bucket["cached_tokens"] += int(log.cached_tokens)
         bucket["total_tokens"] += int(log.total_tokens)
         bucket["total_cost"] += int(log.cost)
+
+    @staticmethod
+    def _build_usage_analytics_window(
+        range_name: UsageAnalyticsRange,
+        reference_time: datetime,
+    ) -> tuple[datetime, datetime, str]:
+        bucket_count, granularity = _ANALYTICS_RANGES[range_name]
+        if granularity == "hour":
+            end = reference_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            start = end - timedelta(hours=bucket_count)
+            return start, end, granularity
+
+        end = reference_time.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        start = end - timedelta(days=bucket_count)
+        return start, end, granularity
+
+    @staticmethod
+    def _iter_bucket_starts(start: datetime, end: datetime, granularity: str) -> list[datetime]:
+        step = timedelta(hours=1) if granularity == "hour" else timedelta(days=1)
+        buckets: list[datetime] = []
+        bucket_start = start
+        while bucket_start < end:
+            buckets.append(bucket_start)
+            bucket_start += step
+        return buckets
+
+    @staticmethod
+    def _get_bucket_start(value: datetime, granularity: str) -> datetime:
+        if granularity == "hour":
+            return value.replace(minute=0, second=0, microsecond=0)
+        return value.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    @staticmethod
+    def _format_bucket_label(value: datetime, granularity: str) -> str:
+        return value.strftime("%H:%M" if granularity == "hour" else "%m-%d")
+
+    @staticmethod
+    def _resolve_effective_model(log: ApiCallLog) -> str:
+        return log.selected_model or log.model_name

@@ -63,6 +63,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         user_id: int | None,
         api_key_id: int | None,
         model_name: str | None,
+        effective_model: str | None = None,
         request_id: str | None = None,
     ) -> PaginatedResult[ApiCallLog]:
         query = select(ApiCallLog)
@@ -74,6 +75,10 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             query = query.where(ApiCallLog.api_key_id == api_key_id)
         if model_name is not None:
             query = query.where(ApiCallLog.model_name == model_name)
+        if effective_model is not None:
+            query = query.where(
+                func.coalesce(ApiCallLog.selected_model, ApiCallLog.model_name) == effective_model
+            )
         if params.time_field is not None:
             start, end = params.validate_time_range()
             time_column = getattr(ApiCallLog, params.time_field)
@@ -92,6 +97,24 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             .all()
         )
         return PaginatedResult(items=items, total=total, page=params.page, page_size=params.page_size)
+
+    async def list_analytics_logs(
+        self,
+        *,
+        user_id: int,
+        start: datetime,
+        end: datetime,
+    ) -> list[ApiCallLog]:
+        query = (
+            select(ApiCallLog)
+            .where(
+                ApiCallLog.user_id == user_id,
+                ApiCallLog.created_at >= start,
+                ApiCallLog.created_at < end,
+            )
+            .order_by(ApiCallLog.created_at.asc(), ApiCallLog.id.asc())
+        )
+        return list((await self.session.execute(query)).scalars().all())
 
     async def list_logs_for_hour(self, stat_hour: datetime, next_hour: datetime) -> list[ApiCallLog]:
         query = select(ApiCallLog).where(

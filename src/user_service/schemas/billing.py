@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, computed_field
 from pydantic import Field
@@ -95,6 +95,45 @@ class UsageStatItem(DateTimeModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+UsageAnalyticsRange = Literal["8h", "24h", "7d", "30d"]
+
+
+class UsageAnalyticsOverview(BaseModel):
+    total_requests: int
+    success_requests: int
+    success_rate: float
+    total_cost: int
+
+
+class UsageAnalyticsModel(BaseModel):
+    effective_model: str
+    request_count: int
+    request_share: float
+    total_cost: int
+
+
+class UsageAnalyticsBucketCost(BaseModel):
+    effective_model: str
+    total_cost: int
+
+
+class UsageAnalyticsBucket(DateTimeModel):
+    bucket_start: datetime
+    label: str
+    costs: list[UsageAnalyticsBucketCost]
+
+
+class UsageAnalyticsData(DateTimeModel):
+    range: UsageAnalyticsRange
+    granularity: str
+    start: datetime
+    end: datetime
+    currency: str
+    overview: UsageAnalyticsOverview
+    models: list[UsageAnalyticsModel]
+    buckets: list[UsageAnalyticsBucket]
+
+
 class ApiCallLogItem(DateTimeModel):
     id: int
     request_id: str
@@ -126,6 +165,12 @@ __all__ = [
     "BalanceResponseData",
     "BalanceTransactionItem",
     "TopupOrderItem",
+    "UsageAnalyticsBucket",
+    "UsageAnalyticsBucketCost",
+    "UsageAnalyticsData",
+    "UsageAnalyticsModel",
+    "UsageAnalyticsOverview",
+    "UsageAnalyticsRange",
     "UsageStatItem",
     "VoucherRedeemRequest",
     "VoucherRedeemResponseData",

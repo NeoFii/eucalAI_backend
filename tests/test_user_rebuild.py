@@ -1140,6 +1140,183 @@ async def test_billing_usage_logs_default_to_recent_window(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_billing_usage_logs_forwards_effective_model_filter(monkeypatch):
+    from common.db.query import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+
+    captured = {}
+
+    async def fake_list_usage_logs(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[], total=0, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.UsageStatService.list_usage_logs",
+        fake_list_usage_logs,
+    )
+
+    response = await billing.list_usage_logs(
+        page=1,
+        page_size=20,
+        effective_model="gpt-4.1-mini-2026-04-14",
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert response["data"]["total"] == 0
+    assert captured["user_id"] == 7
+    assert captured["effective_model"] == "gpt-4.1-mini-2026-04-14"
+    assert captured["params"].order_by == "created_at"
+
+
+@pytest.mark.asyncio
+async def test_usage_stat_service_builds_usage_analytics_from_call_logs(monkeypatch):
+    from user_service.models import ApiCallLog
+    from user_service.services.usage_stat_service import UsageStatService
+
+    fixed_now = datetime(2026, 4, 24, 16, 45, 0)
+    logs = [
+        ApiCallLog(
+            request_id="req-1",
+            user_id=7,
+            api_key_id=1,
+            model_name="auto",
+            selected_model="gpt-4.1-mini-2026-04-14",
+            prompt_tokens=100,
+            completion_tokens=30,
+            cached_tokens=0,
+            total_tokens=130,
+            cost=100,
+            status=ApiCallLog.STATUS_SUCCESS,
+            created_at=datetime(2026, 4, 24, 9, 5, 0),
+        ),
+        ApiCallLog(
+            request_id="req-2",
+            user_id=7,
+            api_key_id=1,
+            model_name="claude-3-7-sonnet-2026-02-19",
+            selected_model=None,
+            prompt_tokens=120,
+            completion_tokens=40,
+            cached_tokens=0,
+            total_tokens=160,
+            cost=300,
+            status=ApiCallLog.STATUS_ERROR,
+            created_at=datetime(2026, 4, 24, 9, 35, 0),
+        ),
+        ApiCallLog(
+            request_id="req-3",
+            user_id=7,
+            api_key_id=2,
+            model_name="auto",
+            selected_model="gpt-4.1-mini-2026-04-14",
+            prompt_tokens=90,
+            completion_tokens=20,
+            cached_tokens=0,
+            total_tokens=110,
+            cost=200,
+            status=ApiCallLog.STATUS_SUCCESS,
+            created_at=datetime(2026, 4, 24, 15, 10, 0),
+        ),
+    ]
+
+    class FakeRepo:
+        def __init__(self, _db):
+            pass
+
+        async def list_analytics_logs(self, *, user_id, start, end):
+            assert user_id == 7
+            assert start == datetime(2026, 4, 24, 9, 0, 0)
+            assert end == datetime(2026, 4, 24, 17, 0, 0)
+            return logs
+
+    monkeypatch.setattr("user_service.services.usage_stat_service.now", lambda: fixed_now)
+    monkeypatch.setattr("user_service.services.usage_stat_service.UsageStatRepository", FakeRepo)
+
+    analytics = await UsageStatService.get_usage_analytics(
+        object(),
+        user_id=7,
+        range_name="8h",
+    )
+
+    assert analytics.range == "8h"
+    assert analytics.granularity == "hour"
+    assert analytics.start == datetime(2026, 4, 24, 9, 0, 0)
+    assert analytics.end == datetime(2026, 4, 24, 17, 0, 0)
+    assert analytics.currency == "CNY"
+    assert analytics.overview.total_requests == 3
+    assert analytics.overview.success_requests == 2
+    assert analytics.overview.success_rate == pytest.approx(2 / 3)
+    assert analytics.overview.total_cost == 600
+    assert analytics.models[0].effective_model == "gpt-4.1-mini-2026-04-14"
+    assert analytics.models[0].request_count == 2
+    assert analytics.models[0].request_share == pytest.approx(2 / 3)
+    assert analytics.models[0].total_cost == 300
+    assert analytics.models[1].effective_model == "claude-3-7-sonnet-2026-02-19"
+    assert analytics.models[1].request_count == 1
+    assert analytics.models[1].request_share == pytest.approx(1 / 3)
+    assert analytics.models[1].total_cost == 300
+    assert len(analytics.buckets) == 8
+    assert analytics.buckets[0].label == "09:00"
+    assert analytics.buckets[-1].label == "16:00"
+    assert analytics.buckets[1].costs == []
+    assert {item.effective_model: item.total_cost for item in analytics.buckets[0].costs} == {
+        "gpt-4.1-mini-2026-04-14": 100,
+        "claude-3-7-sonnet-2026-02-19": 300,
+    }
+    assert {item.effective_model: item.total_cost for item in analytics.buckets[6].costs} == {
+        "gpt-4.1-mini-2026-04-14": 200,
+    }
+
+
+@pytest.mark.asyncio
+async def test_usage_stat_repository_list_usage_logs_filters_by_effective_model_and_orders_latest_first():
+    from common.db import ListParams
+    from user_service.repositories.usage_stat_repository import UsageStatRepository
+
+    class CountResult:
+        def scalar(self):
+            return 1
+
+    class ItemsResult:
+        def scalars(self):
+            return SimpleNamespace(all=lambda: [])
+
+    class FakeSession:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                return CountResult()
+            return ItemsResult()
+
+    db = FakeSession()
+    repo = UsageStatRepository(db)
+    result = await repo.list_usage_logs(
+        params=ListParams(page=1, page_size=20, order_by="created_at"),
+        user_id=7,
+        api_key_id=None,
+        model_name=None,
+        effective_model="gpt-4.1-mini-2026-04-14",
+        request_id=None,
+    )
+
+    compiled = db.statements[1].compile(
+        compile_kwargs={"literal_binds": True, "render_postcompile": True}
+    )
+    sql = str(compiled).lower()
+
+    assert result.total == 1
+    assert result.items == []
+    assert "coalesce(api_call_logs.selected_model, api_call_logs.model_name)" in sql
+    assert "= 'gpt-4.1-mini-2026-04-14'" in sql
+    assert "order by api_call_logs.created_at desc" in sql
+
+
+@pytest.mark.asyncio
 async def test_balance_tx_repository_list_for_user_uses_paginated_result():
     from common.db.query import ListParams, PaginatedResult
     from user_service.repositories.balance_tx_repository import BalanceTxRepository
