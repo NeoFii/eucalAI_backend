@@ -97,7 +97,7 @@ async def test_voucher_service_generates_hash_only_redemption_codes(monkeypatch)
 
     starts_at = datetime(2026, 5, 1, 12, 0, 0)
     expires_at = datetime(2026, 6, 1, 12, 0, 0)
-    generated_codes = iter(["VC-ALPHA-0001", "VC-BRAVO-0002"])
+    generated_codes = iter(["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "f6e5d4c3b2a1f8e7d6c5b4a3f2e1d0c9"])
     monkeypatch.setattr(VoucherService, "_generate_plain_code", staticmethod(lambda: next(generated_codes)))
 
     class FakeSession:
@@ -126,12 +126,12 @@ async def test_voucher_service_generates_hash_only_redemption_codes(monkeypatch)
         remark="launch credit",
     )
 
-    assert [item.code for item in generated] == ["VC-ALPHA-0001", "VC-BRAVO-0002"]
+    assert [item.code for item in generated] == ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "f6e5d4c3b2a1f8e7d6c5b4a3f2e1d0c9"]
     assert len(db.added) == 2
     assert all(isinstance(item, VoucherRedemptionCode) for item in db.added)
     assert all(item.code_hash != generated_item.code for item, generated_item in zip(db.added, generated))
-    assert db.added[0].code_prefix == "VC-A"
-    assert db.added[0].code_suffix == "0001"
+    assert db.added[0].code_prefix == "a1b2"
+    assert db.added[0].code_suffix == "c5d6"
     assert db.added[0].amount == 800
     assert db.added[0].status == VoucherRedemptionCode.STATUS_ACTIVE
     assert db.added[0].starts_at == starts_at
@@ -151,9 +151,9 @@ async def test_voucher_service_redeem_credits_user_balance_and_writes_ledger():
     user = User(id=1, uid=1001, email="user@example.com", password_hash="hash", status=1, balance=200)
     code = VoucherRedemptionCode(
         id=10,
-        code_hash=VoucherService.hash_code("VC-ALPHA-0001"),
-        code_prefix="VC-A",
-        code_suffix="0001",
+        code_hash=VoucherService.hash_code("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
+        code_prefix="a1b2",
+        code_suffix="c5d6",
         amount=800,
         status=VoucherRedemptionCode.STATUS_ACTIVE,
         starts_at=redeem_at - timedelta(hours=1),
@@ -189,7 +189,7 @@ async def test_voucher_service_redeem_credits_user_balance_and_writes_ledger():
     redeemed = await VoucherService.redeem_code(
         db,
         user_id=1,
-        raw_code=" vc-alpha-0001 ",
+        raw_code=" A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6 ",
         redeemed_at=redeem_at,
     )
 
@@ -219,9 +219,9 @@ async def test_voucher_service_redeem_rejects_reused_code():
     redeem_at = datetime(2026, 5, 1, 12, 0, 0)
     code = VoucherRedemptionCode(
         id=10,
-        code_hash=VoucherService.hash_code("VC-ALPHA-0001"),
-        code_prefix="VC-A",
-        code_suffix="0001",
+        code_hash=VoucherService.hash_code("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
+        code_prefix="a1b2",
+        code_suffix="c5d6",
         amount=800,
         status=VoucherRedemptionCode.STATUS_REDEEMED,
         starts_at=redeem_at - timedelta(hours=1),
@@ -243,7 +243,7 @@ async def test_voucher_service_redeem_rejects_reused_code():
         await VoucherService.redeem_code(
             FakeSession(),
             user_id=1,
-            raw_code="VC-ALPHA-0001",
+            raw_code="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
             redeemed_at=redeem_at,
         )
 
@@ -488,8 +488,8 @@ async def test_billing_redeem_voucher_endpoint_delegates_to_service(monkeypatch)
     redeemed = VoucherRedemptionCode(
         id=10,
         code_hash="hash",
-        code_prefix="VC-A",
-        code_suffix="0001",
+        code_prefix="a1b2",
+        code_suffix="c5d6",
         amount=800,
         status=VoucherRedemptionCode.STATUS_REDEEMED,
         starts_at=datetime(2026, 5, 1, 12, 0, 0),
@@ -510,12 +510,12 @@ async def test_billing_redeem_voucher_endpoint_delegates_to_service(monkeypatch)
     db = object()
 
     response = await redeem_voucher_code(
-        payload=VoucherRedeemRequest(code="VC-ALPHA-0001"),
+        payload=VoucherRedeemRequest(code="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
         current_user=current_user,
         db=db,
     )
 
-    assert captured["call"] == (db, 1, "VC-ALPHA-0001")
+    assert captured["call"] == (db, 1, "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
     assert response["data"].amount == 800
     assert response["data"].status == VoucherRedemptionCode.STATUS_REDEEMED
 

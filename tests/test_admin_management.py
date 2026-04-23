@@ -213,9 +213,9 @@ async def test_generate_voucher_codes_endpoint_delegates_and_records_audit(monke
             "items": [
                 {
                     "id": 10,
-                    "code": "VC-ALPHA-0001",
-                    "code_prefix": "VC-A",
-                    "code_suffix": "0001",
+                    "code": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+                    "code_prefix": "a1b2",
+                    "code_suffix": "c5d6",
                     "amount": 800,
                     "status": 1,
                     "starts_at": starts_at,
@@ -264,7 +264,7 @@ async def test_generate_voucher_codes_endpoint_delegates_and_records_audit(monke
         db=fake_db,
     )
 
-    assert response.data.items[0].code == "VC-ALPHA-0001"
+    assert response.data.items[0].code == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
     assert captured["gateway"] == {
         "amount": 800,
         "count": 1,
@@ -292,8 +292,8 @@ async def test_list_voucher_codes_response_does_not_expose_full_code(monkeypatch
             "items": [
                 {
                     "id": 10,
-                    "code_prefix": "VC-A",
-                    "code_suffix": "0001",
+                    "code_prefix": "a1b2",
+                    "code_suffix": "c5d6",
                     "amount": 800,
                     "status": 1,
                     "starts_at": starts_at,
@@ -331,8 +331,8 @@ async def test_list_voucher_codes_response_does_not_expose_full_code(monkeypatch
     )
 
     item = response.data.items[0]
-    assert item.code_prefix == "VC-A"
-    assert item.code_suffix == "0001"
+    assert item.code_prefix == "a1b2"
+    assert item.code_suffix == "c5d6"
     assert not hasattr(item, "code")
 
 
