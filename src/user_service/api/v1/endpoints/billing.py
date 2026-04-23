@@ -19,6 +19,8 @@ from user_service.schemas import (
     BalanceResponseData,
     BalanceTransactionItem,
     TopupOrderItem,
+    UsageAnalyticsData,
+    UsageAnalyticsRange,
     UsageStatItem,
     VoucherRedeemRequest,
     VoucherRedeemResponseData,
@@ -217,6 +219,28 @@ async def list_usage_stats(
 
 
 @router.get(
+    "/usage/analytics",
+    response_model=ApiResponse[UsageAnalyticsData],
+    summary="Get usage analytics",
+)
+async def list_usage_analytics(
+    range: UsageAnalyticsRange = Query("8h"),
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    analytics = await UsageStatService.get_usage_analytics(
+        db,
+        user_id=int(current_user.id),
+        range_name=range,
+    )
+    return {
+        "code": 200,
+        "message": "success",
+        "data": analytics,
+    }
+
+
+@router.get(
     "/usage/logs",
     response_model=ApiResponse[PaginatedResponse[ApiCallLogItem]],
     summary="List usage logs",
@@ -227,6 +251,7 @@ async def list_usage_logs(
     start: datetime | None = None,
     end: datetime | None = None,
     model_name: str | None = None,
+    effective_model: str | None = None,
     api_key_id: int | None = None,
     request_id: str | None = None,
     current_user: User = Depends(require_active_user),
@@ -245,6 +270,7 @@ async def list_usage_logs(
         params=params,
         user_id=int(current_user.id),
         model_name=model_name,
+        effective_model=effective_model,
         api_key_id=api_key_id,
         request_id=request_id,
     )
