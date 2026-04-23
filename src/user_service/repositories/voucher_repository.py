@@ -49,3 +49,19 @@ class VoucherRedemptionCodeRepository(BaseRepository[VoucherRedemptionCode]):
         if status is not None:
             filters.append(VoucherRedemptionCode.status == status)
         return await self.get_list(params, extra_filters=filters)
+
+    async def list_for_user_redemptions(
+        self,
+        *,
+        user_id: int,
+        params: ListParams,
+    ) -> PaginatedResult[VoucherRedemptionCode]:
+        if params.order_by is None:
+            params.order_by = "redeemed_at"
+        return await self.get_list(
+            params,
+            extra_filters=(
+                VoucherRedemptionCode.redeemed_user_id == user_id,
+                VoucherRedemptionCode.status == VoucherRedemptionCode.STATUS_REDEEMED,
+            ),
+        )

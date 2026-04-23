@@ -113,6 +113,18 @@ class VoucherService:
         return await VoucherRedemptionCodeRepository(db).list_for_admin(params, status=status)
 
     @staticmethod
+    async def list_user_redemptions(
+        db: AsyncSession,
+        *,
+        user_id: int,
+        params: ListParams,
+    ) -> PaginatedResult[VoucherRedemptionCode]:
+        return await VoucherRedemptionCodeRepository(db).list_for_user_redemptions(
+            user_id=user_id,
+            params=params,
+        )
+
+    @staticmethod
     async def disable(
         db: AsyncSession,
         *,

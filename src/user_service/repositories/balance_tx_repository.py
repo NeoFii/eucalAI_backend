@@ -32,12 +32,16 @@ class BalanceTxRepository(BaseRepository[BalanceTransaction]):
         *,
         user_id: int,
         params: ListParams,
+        tx_type: int | None = None,
     ) -> PaginatedResult[BalanceTransaction]:
         if params.order_by is None:
             params.order_by = "created_at"
+        filters = [BalanceTransaction.user_id == user_id]
+        if tx_type is not None:
+            filters.append(BalanceTransaction.type == tx_type)
         return await self.get_list(
             params,
-            extra_filters=(BalanceTransaction.user_id == user_id,),
+            extra_filters=filters,
         )
 
     async def list_all(

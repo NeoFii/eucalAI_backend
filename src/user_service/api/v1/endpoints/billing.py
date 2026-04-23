@@ -22,6 +22,7 @@ from user_service.schemas import (
     UsageStatItem,
     VoucherRedeemRequest,
     VoucherRedeemResponseData,
+    VoucherRedemptionItem,
 )
 from user_service.services.balance_service import BalanceService
 from user_service.services.topup_order_service import TopupOrderService
@@ -85,6 +86,7 @@ async def get_balance(
 async def list_transactions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    type: int | None = Query(None, ge=1, le=7),
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
@@ -92,12 +94,41 @@ async def list_transactions(
         db,
         user_id=int(current_user.id),
         params=ListParams(page=page, page_size=page_size, order_by="created_at"),
+        tx_type=type,
     )
     return {
         "code": 200,
         "message": "success",
         "data": {
             "items": [BalanceTransactionItem.model_validate(item) for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
+        },
+    }
+
+
+@router.get(
+    "/vouchers/redemptions",
+    response_model=ApiResponse[PaginatedResponse[VoucherRedemptionItem]],
+    summary="List voucher redemptions",
+)
+async def list_voucher_redemptions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    result = await VoucherService.list_user_redemptions(
+        db,
+        user_id=int(current_user.id),
+        params=ListParams(page=page, page_size=page_size, order_by="redeemed_at"),
+    )
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "items": [VoucherRedemptionItem.model_validate(item) for item in result.items],
             "total": result.total,
             "page": result.page,
             "page_size": result.page_size,

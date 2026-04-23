@@ -261,10 +261,12 @@ class BalanceService:
         *,
         user_id: int,
         params: ListParams,
+        tx_type: int | None = None,
     ) -> PaginatedResult[BalanceTransaction]:
         return await BalanceTxRepository(db).list_for_user(
             user_id=user_id,
             params=params,
+            tx_type=tx_type,
         )
 
     @staticmethod
