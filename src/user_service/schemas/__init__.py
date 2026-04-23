@@ -28,6 +28,7 @@ from user_service.schemas.billing import (
     UsageStatItem,
     VoucherRedeemRequest,
     VoucherRedeemResponseData,
+    VoucherRedemptionItem,
 )
 from user_service.schemas.common import ApiResponse, AuthBaseResponse, AuthErrorResponse, DateTimeModel
 from user_service.schemas.keys import ApiKeyCreateData, ApiKeyCreateRequest, ApiKeyItem, ApiKeyUpdateRequest
@@ -66,4 +67,5 @@ __all__ = [
     "VerifyEmailRequest",
     "VoucherRedeemRequest",
     "VoucherRedeemResponseData",
+    "VoucherRedemptionItem",
 ]

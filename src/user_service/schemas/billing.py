@@ -51,6 +51,18 @@ class VoucherRedeemResponseData(DateTimeModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class VoucherRedemptionItem(DateTimeModel):
+    id: int
+    code_prefix: str
+    code_suffix: str
+    amount: int
+    status: int
+    redeemed_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TopupOrderItem(DateTimeModel):
     id: int
     order_no: str
@@ -117,4 +129,5 @@ __all__ = [
     "UsageStatItem",
     "VoucherRedeemRequest",
     "VoucherRedeemResponseData",
+    "VoucherRedemptionItem",
 ]

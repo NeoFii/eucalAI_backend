@@ -19,6 +19,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
 os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret_32chars_long!")
 os.environ.setdefault("ADMIN_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/admin")
 os.environ.setdefault("USER_DATABASE_URL", "mysql+aiomysql://root:pw@localhost/user")
+os.environ.setdefault("PROVIDER_SECRET_MASTER_KEY", "a" * 64)
 
 
 def _build_app_routes_snapshot():
@@ -63,6 +64,7 @@ def test_internal_endpoints_remain_reachable_under_backend_app():
     assert ("POST", "/api/v1/auth/login") in pairs
     assert ("GET", "/api/v1/billing/balance") in pairs
     assert ("POST", "/api/v1/billing/vouchers/redeem") in pairs
+    assert ("GET", "/api/v1/billing/vouchers/redemptions") in pairs
     assert ("GET", "/api/v1/keys") in pairs
     assert ("POST", "/api/v1/admin/users/{uid}/topup") in pairs
     assert ("POST", "/api/v1/admin/vouchers") in pairs

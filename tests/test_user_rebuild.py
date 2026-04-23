@@ -520,13 +520,111 @@ async def test_billing_redeem_voucher_endpoint_delegates_to_service(monkeypatch)
     assert response["data"].status == VoucherRedemptionCode.STATUS_REDEEMED
 
 
+@pytest.mark.asyncio
+async def test_voucher_service_lists_current_user_redeemed_history(monkeypatch):
+    from common.db import ListParams, PaginatedResult
+    from user_service.models import VoucherRedemptionCode
+    from user_service.services.voucher_service import VoucherService
+
+    redeemed = VoucherRedemptionCode(
+        id=10,
+        code_hash="secret-hash",
+        code_prefix="VC-A",
+        code_suffix="0001",
+        amount=800,
+        status=VoucherRedemptionCode.STATUS_REDEEMED,
+        starts_at=datetime(2026, 5, 1, 12, 0, 0),
+        expires_at=datetime(2026, 6, 1, 12, 0, 0),
+        redeemed_user_id=7,
+        redeemed_at=datetime(2026, 5, 2, 12, 0, 0),
+    )
+    captured = {}
+
+    async def fake_list_for_user_redemptions(self, *, user_id, params):
+        captured["call"] = (self.session, user_id, params)
+        return PaginatedResult(items=[redeemed], total=1, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.services.voucher_service.VoucherRedemptionCodeRepository.list_for_user_redemptions",
+        fake_list_for_user_redemptions,
+        raising=False,
+    )
+    db = object()
+    params = ListParams(page=2, page_size=5, order_by="redeemed_at")
+
+    result = await VoucherService.list_user_redemptions(db, user_id=7, params=params)
+
+    assert result.items == [redeemed]
+    assert result.total == 1
+    assert captured["call"] == (db, 7, params)
+
+
+@pytest.mark.asyncio
+async def test_billing_voucher_redemptions_endpoint_returns_masked_history(monkeypatch):
+    from common.db import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+    from user_service.models import VoucherRedemptionCode
+
+    redeemed = VoucherRedemptionCode(
+        id=10,
+        code_hash="secret-hash",
+        code_prefix="VC-A",
+        code_suffix="0001",
+        amount=800,
+        status=VoucherRedemptionCode.STATUS_REDEEMED,
+        starts_at=datetime(2026, 5, 1, 12, 0, 0),
+        expires_at=datetime(2026, 6, 1, 12, 0, 0),
+        redeemed_user_id=7,
+        redeemed_at=datetime(2026, 5, 2, 12, 0, 0),
+        created_at=datetime(2026, 5, 1, 12, 0, 0),
+    )
+    captured = {}
+
+    async def fake_list_user_redemptions(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[redeemed], total=1, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.VoucherService.list_user_redemptions",
+        fake_list_user_redemptions,
+        raising=False,
+    )
+
+    response = await billing.list_voucher_redemptions(
+        page=2,
+        page_size=5,
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert captured["user_id"] == 7
+    assert captured["params"].page == 2
+    assert captured["params"].page_size == 5
+    assert captured["params"].order_by == "redeemed_at"
+    item = response["data"]["items"][0]
+    assert item.code_prefix == "VC-A"
+    assert item.code_suffix == "0001"
+    assert item.amount == 800
+    assert item.redeemed_at == datetime(2026, 5, 2, 12, 0, 0)
+    assert "code_hash" not in item.model_dump()
+    assert "code" not in item.model_dump()
+
+
 def test_user_billing_response_schemas_do_not_expose_internal_ids():
-    from user_service.schemas import ApiCallLogItem, BalanceTransactionItem, TopupOrderItem, UsageStatItem
+    from user_service.schemas import (
+        ApiCallLogItem,
+        BalanceTransactionItem,
+        TopupOrderItem,
+        UsageStatItem,
+        VoucherRedemptionItem,
+    )
 
     tx_fields = set(BalanceTransactionItem.model_fields)
     order_fields = set(TopupOrderItem.model_fields)
     stat_fields = set(UsageStatItem.model_fields)
     log_fields = set(ApiCallLogItem.model_fields)
+    voucher_fields = set(VoucherRedemptionItem.model_fields)
 
     assert "operator_id" not in tx_fields
     assert "user_id" not in order_fields
@@ -534,10 +632,14 @@ def test_user_billing_response_schemas_do_not_expose_internal_ids():
     assert "user_id" not in stat_fields
     assert "user_id" not in log_fields
     assert "ip" not in log_fields
+    assert "code_hash" not in voucher_fields
+    assert "code" not in voucher_fields
+    assert {"code_prefix", "code_suffix", "amount", "redeemed_at"} <= voucher_fields
     assert BalanceTransactionItem.__module__ == "user_service.schemas.billing"
     assert TopupOrderItem.__module__ == "user_service.schemas.billing"
     assert UsageStatItem.__module__ == "user_service.schemas.billing"
     assert ApiCallLogItem.__module__ == "user_service.schemas.billing"
+    assert VoucherRedemptionItem.__module__ == "user_service.schemas.billing"
 
 
 def test_api_key_request_normalizes_policy_fields():
@@ -1035,6 +1137,138 @@ async def test_balance_tx_repository_list_for_user_uses_paginated_result():
     assert result.total == 2
     assert result.page == 2
     assert result.page_size == 5
+
+
+@pytest.mark.asyncio
+async def test_balance_tx_repository_list_for_user_filters_type_before_count():
+    from common.db.query import ListParams
+    from user_service.repositories.balance_tx_repository import BalanceTxRepository
+
+    class CountResult:
+        def scalar(self):
+            return 1
+
+    class ItemsResult:
+        def scalars(self):
+            return SimpleNamespace(all=lambda: ["voucher-tx"])
+
+    class FakeSession:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                return CountResult()
+            return ItemsResult()
+
+    db = FakeSession()
+    repo = BalanceTxRepository(db)
+    result = await repo.list_for_user(
+        user_id=7,
+        params=ListParams(page=1, page_size=20, order_by="created_at"),
+        tx_type=7,
+    )
+
+    compiled = "\n".join(str(statement) for statement in db.statements)
+    assert "balance_transactions.user_id" in compiled
+    assert "balance_transactions.type" in compiled
+    assert result.total == 1
+    assert result.items == ["voucher-tx"]
+
+
+@pytest.mark.asyncio
+async def test_voucher_repository_list_for_user_redemptions_filters_user_and_status():
+    from common.db.query import ListParams, PaginatedResult
+    from user_service.repositories.voucher_repository import VoucherRedemptionCodeRepository
+
+    class CountResult:
+        def scalar(self):
+            return 1
+
+    class ItemsResult:
+        def scalars(self):
+            return SimpleNamespace(all=lambda: ["redeemed-voucher"])
+
+    class FakeSession:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                return CountResult()
+            return ItemsResult()
+
+    db = FakeSession()
+    repo = VoucherRedemptionCodeRepository(db)
+    result = await repo.list_for_user_redemptions(
+        user_id=7,
+        params=ListParams(page=1, page_size=20, order_by="redeemed_at"),
+    )
+
+    compiled = "\n".join(str(statement) for statement in db.statements)
+    assert isinstance(result, PaginatedResult)
+    assert "voucher_redemption_codes.redeemed_user_id" in compiled
+    assert "voucher_redemption_codes.status" in compiled
+    assert result.total == 1
+    assert result.items == ["redeemed-voucher"]
+
+
+@pytest.mark.asyncio
+async def test_balance_service_list_transactions_passes_type_filter(monkeypatch):
+    from common.db import ListParams, PaginatedResult
+    from user_service.services.balance_service import BalanceService
+
+    captured = {}
+
+    async def fake_list_for_user(self, *, user_id, params, tx_type=None):
+        captured["call"] = (self.session, user_id, params, tx_type)
+        return PaginatedResult(items=["voucher-tx"], total=1, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.services.balance_service.BalanceTxRepository.list_for_user",
+        fake_list_for_user,
+    )
+    db = object()
+    params = ListParams(page=1, page_size=20, order_by="created_at")
+
+    result = await BalanceService.list_transactions(db, user_id=7, params=params, tx_type=7)
+
+    assert result.items == ["voucher-tx"]
+    assert captured["call"] == (db, 7, params, 7)
+
+
+@pytest.mark.asyncio
+async def test_billing_transactions_endpoint_passes_type_filter(monkeypatch):
+    from common.db import PaginatedResult
+    from user_service.api.v1.endpoints import billing
+
+    captured = {}
+
+    async def fake_list_transactions(_db, **kwargs):
+        captured.update(kwargs)
+        params = kwargs["params"]
+        return PaginatedResult(items=[], total=0, page=params.page, page_size=params.page_size)
+
+    monkeypatch.setattr(
+        "user_service.api.v1.endpoints.billing.BalanceService.list_transactions",
+        fake_list_transactions,
+    )
+
+    response = await billing.list_transactions(
+        page=3,
+        page_size=10,
+        type=7,
+        current_user=SimpleNamespace(id=7),
+        db=object(),
+    )
+
+    assert response["data"]["total"] == 0
+    assert captured["user_id"] == 7
+    assert captured["tx_type"] == 7
+    assert captured["params"].page == 3
+    assert captured["params"].page_size == 10
 
 
 @pytest.mark.asyncio
