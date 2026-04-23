@@ -8,6 +8,10 @@ from admin_service.repositories.model_catalog_repository import (
     ModelVendorRepository,
     SupportedModelRepository,
 )
+from admin_service.repositories.routing_config_repository import (
+    ProviderCredentialRepository,
+    RoutingConfigRepository,
+)
 
 __all__ = [
     "AdminAuditLogRepository",
@@ -15,5 +19,7 @@ __all__ = [
     "InvitationCodeRepository",
     "ModelCategoryRepository",
     "ModelVendorRepository",
+    "ProviderCredentialRepository",
+    "RoutingConfigRepository",
     "SupportedModelRepository",
 ]

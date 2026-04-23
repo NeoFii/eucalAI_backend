@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from pydantic import AliasChoices, Field, model_validator
 
 from common.config import BaseServiceSettings
+from common.utils.crypto import validate_master_key
 
 _config_logger = logging.getLogger(__name__)
 
@@ -77,7 +78,16 @@ class Settings(BaseServiceSettings):
     BOOTSTRAP_SUPERADMIN_RESET_PASSWORD_IF_EXISTS: bool = False
     BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS: bool = False
 
+    PROVIDER_SECRET_MASTER_KEY: str = ""
+
     LOG_FILE_PREFIX: str = "admin"
+
+    @model_validator(mode="after")
+    def _validate_provider_master_key(self) -> Settings:
+        if not self.PROVIDER_SECRET_MASTER_KEY:
+            raise ValueError("PROVIDER_SECRET_MASTER_KEY must be configured")
+        validate_master_key(self.PROVIDER_SECRET_MASTER_KEY)
+        return self
 
 
 @lru_cache

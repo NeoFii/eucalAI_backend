@@ -223,17 +223,18 @@ def test_admin_route_completeness():
     # 2. Categorise standalone routes.
     internal_pairs: list[tuple[str, str]] = []
     public_model_catalog_pairs: list[tuple[str, str]] = []
-    admin_model_catalog_pairs: list[tuple[str, str]] = []
+    admin_prefixed_pairs: list[tuple[str, str]] = []
     regular_admin_pairs: list[tuple[str, str]] = []
 
     # Public model-catalog paths (no prefix in model_catalog.py, mounted at /api/v1 in standalone)
     _public_mc_prefixes = ("/api/v1/model-vendors", "/api/v1/models")
+    _admin_prefixed = ("/api/v1/admin/model-catalog", "/api/v1/admin/routing-config")
 
     for method, path in standalone_pairs:
         if "/internal/" in path:
             internal_pairs.append((method, path))
-        elif path.startswith("/api/v1/admin/model-catalog"):
-            admin_model_catalog_pairs.append((method, path))
+        elif any(path.startswith(p) for p in _admin_prefixed):
+            admin_prefixed_pairs.append((method, path))
         elif any(path.startswith(p) for p in _public_mc_prefixes):
             public_model_catalog_pairs.append((method, path))
         else:
@@ -250,8 +251,8 @@ def test_admin_route_completeness():
         if (method, mapped) not in backend_pairs:
             missing.append((method, path, mapped))
 
-    # Admin model-catalog paths: already /api/v1/admin/model-catalog/*, keep as-is
-    for method, path in admin_model_catalog_pairs:
+    # Admin model-catalog / routing-config paths: already /api/v1/admin/*, keep as-is
+    for method, path in admin_prefixed_pairs:
         if (method, path) not in backend_pairs:
             missing.append((method, path, path))
 

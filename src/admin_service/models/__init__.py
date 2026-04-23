@@ -9,6 +9,7 @@ from admin_service.models.model_catalog import (
     SupportedModel,
     SupportedModelCategoryMap,
 )
+from admin_service.models.routing_config import ProviderCredential, RoutingConfig
 
 SERVICE_MODELS = [
     AdminAuditLog,
@@ -16,6 +17,8 @@ SERVICE_MODELS = [
     InvitationCode,
     ModelCategory,
     ModelVendor,
+    ProviderCredential,
+    RoutingConfig,
     SupportedModel,
     SupportedModelCategoryMap,
 ]
@@ -26,6 +29,8 @@ __all__ = [
     "InvitationCode",
     "ModelCategory",
     "ModelVendor",
+    "ProviderCredential",
+    "RoutingConfig",
     "SERVICE_MODELS",
     "SupportedModel",
     "SupportedModelCategoryMap",
