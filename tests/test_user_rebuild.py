@@ -395,6 +395,103 @@ async def test_balance_service_topup_rejects_already_paid_order():
 
 
 @pytest.mark.asyncio
+async def test_topup_order_service_create_manual_writes_order_backed_topup_ledger():
+    from user_service.models import BalanceTransaction, TopupOrder, User
+    from user_service.services.balance_service import BalanceService
+
+    user = User(id=1, uid=1, email="user@example.com", password_hash="hash", status=1, balance=1000, frozen_amount=0)
+    order = TopupOrder(
+        id=10,
+        user_id=1,
+        order_no="TP20260420ABC",
+        amount=500,
+        status=TopupOrder.STATUS_PENDING,
+        payment_channel="manual",
+    )
+
+    class FakeSession:
+        def __init__(self):
+            self.execute_calls = 0
+            self.added = []
+            self.commit_calls = 0
+
+        async def execute(self, _statement):
+            self.execute_calls += 1
+            if self.execute_calls == 1:
+                return ScalarResult(user)
+            if self.execute_calls == 2:
+                return ScalarResult(order)
+            return ScalarResult(None)
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+    db = FakeSession()
+    await BalanceService.topup(
+        db,
+        user_id=1,
+        amount=500,
+        order_no=order.order_no,
+        operator_id=99,
+        remark="manual topup",
+    )
+
+    assert user.balance == 1500
+    assert order.status == TopupOrder.STATUS_PAID
+    assert db.commit_calls == 1
+    assert len(db.added) == 1
+    assert db.added[0].type == BalanceTransaction.TYPE_TOPUP
+    assert db.added[0].ref_type == "topup_order"
+    assert db.added[0].ref_id == order.order_no
+    assert db.added[0].operator_id == 99
+
+
+@pytest.mark.asyncio
+async def test_balance_service_admin_adjust_writes_adjust_ledger_without_topup_order():
+    from user_service.models import BalanceTransaction, User
+    from user_service.services.balance_service import BalanceService
+
+    user = User(id=1, uid=1, email="user@example.com", password_hash="hash", status=1, balance=1000, frozen_amount=0)
+
+    class FakeSession:
+        def __init__(self):
+            self.execute_calls = 0
+            self.added = []
+            self.commit_calls = 0
+
+        async def execute(self, _statement):
+            self.execute_calls += 1
+            return ScalarResult(user)
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+    db = FakeSession()
+    await BalanceService.admin_adjust(
+        db,
+        user_id=1,
+        amount=-300,
+        operator_id=99,
+        remark="adjust balance",
+    )
+
+    assert db.execute_calls == 1
+    assert user.balance == 700
+    assert db.commit_calls == 1
+    assert len(db.added) == 1
+    assert db.added[0].type == BalanceTransaction.TYPE_ADMIN_ADJUST
+    assert db.added[0].ref_type is None
+    assert db.added[0].ref_id is None
+    assert db.added[0].operator_id == 99
+
+
+@pytest.mark.asyncio
 async def test_balance_service_settle_consumes_balance_and_counts_quota():
     from user_service.models import User, UserApiKey
     from user_service.services.balance_service import BalanceService
