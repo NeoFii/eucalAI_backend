@@ -322,10 +322,11 @@ class ModelCatalogService:
         model: SupportedModel,
         categories: list[ModelCategory],
     ) -> None:
-        model.category_links = [
+        model.category_links.clear()
+        model.category_links.extend(
             SupportedModelCategoryMap(category=category, sort_order=index + 1)
             for index, category in enumerate(categories)
-        ]
+        )
 
     @staticmethod
     async def create_model(
