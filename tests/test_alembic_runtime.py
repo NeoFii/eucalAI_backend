@@ -1,26 +1,20 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pytest
 
 
-async def _async_noop(*args, **kwargs):
-    pass
-
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_backend_app_runtime_does_not_call_init_db():
-    source = (ROOT / "src" / "backend_app" / "lifecycle.py").read_text(encoding="utf-8")
-    assert "init_db(" not in source
-
-
 def test_standalone_services_do_not_call_init_db():
-    admin_main = (ROOT / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
-    assert "init_db(" not in admin_main
+    for relative_path in (
+        "src/admin_service/main.py",
+        "src/user_service/main.py",
+    ):
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "init_db(" not in source
 
 
 def test_service_db_facades_do_not_export_init_db():
@@ -110,38 +104,3 @@ async def test_ensure_database_at_head_raises_clear_error(monkeypatch):
     message = str(exc_info.value)
     assert "admin-service database is at '20260420_old', expected '20260421_head'" in message
     assert "uv run migrate --service admin-service upgrade head" in message
-
-
-@pytest.mark.asyncio
-async def test_backend_app_revision_mismatch_stops_before_admin_bootstrap(monkeypatch):
-    from backend_app import lifecycle
-
-    calls: list[str] = []
-
-    async def fake_check(*_args, **_kwargs):
-        calls.append("check")
-        raise RuntimeError("revision mismatch")
-
-    async def fake_bootstrap():
-        calls.append("bootstrap")
-        return False
-
-    monkeypatch.setattr(lifecycle, "ensure_database_at_head", fake_check)
-    monkeypatch.setattr(
-        "backend_app.lifecycle.AdminBootstrapService.ensure_super_admin",
-        fake_bootstrap,
-    )
-    monkeypatch.setattr("backend_app.lifecycle.configure_snowflake", lambda **_kwargs: None)
-    monkeypatch.setattr("backend_app.lifecycle.init_redis", _async_noop)
-    monkeypatch.setattr("backend_app.lifecycle.close_redis", _async_noop)
-    monkeypatch.setattr("backend_app.lifecycle.admin_db.create_engine", lambda **_kwargs: None)
-    monkeypatch.setattr("backend_app.lifecycle.user_db.create_engine", lambda **_kwargs: None)
-    monkeypatch.setattr("backend_app.lifecycle.admin_db.init_session_factory", lambda: None)
-    monkeypatch.setattr("backend_app.lifecycle.user_db.init_session_factory", lambda: None)
-
-    manager = lifecycle.build_lifecycle_manager(logger=logging.getLogger("test"))
-
-    with pytest.raises(RuntimeError, match="revision mismatch"):
-        await manager.startup()
-
-    assert calls == ["check"]

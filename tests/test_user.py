@@ -28,7 +28,6 @@ class TestUserConfig:
         from user_service.config import settings
 
         assert settings.PORT == 8000
-        # Post-consolidation: admin/user/testing all live inside backend-app on :8001.
         assert settings.ADMIN_SERVICE_URL == "http://localhost:8001"
 
 

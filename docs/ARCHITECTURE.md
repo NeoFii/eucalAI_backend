@@ -6,12 +6,10 @@ The active backend has two data-owning domains and two DB-less runtime services.
 
 | Process | Module | Port | Role |
 | --- | --- | ---: | --- |
-| backend-app | `backend_app.main:app` | 8001 | consolidated admin and user control plane |
+| user-service | `user_service.main:app` | 8000 | user control plane and billing API |
+| admin-service | `admin_service.main:app` | 8001 | admin control plane and routing configuration API |
 | router-service | `router_service.main:app` | 8003 | CPU request gateway and upstream routing |
 | inference-service | `inference_service.main:app` | 8004 | model classification and routing signals |
-
-Standalone `admin_service.main:app` and `user_service.main:app` remain available for
-local domain debugging. They are not part of the default startup set.
 
 ## Data Ownership
 
@@ -25,11 +23,12 @@ Router and inference do not own schemas. Router uses file-based runtime config u
 
 ## Request Flow
 
-1. Frontend and admin clients call `backend-app`.
-2. LLM clients call `router-service`.
-3. Router validates user API keys through the user internal endpoint.
-4. Router calls `inference-service` for classification.
-5. Router forwards the request to the selected upstream provider.
+1. Frontend clients call `user-service`.
+2. Admin clients call `admin-service`.
+3. LLM clients call `router-service`.
+4. Router validates user API keys through the user internal endpoint.
+5. Router calls `inference-service` for classification.
+6. Router forwards the request to the selected upstream provider.
 
 ## Internal Calls
 
@@ -52,5 +51,5 @@ Alembic is the only schema source of truth. Migration namespaces exist for:
 ## Packaging
 
 All importable packages live under `src/`. The base Dockerfile copies common,
-admin, user, router, inference, backend-app, migrations, scripts, and router runtime
-configuration into the image.
+admin, user, router, inference, migrations, scripts, and router runtime configuration
+into the image.

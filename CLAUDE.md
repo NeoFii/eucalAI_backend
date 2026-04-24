@@ -8,13 +8,12 @@ Eucal AI backend — a mono-repo of Python microservices built with FastAPI, asy
 
 ## Services
 
-All packages live under `src/`. Typical deployment uses `backend-app` (merged control plane) + `router-service` (CPU gateway) + `inference-service` (GPU inference) + `testing-scheduler` + `testing-worker`.
+All packages live under `src/`. Typical deployment uses `user-service` + `admin-service` on the backend node, `router-service` on the CPU gateway node, `inference-service` on the GPU node, and `user-worker` for async user jobs.
 
 | Service | Module | Port | Purpose |
 |---------|--------|------|---------|
-| backend-app | `backend_app.main:app` | 8001 | Merged admin + user + testing control plane |
-| user-service | `user_service` | 8000 | Registration, login, password |
-| admin-service | `admin_service` | 8001 | Admin auth, super-admin, audit (standalone mode) |
+| user-service | `user_service` | 8000 | Registration, login, billing, API keys |
+| admin-service | `admin_service` | 8001 | Admin auth, super-admin, audit, model catalog, routing config |
 | testing-service | `testing_service` | 8002 | Model catalog, providers, quotes, benchmark (standalone mode) |
 | router-service | `router_service` | 8003 | CPU gateway: API key auth, routing via inference-svc, upstream forwarding. No DB, no ML deps. |
 | inference-service | `inference_service` | 8004 | GPU inference: Qwen backbone + 5 CG-TabM routers. No DB. |
@@ -22,8 +21,6 @@ All packages live under `src/`. Typical deployment uses `backend-app` (merged co
 | testing-worker | `testing_service.worker` | — | Benchmark queue consumer (arq + Redis) |
 
 Router runtime assets (`runtime_config.json`, `model_paths.json`) live under `deploy/router/`. Install inference ML deps with `uv sync --extra inference`.
-
-`backend-app` merges admin/user/testing into one process but they still make HMAC-signed HTTP calls to themselves over loopback for wire compatibility with standalone deployments.
 
 ## Common Commands
 
@@ -98,7 +95,7 @@ Signed with `INTERNAL_SECRET` using headers `X-Internal-Service`, `X-Internal-Ti
 - admin <-> user (bidirectional)
 - testing -> admin (real-time identity verification on every admin request)
 - router -> inference-svc (internal HTTP: `/internal/v1/classify`, shared secret via `X-Inference-Secret`)
-- router -> user-service (API Key validation via backend-app)
+- router -> user-service (API Key validation and call logging)
 
 ### Config
 All config via `.env` loaded by pydantic-settings. Each service config extends `BaseServiceSettings` and maps `<SERVICE>_DATABASE_URL` to its local `DATABASE_URL`. No generic `DATABASE_URL` fallback exists.
@@ -116,7 +113,7 @@ All config via `.env` loaded by pydantic-settings. Each service config extends `
 - Alembic revisions are the schema source of truth; SQL snapshots in `scripts/sql/` are reference only
 
 ## Deployment
-- Docker Compose in `deploy/docker-compose.yml` orchestrates backend-app + router-service + redis + testing-worker + testing-scheduler
-- MySQL is managed separately (not in compose)
-- `testing-scheduler` runs APScheduler in a separate process from `testing-service`
-- `testing-worker` is an arq consumer process for the benchmark queue
+- Split Compose files under `deploy/` run backend, router, and inference nodes separately.
+- `deploy/docker-compose.backend.yml` runs `user-service`, `admin-service`, `user-worker`, MySQL, and Redis.
+- `deploy/docker-compose.router.yml` runs `router-service`.
+- `deploy/docker-compose.inference.yml` runs `inference-service`.

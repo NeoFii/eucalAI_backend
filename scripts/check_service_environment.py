@@ -20,16 +20,15 @@ SERVICE_DATABASE_ENV = {
     "admin-service": "ADMIN_DATABASE_URL",
     "user-service": "USER_DATABASE_URL",
 }
-# backend-app is a single process that hosts admin/user domains,
-# so it needs both database URLs rather than a single one.
-BACKEND_APP_DATABASE_ENVS = (
-    "ADMIN_DATABASE_URL",
-    "USER_DATABASE_URL",
-)
 DB_LESS_SERVICES = {"router-service", "inference-service"}
-DEFAULT_RUNTIME_SERVICES = ("backend-app", "router-service", "inference-service")
-KNOWN_SERVICES = set(SERVICE_DATABASE_ENV) | DB_LESS_SERVICES | {"backend-app"}
-AUTH_COOKIE_SERVICES = {"admin-service", "user-service", "backend-app"}
+DEFAULT_RUNTIME_SERVICES = (
+    "user-service",
+    "admin-service",
+    "router-service",
+    "inference-service",
+)
+KNOWN_SERVICES = set(SERVICE_DATABASE_ENV) | DB_LESS_SERVICES
+AUTH_COOKIE_SERVICES = {"admin-service", "user-service"}
 VALID_COOKIE_SAMESITE = {"lax", "strict", "none"}
 PLACEHOLDER_VALUES = {
     "JWT_SECRET_KEY": {"", "your-secret-key", "your-secret-key-change-in-production", "change-me"},
@@ -107,16 +106,6 @@ def validate_environment(
 
     database_urls: dict[str, tuple[str, str]] = {}
     for service in selected_services:
-        if service == "backend-app":
-            for db_env in BACKEND_APP_DATABASE_ENVS:
-                value = _get_env(env, db_env)
-                if not value:
-                    result.errors.append(
-                        f"Missing required database URL: {db_env} for backend-app"
-                    )
-                    continue
-                database_urls[f"backend-app:{db_env}"] = (db_env, value)
-            continue
         db_env = SERVICE_DATABASE_ENV.get(service)
         if db_env is None:
             continue
@@ -166,11 +155,11 @@ def validate_environment(
                 "PROVIDER_SECRET_MASTER_KEY is empty; router-service will derive provider keys from JWT_SECRET_KEY"
             )
 
-    if set(selected_services) & {"admin-service", "backend-app"}:
+    if "admin-service" in selected_services:
         provider_secret = _get_first_env(env, "PROVIDER_SECRET_MASTER_KEY")
         if not provider_secret:
             result.errors.append(
-                "PROVIDER_SECRET_MASTER_KEY is required for admin-service / backend-app "
+                "PROVIDER_SECRET_MASTER_KEY is required for admin-service "
                 "(must be 64-char hex string for AES-256-GCM)"
             )
         elif len(provider_secret) != 64:

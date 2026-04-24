@@ -49,7 +49,7 @@ class Settings(BaseServiceSettings):
         if user_port == self.PORT:
             _config_logger.warning(
                 "USER_SERVICE_URL (%s) points to the same port as this service (%d). "
-                "Gateway calls will loop back unless running in merged backend-app mode.",
+                "Admin-to-user gateway calls may loop back; check USER_SERVICE_URL.",
                 self.USER_SERVICE_URL,
                 self.PORT,
             )

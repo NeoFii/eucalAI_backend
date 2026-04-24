@@ -42,7 +42,7 @@ def test_validate_environment_rejects_duplicate_database_urls():
 
 def test_validate_environment_warns_about_ignored_generic_database_url():
     result = validate_environment(
-        ["backend-app"],
+        ["admin-service", "user-service"],
         environ={
             "JWT_SECRET_KEY": "x" * 32,
             "INTERNAL_SECRET": "test_internal_secret_32chars_long!",
@@ -156,3 +156,4 @@ def test_check_env_script_validates_unknown_services_manually():
 
     assert "unknown services:" in source
     assert "choices=" not in source
+    assert "backend-app" not in source

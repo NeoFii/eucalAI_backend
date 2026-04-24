@@ -21,8 +21,8 @@ python scripts/runtime_probe.py http-ready --port 8003
 python scripts/runtime_probe.py http-ready --port 8004
 ```
 
-`backend-app /ready` checks the admin and user database engines. Router and inference
-readiness checks validate their own runtime dependencies.
+Data-owning services check their own database engine. Router and inference readiness
+checks validate their own runtime dependencies.
 
 ## Internal Authentication
 

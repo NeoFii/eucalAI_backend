@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class RouterSettings:
-    user_service_url: str = "http://127.0.0.1:8001"
+    user_service_url: str = "http://127.0.0.1:8000"
     internal_secret: str = ""
     inference_service_url: str = "http://127.0.0.1:8004"
     inference_service_secret: str = ""
@@ -27,7 +27,7 @@ class RouterSettings:
     @classmethod
     def from_env(cls) -> "RouterSettings":
         return cls(
-            user_service_url=os.getenv("USER_SERVICE_URL", "http://127.0.0.1:8001"),
+            user_service_url=os.getenv("USER_SERVICE_URL", "http://127.0.0.1:8000"),
             internal_secret=os.getenv("INTERNAL_SECRET", ""),
             inference_service_url=os.getenv(
                 "INFERENCE_SERVICE_URL", "http://127.0.0.1:8004"

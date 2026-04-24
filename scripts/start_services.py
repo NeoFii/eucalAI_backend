@@ -22,14 +22,11 @@ from scripts.runtime_probe import probe_http_ready
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 SERVICES = {
-    "backend-app": {
-        "name": "backend-app",
-        "app": "backend_app.main:app",
-        "port": 8001,
-        "color": "\033[94m",
-        "env": {
-            "PORT": "8001",
-        },
+    "user-service": {
+        "name": "user-service",
+        "app": "user_service.main:app",
+        "port": 8000,
+        "color": "\033[92m",
     },
     "admin-service": {
         "name": "admin-service",
@@ -57,7 +54,8 @@ SERVICES = {
     },
 }
 DEFAULT_SERVICES = [
-    "backend-app",
+    "user-service",
+    "admin-service",
     "inference-service",
     "router-service",
     "user-worker",
@@ -66,7 +64,7 @@ START_ORDER = {
     service_name: index
     for index, service_name in enumerate(
         [
-            "backend-app",
+            "user-service",
             "admin-service",
             "inference-service",
             "router-service",

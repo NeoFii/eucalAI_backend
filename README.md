@@ -11,15 +11,13 @@ signed internal calls between backend services.
 
 | Service | Module | Port | Storage |
 | --- | --- | ---: | --- |
-| backend-app | `backend_app.main:app` | 8001 | admin and user MySQL schemas |
 | admin-service | `admin_service.main:app` | 8001 | admin MySQL schema |
 | user-service | `user_service.main:app` | 8000 | user MySQL schema |
 | router-service | `router_service.main:app` | 8003 | none |
 | inference-service | `inference_service.main:app` | 8004 | none |
 
-`backend-app` is the default control-plane process. It mounts the admin and user APIs,
-initializes both database engines, verifies Alembic revisions, and exposes `/health`
-and `/ready`.
+`admin-service` and `user-service` are separate control-plane services in the real
+deployment topology. Each owns its own MySQL schema and exposes `/health` and `/ready`.
 
 `router-service` and `inference-service` are DB-less runtime services. Router reads
 its model routing configuration from `deploy/router/runtime_config.json`; inference
@@ -42,9 +40,9 @@ project does not create or drop databases automatically.
 | Variable | Required For | Purpose |
 | --- | --- | --- |
 | `JWT_SECRET_KEY` | all API services | JWT signing key, at least 32 characters |
-| `INTERNAL_SECRET` | backend-app, admin, user, router | HMAC signing secret for internal calls |
-| `ADMIN_DATABASE_URL` | backend-app, admin-service | admin schema database URL |
-| `USER_DATABASE_URL` | backend-app, user-service | user schema database URL |
+| `INTERNAL_SECRET` | admin, user, router | HMAC signing secret for internal calls |
+| `ADMIN_DATABASE_URL` | admin-service | admin schema database URL |
+| `USER_DATABASE_URL` | user-service | user schema database URL |
 | `INFERENCE_SERVICE_SECRET` | router-service, inference-service | router to inference shared secret |
 
 There is no generic `DATABASE_URL` fallback. Use service-specific database URLs.
@@ -70,14 +68,16 @@ uv run start
 
 The default startup set is:
 
-- `backend-app`
+- `user-service`
+- `admin-service`
 - `inference-service`
 - `router-service`
+- `user-worker`
 
 You can start a subset explicitly:
 
 ```bash
-uv run start backend-app router-service
+uv run start user-service admin-service router-service
 ```
 
 ## Deployment
@@ -93,7 +93,6 @@ env files, startup order, and `api.eucal.ai` gateway entrypoint.
 
 ## Runtime Contracts
 
-- `backend-app /ready` checks admin and user databases only.
 - Admin internal endpoints accept signed calls from user-service.
 - User internal endpoints accept signed calls from router-service and admin-service.
 - Router calls inference through `X-Inference-Secret`.

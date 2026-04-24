@@ -176,12 +176,12 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
 
     response = client.get(
         "/api/v1/internal/users/u1001",
-            headers=build_internal_headers(
-                secret=_user_internal_secret(),
-                caller_service="backend-app",
-                method="GET",
-                path="/api/v1/internal/users/u1001",
-            ),
+        headers=build_internal_headers(
+            secret=_user_internal_secret(),
+            caller_service="unknown-service",
+            method="GET",
+            path="/api/v1/internal/users/u1001",
+        ),
     )
 
     assert response.status_code == 403
@@ -809,6 +809,10 @@ def test_split_deployment_compose_and_dockerfile_expose_expected_services():
         repo_root / "deploy" / "docker-compose.inference.yml"
     ).read_text(encoding="utf-8")
     dockerfile = (repo_root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+    start_services = (repo_root / "scripts" / "start_services.py").read_text(
+        encoding="utf-8"
+    )
     removed_worker = "testing" + "-worker"
     removed_queue_env = "BENCHMARK" + "_QUEUE_REDIS_URL"
 
@@ -823,24 +827,36 @@ def test_split_deployment_compose_and_dockerfile_expose_expected_services():
     assert "src/router_service" in dockerfile
     assert "scripts" in dockerfile
     assert "EXPOSE 8000 8001 8003 8004" in dockerfile
+    assert "backend_app" not in dockerfile
+    assert "backend_app" not in pyproject
+    assert "backend-app" not in start_services
+    assert "backend_app" not in start_services
+
+
+def test_router_settings_default_user_service_url_points_to_user_port(monkeypatch):
+    """RouterSettings defaults must target user-service, not admin-service."""
+
+    monkeypatch.delenv("USER_SERVICE_URL", raising=False)
+    monkeypatch.delenv("ADMIN_SERVICE_URL", raising=False)
+
+    from router_service.settings import RouterSettings
+
+    defaults = RouterSettings()
+    assert defaults.user_service_url == "http://127.0.0.1:8000"
+    assert defaults.admin_service_url == "http://127.0.0.1:8001"
+
+    from_env = RouterSettings.from_env()
+    assert from_env.user_service_url == "http://127.0.0.1:8000"
+    assert from_env.admin_service_url == "http://127.0.0.1:8001"
 
 
 def test_runtime_entrypoints_require_alembic_head_before_followup_work():
     repo_root = Path(__file__).resolve().parent.parent
-    backend_main = (repo_root / "src" / "backend_app" / "main.py").read_text(encoding="utf-8")
-    backend_lifecycle = (repo_root / "src" / "backend_app" / "lifecycle.py").read_text(
-        encoding="utf-8"
-    )
     admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
     bootstrap_cli = (
         repo_root / "src" / "admin_service" / "bootstrap_superadmin.py"
     ).read_text(encoding="utf-8")
 
-    assert "lifespan=lifecycle_manager.lifespan" in backend_main
-    assert "ensure_database_at_head" in backend_lifecycle
-    assert 'service_name="admin-service"' in backend_lifecycle
-    assert 'service_name="user-service"' in backend_lifecycle
-    assert "AUTO_INIT_DB" not in backend_lifecycle
     assert 'ensure_database_at_head(service_name="admin-service"' in admin_main
     assert 'ensure_database_at_head(service_name="admin-service"' in bootstrap_cli
     assert "skip-init-db" not in bootstrap_cli
