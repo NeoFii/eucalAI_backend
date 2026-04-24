@@ -4,6 +4,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 os.environ.setdefault("JWT_SECRET_KEY", "test_jwt_secret_key_32bytes_long!!")
 os.environ.setdefault("INTERNAL_SECRET", "test_internal_secret_32chars_long!")
@@ -74,6 +75,88 @@ def test_catalog_service_serializes_supported_model_with_vendor_and_categories()
     assert item.capability_tags == ["chat", "coding", "reasoning"]
     assert [category.key for category in item.categories] == ["reasoning", "coding"]
     assert item.offerings == []
+
+
+def test_catalog_service_replace_categories_reuses_existing_links_when_order_changes():
+    from admin_service.models import (
+        ModelCategory,
+        SupportedModel,
+        SupportedModelCategoryMap,
+    )
+    from admin_service.services.model_catalog_service import ModelCatalogService
+
+    reasoning = ModelCategory(id=1, key="reasoning", name="Reasoning", sort_order=1)
+    coding = ModelCategory(id=2, key="coding", name="Coding", sort_order=2)
+    reasoning_link = SupportedModelCategoryMap(
+        id=101,
+        category=reasoning,
+        category_id=reasoning.id,
+        sort_order=1,
+    )
+    coding_link = SupportedModelCategoryMap(
+        id=102,
+        category=coding,
+        category_id=coding.id,
+        sort_order=2,
+    )
+    model = SupportedModel(id=1, slug="deepseek-v3-2", name="DeepSeek-V3.2")
+    model.category_links = [reasoning_link, coding_link]
+
+    ModelCatalogService._replace_categories(model, [coding, reasoning])
+
+    assert model.category_links == [coding_link, reasoning_link]
+    assert [link.id for link in model.category_links] == [102, 101]
+    assert [link.category_id for link in model.category_links] == [coding.id, reasoning.id]
+    assert [link.sort_order for link in model.category_links] == [1, 2]
+
+
+def test_catalog_service_replace_categories_adds_and_removes_without_reinserting_existing_links():
+    from admin_service.models import (
+        ModelCategory,
+        SupportedModel,
+        SupportedModelCategoryMap,
+    )
+    from admin_service.services.model_catalog_service import ModelCatalogService
+
+    reasoning = ModelCategory(id=1, key="reasoning", name="Reasoning", sort_order=1)
+    coding = ModelCategory(id=2, key="coding", name="Coding", sort_order=2)
+    vision = ModelCategory(id=3, key="vision", name="Vision", sort_order=3)
+    reasoning_link = SupportedModelCategoryMap(
+        id=101,
+        category=reasoning,
+        category_id=reasoning.id,
+        sort_order=1,
+    )
+    coding_link = SupportedModelCategoryMap(
+        id=102,
+        category=coding,
+        category_id=coding.id,
+        sort_order=2,
+    )
+    model = SupportedModel(id=1, slug="deepseek-v3-2", name="DeepSeek-V3.2")
+    model.category_links = [reasoning_link, coding_link]
+
+    ModelCatalogService._replace_categories(model, [coding, vision])
+
+    assert model.category_links[0] is coding_link
+    assert [link.category_id for link in model.category_links] == [coding.id, vision.id]
+    assert len({link.category_id for link in model.category_links}) == 2
+    assert [link.sort_order for link in model.category_links] == [1, 2]
+
+
+def test_supported_model_category_keys_reject_duplicates():
+    from admin_service.schemas.model_catalog import SupportedModelCreate, SupportedModelUpdate
+
+    with pytest.raises(ValidationError, match="duplicate category key"):
+        SupportedModelCreate(
+            slug="deepseek-r1",
+            name="DeepSeek-R1",
+            vendor_slug="deepseek",
+            category_keys=["reasoning", "reasoning"],
+        )
+
+    with pytest.raises(ValidationError, match="duplicate category key"):
+        SupportedModelUpdate(category_keys=["reasoning", "coding", "reasoning"])
 
 
 async def _fake_list_vendors(db, *, page, page_size, active_only):

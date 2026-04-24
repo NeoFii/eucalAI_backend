@@ -134,11 +134,15 @@ class SupportedModelCreate(BaseModel):
         import re
 
         _slug_re = re.compile(r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
+        seen: set[str] = set()
         for key in v:
             if len(key) > 80:
                 raise ValueError("each category key must be <= 80 characters")
             if not _slug_re.match(key):
                 raise ValueError(f"invalid category key format: {key!r}")
+            if key in seen:
+                raise ValueError(f"duplicate category key: {key}")
+            seen.add(key)
         return v
 
 
@@ -177,11 +181,15 @@ class SupportedModelUpdate(BaseModel):
             _slug_re = re.compile(r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
             if len(v) > 20:
                 raise ValueError("category_keys must have at most 20 items")
+            seen: set[str] = set()
             for key in v:
                 if len(key) > 80:
                     raise ValueError("each category key must be <= 80 characters")
                 if not _slug_re.match(key):
                     raise ValueError(f"invalid category key format: {key!r}")
+                if key in seen:
+                    raise ValueError(f"duplicate category key: {key}")
+                seen.add(key)
         return v
 
 

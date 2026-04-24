@@ -322,11 +322,25 @@ class ModelCatalogService:
         model: SupportedModel,
         categories: list[ModelCategory],
     ) -> None:
-        model.category_links.clear()
-        model.category_links.extend(
-            SupportedModelCategoryMap(category=category, sort_order=index + 1)
-            for index, category in enumerate(categories)
-        )
+        existing_by_category_id: dict[int, SupportedModelCategoryMap] = {}
+        for link in model.category_links:
+            category_id = link.category_id or (link.category.id if link.category else None)
+            if category_id is not None:
+                existing_by_category_id[category_id] = link
+
+        next_links: list[SupportedModelCategoryMap] = []
+        for index, category in enumerate(categories):
+            category_id = category.id
+            link = existing_by_category_id.get(category_id) if category_id is not None else None
+            if link is None:
+                link = SupportedModelCategoryMap(category=category, category_id=category_id)
+            else:
+                link.category = category
+                link.category_id = category_id
+            link.sort_order = index + 1
+            next_links.append(link)
+
+        model.category_links = next_links
 
     @staticmethod
     async def create_model(
