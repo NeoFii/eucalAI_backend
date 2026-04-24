@@ -8,9 +8,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from common.cache import close_cache_redis, init_cache_redis
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
 from common.observability import configure_logging, install_observability
+from common.redis import check_redis_ready, close_redis, init_redis
 
 from user_service import db
 from user_service.api.v1.router import api_router
@@ -24,8 +26,12 @@ logger = logging.getLogger(settings.SERVICE_NAME)
 async def lifespan(app: FastAPI):
     db.create_engine(settings.DATABASE_URL)
     db.init_session_factory()
+    await init_redis(settings.REDIS_URL)
+    await init_cache_redis(settings.CACHE_REDIS_URL)
     logger.info("user-service started (standalone)")
     yield
+    await close_cache_redis()
+    await close_redis()
     await db.close_db()
     logger.info("user-service stopped")
 
@@ -63,4 +69,5 @@ async def readiness_check():
     return await build_readiness_response(
         service_name=settings.SERVICE_NAME,
         database_check=lambda: check_database_ready(db.get_engine),
+        redis_check=check_redis_ready,
     )

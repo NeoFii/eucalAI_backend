@@ -22,6 +22,7 @@ class Settings(BaseServiceSettings):
     LOG_FILE_PREFIX: str = "user"
 
     ADMIN_SERVICE_URL: str = "http://localhost:8001"
+    CACHE_REDIS_URL: str = "redis://127.0.0.1:6379/2"
 
     EMAIL_CODE_EXPIRE_MINUTES: int = 5
     MIN_TOPUP_AMOUNT: int = 100
