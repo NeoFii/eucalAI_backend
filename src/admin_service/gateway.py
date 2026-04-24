@@ -134,7 +134,7 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
-    async def get_user_detail(self, uid: int) -> dict:
+    async def get_user_detail(self, uid: str) -> dict:
         try:
             return await get_internal_json(
                 path=f"/api/v1/internal/users/{uid}/detail",
@@ -143,7 +143,7 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
-    async def update_user_status(self, uid: int, status: int) -> dict:
+    async def update_user_status(self, uid: str, status: int) -> dict:
         try:
             return await post_internal_json(
                 path=f"/api/v1/internal/users/{uid}/status",
@@ -153,7 +153,7 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
-    async def reset_user_password(self, uid: int, new_password: str) -> dict:
+    async def reset_user_password(self, uid: str, new_password: str) -> dict:
         try:
             return await post_internal_json(
                 path=f"/api/v1/internal/users/{uid}/reset-password",
@@ -164,7 +164,7 @@ class UserManagementGateway(BaseGateway):
             self._handle_error(exc)
 
     async def topup_user(
-        self, uid: int, amount: int, operator_uid: int, remark: str,
+        self, uid: str, amount: int, operator_uid: str, remark: str,
     ) -> dict:
         try:
             return await post_internal_json(
@@ -180,7 +180,7 @@ class UserManagementGateway(BaseGateway):
             self._handle_error(exc)
 
     async def adjust_user_balance(
-        self, uid: int, amount: int, operator_uid: int, remark: str,
+        self, uid: str, amount: int, operator_uid: str, remark: str,
     ) -> dict:
         try:
             return await post_internal_json(
@@ -196,7 +196,7 @@ class UserManagementGateway(BaseGateway):
             self._handle_error(exc)
 
     async def list_user_transactions(
-        self, uid: int, *, page: int = 1, page_size: int = 20,
+        self, uid: str, *, page: int = 1, page_size: int = 20,
     ) -> dict:
         try:
             return await get_internal_json(
@@ -207,7 +207,7 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
-    async def list_user_api_keys(self, uid: int) -> list[dict]:
+    async def list_user_api_keys(self, uid: str) -> list[dict]:
         try:
             return await get_internal_json(
                 path=f"/api/v1/internal/users/{uid}/api-keys",
@@ -216,7 +216,7 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
-    async def disable_user_api_key(self, uid: int, key_id: int) -> dict:
+    async def disable_user_api_key(self, uid: str, key_id: int) -> dict:
         try:
             return await post_internal_json(
                 path=f"/api/v1/internal/users/{uid}/api-keys/{key_id}/disable",
@@ -290,7 +290,7 @@ class UserManagementGateway(BaseGateway):
         count: int,
         starts_at,
         expires_at,
-        operator_uid: int,
+        operator_uid: str,
         remark: str | None,
     ) -> dict:
         try:
@@ -337,7 +337,7 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
-    async def disable_voucher_code(self, code_id: int, *, operator_uid: int) -> dict:
+    async def disable_voucher_code(self, code_id: int, *, operator_uid: str) -> dict:
         try:
             return await request_internal_json(
                 method="DELETE",

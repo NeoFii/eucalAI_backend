@@ -15,7 +15,7 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
 
     __tablename__ = "users"
 
-    uid = Column(BigInteger, unique=True, nullable=False, index=True, comment="Public user UID")
+    uid = Column(String(20), unique=True, nullable=False, index=True, comment="Public user UID (NanoID)")
     email = Column(
         String(255),
         unique=True,

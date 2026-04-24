@@ -49,7 +49,7 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponseData(DateTimeModel):
-    uid: int = Field(..., description="User UID")
+    uid: str = Field(..., description="User UID")
     email: str = Field(..., description="Email")
     created_at: datetime = Field(..., description="Created at")
     access_token: Optional[str] = Field(default=None, description="Access token")
@@ -80,7 +80,7 @@ class LoginRequest(BaseModel):
 
 
 class UserData(DateTimeModel):
-    uid: int = Field(..., description="User UID")
+    uid: str = Field(..., description="User UID")
     email: str = Field(..., description="Email")
     status: int = Field(..., description="Status")
     email_verified_at: Optional[datetime] = Field(default=None, description="Email verified at")
@@ -99,7 +99,7 @@ class LoginResponse(AuthBaseResponse):
 
 
 class UserInfoResponseData(DateTimeModel):
-    uid: int = Field(..., description="User UID")
+    uid: str = Field(..., description="User UID")
     email: str = Field(..., description="Email")
     status: int = Field(..., description="Status")
     email_verified_at: Optional[datetime] = Field(default=None, description="Email verified at")

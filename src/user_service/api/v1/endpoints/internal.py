@@ -44,7 +44,7 @@ verify_router_only = build_internal_auth_dependency(
 
 class InternalUserResponse(BaseModel):
     id: int
-    uid: int
+    uid: str
     email: str
     status: int
 
@@ -69,7 +69,7 @@ class InternalApiKeyValidateResponse(BaseModel):
 
 
 class InternalUserListItem(BaseModel):
-    uid: int
+    uid: str
     email: str
     status: int
     email_verified_at: datetime | None = None
@@ -88,7 +88,7 @@ class InternalUserListResponse(BaseModel):
 
 
 class InternalUserDetailResponse(BaseModel):
-    uid: int
+    uid: str
     email: str
     status: int
     email_verified_at: datetime | None = None
@@ -110,7 +110,7 @@ class InternalUpdateStatusRequest(BaseModel):
 
 
 class InternalUpdateStatusResponse(BaseModel):
-    uid: int
+    uid: str
     before_status: int
     after_status: int
 
@@ -121,13 +121,13 @@ class InternalResetPasswordRequest(BaseModel):
 
 class InternalTopupRequest(BaseModel):
     amount: int = Field(gt=0, le=settings.MAX_TOPUP_AMOUNT)
-    operator_uid: int  # admin snowflake uid, stored as operator_id in DB
+    operator_uid: str  # admin NanoID uid, stored as operator_id in DB
     remark: str = Field(default="", max_length=255)
 
 
 class InternalAdjustBalanceRequest(BaseModel):
     amount: int = Field(ge=-settings.MAX_TOPUP_AMOUNT, le=settings.MAX_TOPUP_AMOUNT)
-    operator_uid: int  # admin snowflake uid, stored as operator_id in DB
+    operator_uid: str  # admin NanoID uid, stored as operator_id in DB
     remark: str = Field(max_length=255)
 
 
@@ -235,12 +235,12 @@ class InternalVoucherGenerateRequest(BaseModel):
     count: int = Field(ge=1, le=1000)
     starts_at: datetime
     expires_at: datetime
-    operator_uid: int | None = None
+    operator_uid: str | None = None
     remark: str | None = Field(default=None, max_length=255)
 
 
 class InternalVoucherDisableRequest(BaseModel):
-    operator_uid: int | None = None
+    operator_uid: str | None = None
 
 
 class InternalVoucherItem(BaseModel):
@@ -253,7 +253,7 @@ class InternalVoucherItem(BaseModel):
     expires_at: datetime
     redeemed_user_id: int | None = None
     redeemed_at: datetime | None = None
-    created_by_admin_uid: int | None = None
+    created_by_admin_uid: str | None = None
     remark: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -278,7 +278,7 @@ class InternalVoucherListResponse(BaseModel):
 
 @router.get("/users/{uid}", response_model=InternalUserResponse, summary="Get user by uid")
 async def get_user_by_uid(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserResponse:
@@ -288,7 +288,7 @@ async def get_user_by_uid(
 
     return InternalUserResponse(
         id=int(user.id),
-        uid=int(user.uid),
+        uid=user.uid,
         email=user.email,
         status=int(user.status),
     )
@@ -406,7 +406,7 @@ async def disable_voucher_code(
 # --- Admin user-management endpoints ---
 
 
-async def _get_user_or_404(db: AsyncSession, uid: int):
+async def _get_user_or_404(db: AsyncSession, uid: str):
     user = await UserRepository(db).get_by_uid(uid)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -439,7 +439,7 @@ async def list_users(
     summary="Get user detail",
 )
 async def get_user_detail(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserDetailResponse:
@@ -453,7 +453,7 @@ async def get_user_detail(
     summary="Update user status",
 )
 async def update_user_status(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     payload: InternalUpdateStatusRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
@@ -465,13 +465,13 @@ async def update_user_status(
         await ApiKeyService.disable_all_for_user(db, int(user.id))
     await db.commit()
     return InternalUpdateStatusResponse(
-        uid=int(user.uid), before_status=before_status, after_status=payload.status,
+        uid=user.uid, before_status=before_status, after_status=payload.status,
     )
 
 
 @router.post("/users/{uid}/reset-password", summary="Reset user password")
 async def reset_user_password(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     payload: InternalResetPasswordRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
@@ -487,12 +487,12 @@ async def reset_user_password(
     user.password_hash = hash_password(payload.new_password)
     await AuthService._revoke_all_user_sessions(db, user.id)
     await db.commit()
-    return {"uid": int(user.uid), "success": True}
+    return {"uid": user.uid, "success": True}
 
 
 @router.post("/users/{uid}/topup", summary="Manual topup")
 async def topup_user(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     payload: InternalTopupRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
@@ -515,7 +515,7 @@ async def topup_user(
 
 @router.post("/users/{uid}/adjust-balance", summary="Adjust user balance")
 async def adjust_user_balance(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     payload: InternalAdjustBalanceRequest = ...,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
@@ -529,7 +529,7 @@ async def adjust_user_balance(
         operator_id=payload.operator_uid,
         remark=payload.remark,
     )
-    return {"uid": int(user.uid), "success": True}
+    return {"uid": user.uid, "success": True}
 
 
 @router.get(
@@ -538,7 +538,7 @@ async def adjust_user_balance(
     summary="List user transactions",
 )
 async def list_user_transactions(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     _: None = Depends(verify_internal_secret),
@@ -560,7 +560,7 @@ async def list_user_transactions(
 
 @router.get("/users/{uid}/api-keys", summary="List user API keys")
 async def list_user_api_keys(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[InternalApiKeyItem]:
@@ -571,14 +571,14 @@ async def list_user_api_keys(
 
 @router.post("/users/{uid}/api-keys/{key_id}/disable", summary="Disable user API key")
 async def disable_user_api_key(
-    uid: int = Path(gt=0),
+    uid: str = Path(min_length=1),
     key_id: int = Path(gt=0),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     user = await _get_user_or_404(db, uid)
     await ApiKeyService.disable(db, key_id=key_id, user_id=int(user.id))
-    return {"uid": int(user.uid), "key_id": key_id, "success": True}
+    return {"uid": user.uid, "key_id": key_id, "success": True}
 
 
 @router.get(

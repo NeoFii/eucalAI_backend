@@ -50,7 +50,7 @@ class TestUserModels:
         from user_service.models import User
 
         user = User(
-            uid=12345,
+            uid="12345",
             email="test@example.com",
             password_hash="hash",
             status=1,
@@ -141,12 +141,12 @@ class TestUserSchemas:
         from user_service.schemas import UserInfoResponseData
 
         data = UserInfoResponseData(
-            uid=12345,
+            uid="12345",
             email="test@example.com",
             status=1,
             created_at=datetime.now(),
         )
-        assert data.uid == 12345
+        assert data.uid == "12345"
         assert data.status == 1
 
     def test_login_response_contains_full_user_info(self):
@@ -155,7 +155,7 @@ class TestUserSchemas:
         now = datetime.now()
         data = LoginResponseData(
             user=UserData(
-                uid=12345,
+                uid="12345",
                 email="test@example.com",
                 status=1,
                 email_verified_at=now,
@@ -166,7 +166,7 @@ class TestUserSchemas:
             expires_in=3600,
         )
 
-        assert data.user.uid == 12345
+        assert data.user.uid == "12345"
         assert data.user.status == 1
         assert data.user.created_at == now
 
@@ -231,7 +231,7 @@ class TestUserServices:
                 return self.value
 
         disabled_user = User(
-            uid=12345,
+            uid="12345",
             email="disabled@example.com",
             password_hash="hash",
             status=0,
@@ -371,7 +371,7 @@ class TestUserServices:
         )
 
         user = User(
-            uid=1,
+            uid="1",
             email="user@example.com",
             password_hash="old-hash",
             status=1,
@@ -430,7 +430,7 @@ class TestUserServices:
 
         user = User(
             id=77,
-            uid=12345,
+            uid="12345",
             email="user@example.com",
             password_hash="stored-hash",
             status=1,
@@ -517,7 +517,7 @@ class TestUserServices:
         code_record = SimpleNamespace(used_at=None, error_count=0)
         user = User(
             id=77,
-            uid=12345,
+            uid="12345",
             email="user@example.com",
             password_hash="stored-hash",
             status=1,
@@ -666,7 +666,7 @@ class TestUserServices:
         code_record = SimpleNamespace(used_at=None, error_count=0)
         disabled_user = User(
             id=77,
-            uid=12345,
+            uid="12345",
             email="disabled@example.com",
             password_hash="stored-hash",
             status=0,
@@ -729,7 +729,7 @@ class TestUserServices:
         code_record = SimpleNamespace(used_at=None, error_count=0)
         user = User(
             id=77,
-            uid=12345,
+            uid="12345",
             email="user@example.com",
             password_hash="stored-hash",
             status=1,
@@ -804,7 +804,7 @@ class TestUserAPI:
         from user_service.models import User
 
         pending_user = User(
-            uid=12345,
+            uid="12345",
             email="pending@example.com",
             password_hash="hash",
             status=2,
@@ -900,7 +900,7 @@ class TestUserAPI:
             email="user@example.com",
         )
         logged_in_user = SimpleNamespace(
-            uid=12345,
+            uid="12345",
             email="user@example.com",
             created_at=datetime.now(),
         )

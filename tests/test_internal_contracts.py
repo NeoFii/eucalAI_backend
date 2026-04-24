@@ -74,30 +74,30 @@ def test_user_internal_endpoint_requires_signed_internal_request():
     from common.internal import build_internal_headers
 
     app = _build_user_internal_app(
-        SimpleNamespace(id=5, uid=1001, email="user@example.com", status=1)
+        SimpleNamespace(id=5, uid="u1001", email="user@example.com", status=1)
     )
     client = TestClient(app)
 
     forbidden = client.get(
-        "/api/v1/internal/users/1001",
+        "/api/v1/internal/users/u1001",
         headers={"X-Untrusted-Header": "wrong-secret"},
     )
     assert forbidden.status_code == 403
     assert forbidden.json()["detail"] == "Invalid internal secret"
 
     ok = client.get(
-        "/api/v1/internal/users/1001",
+        "/api/v1/internal/users/u1001",
         headers=build_internal_headers(
             secret=_user_internal_secret(),
             caller_service="router-service",
             method="GET",
-            path="/api/v1/internal/users/1001",
+            path="/api/v1/internal/users/u1001",
         ),
     )
     assert ok.status_code == 200
     assert ok.json() == {
         "id": 5,
-        "uid": 1001,
+        "uid": "u1001",
         "email": "user@example.com",
         "status": 1,
     }
@@ -107,22 +107,22 @@ def test_user_internal_endpoint_accepts_signed_internal_request():
     from common.internal import build_internal_headers
 
     app = _build_user_internal_app(
-        SimpleNamespace(id=5, uid=1001, email="user@example.com", status=1)
+        SimpleNamespace(id=5, uid="u1001", email="user@example.com", status=1)
     )
     client = TestClient(app)
 
     response = client.get(
-        "/api/v1/internal/users/1001",
+        "/api/v1/internal/users/u1001",
         headers=build_internal_headers(
             secret=_user_internal_secret(),
             caller_service="router-service",
             method="GET",
-            path="/api/v1/internal/users/1001",
+            path="/api/v1/internal/users/u1001",
         ),
     )
 
     assert response.status_code == 200
-    assert response.json()["uid"] == 1001
+    assert response.json()["uid"] == "u1001"
 
 
 @pytest.mark.asyncio
@@ -170,17 +170,17 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
     from common.internal import build_internal_headers
 
     app = _build_user_internal_app(
-        SimpleNamespace(id=5, uid=1001, email="user@example.com", status=1)
+        SimpleNamespace(id=5, uid="u1001", email="user@example.com", status=1)
     )
     client = TestClient(app)
 
     response = client.get(
-        "/api/v1/internal/users/1001",
+        "/api/v1/internal/users/u1001",
             headers=build_internal_headers(
                 secret=_user_internal_secret(),
                 caller_service="backend-app",
                 method="GET",
-                path="/api/v1/internal/users/1001",
+                path="/api/v1/internal/users/u1001",
             ),
     )
 
@@ -298,7 +298,7 @@ def test_admin_internal_endpoint_requires_signed_internal_request():
     app = _build_admin_internal_app(
         SimpleNamespace(
             id=7,
-            uid=9001,
+            uid="a9001",
             email="admin@example.com",
             name="Admin",
             role="super_admin",
@@ -308,25 +308,25 @@ def test_admin_internal_endpoint_requires_signed_internal_request():
     client = TestClient(app)
 
     forbidden = client.get(
-        "/api/v1/internal/admins/9001",
+        "/api/v1/internal/admins/a9001",
         headers={"X-Untrusted-Header": "wrong-secret"},
     )
     assert forbidden.status_code == 403
     assert forbidden.json()["detail"] == "Invalid internal secret"
 
     ok = client.get(
-        "/api/v1/internal/admins/9001",
+        "/api/v1/internal/admins/a9001",
         headers=build_internal_headers(
             secret=_admin_internal_secret(),
             caller_service="user-service",
             method="GET",
-            path="/api/v1/internal/admins/9001",
+            path="/api/v1/internal/admins/a9001",
         ),
     )
     assert ok.status_code == 200
     assert ok.json() == {
         "id": 7,
-        "uid": 9001,
+        "uid": "a9001",
         "email": "admin@example.com",
         "name": "Admin",
         "role": "super_admin",
@@ -340,7 +340,7 @@ def test_signed_internal_request_rejects_expired_timestamp():
     app = _build_admin_internal_app(
         SimpleNamespace(
             id=7,
-            uid=9001,
+            uid="a9001",
             email="admin@example.com",
             name="Admin",
             role="super_admin",
@@ -351,7 +351,7 @@ def test_signed_internal_request_rejects_expired_timestamp():
     timestamp = "1"
 
     response = client.get(
-        "/api/v1/internal/admins/9001",
+        "/api/v1/internal/admins/a9001",
         headers={
             "X-Internal-Service": "user-service",
             "X-Internal-Timestamp": timestamp,
@@ -359,7 +359,7 @@ def test_signed_internal_request_rejects_expired_timestamp():
                 secret=_admin_internal_secret(),
                 caller_service="user-service",
                 method="GET",
-                request_target="/api/v1/internal/admins/9001",
+                request_target="/api/v1/internal/admins/a9001",
                 timestamp=timestamp,
                 canonical_body="",
             ),
@@ -376,7 +376,7 @@ def test_internal_request_signature_covers_query_string():
     app = _build_admin_internal_app(
         SimpleNamespace(
             id=7,
-            uid=9001,
+            uid="a9001",
             email="admin@example.com",
             name="Admin",
             role="super_admin",
@@ -386,24 +386,24 @@ def test_internal_request_signature_covers_query_string():
     client = TestClient(app)
 
     valid = client.get(
-        "/api/v1/internal/admins/9001?verbose=true",
+        "/api/v1/internal/admins/a9001?verbose=true",
         headers=build_internal_headers(
             secret=_admin_internal_secret(),
             caller_service="user-service",
             method="GET",
-            path="/api/v1/internal/admins/9001",
+            path="/api/v1/internal/admins/a9001",
             query_params={"verbose": "true"},
         ),
     )
     assert valid.status_code == 200
 
     tampered = client.get(
-        "/api/v1/internal/admins/9001?verbose=false",
+        "/api/v1/internal/admins/a9001?verbose=false",
         headers=build_internal_headers(
             secret=_admin_internal_secret(),
             caller_service="user-service",
             method="GET",
-            path="/api/v1/internal/admins/9001",
+            path="/api/v1/internal/admins/a9001",
             query_params={"verbose": "true"},
         ),
     )

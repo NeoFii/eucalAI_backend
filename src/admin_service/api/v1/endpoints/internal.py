@@ -29,7 +29,7 @@ verify_internal_secret = build_internal_auth_dependency(
 
 class InternalAdminResponse(BaseModel):
     id: int
-    uid: int
+    uid: str
     email: str
     name: str
     role: str
@@ -38,7 +38,7 @@ class InternalAdminResponse(BaseModel):
 
 @router.get("/admins/{uid}", response_model=InternalAdminResponse, summary="Get admin by uid")
 async def get_admin_by_uid(
-    uid: int,
+    uid: str,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalAdminResponse:
@@ -48,7 +48,7 @@ async def get_admin_by_uid(
 
     return InternalAdminResponse(
         id=int(admin.id),
-        uid=int(admin.uid),
+        uid=admin.uid,
         email=admin.email,
         name=admin.name,
         role=admin.role,

@@ -10,7 +10,7 @@ from admin_service.models import AdminUser
 from admin_service.repositories.admin_user_repository import AdminUserRepository
 from admin_service.services.audit_service import AdminAuditService
 from admin_service.utils.password import check_password_strength
-from common.utils import generate_snowflake_id, hash_password
+from common.utils import generate_nanoid_uid, hash_password
 from common.utils.timezone import now
 
 logger = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ class AdminBootstrapService:
             return existing, False
 
         admin = AdminUser(
-            uid=generate_snowflake_id(),
+            uid=generate_nanoid_uid(),
             email=settings.BOOTSTRAP_SUPERADMIN_EMAIL,
             password_hash=hash_password(settings.BOOTSTRAP_SUPERADMIN_PASSWORD),
             name=settings.BOOTSTRAP_SUPERADMIN_NAME,

@@ -50,7 +50,7 @@ class VoucherService:
         count: int,
         starts_at: datetime,
         expires_at: datetime,
-        created_by_admin_uid: int | None,
+        created_by_admin_uid: str | None,
         remark: str | None = None,
     ) -> list[GeneratedVoucherCode]:
         if amount <= 0:

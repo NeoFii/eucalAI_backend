@@ -38,7 +38,7 @@ class VoucherCodeItem(DateTimeModel):
     expires_at: datetime
     redeemed_user_id: int | None = None
     redeemed_at: datetime | None = None
-    created_by_admin_uid: int | None = None
+    created_by_admin_uid: str | None = None
     remark: str | None = None
     created_at: datetime
     updated_at: datetime

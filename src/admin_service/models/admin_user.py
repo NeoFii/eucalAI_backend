@@ -14,7 +14,7 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
 
     __tablename__ = "admin_users"
 
-    uid = Column(BigInteger, unique=True, nullable=False, index=True, comment="Public admin UID")
+    uid = Column(String(20), unique=True, nullable=False, index=True, comment="Public admin UID (NanoID)")
     email = Column(String(255), unique=True, nullable=False, index=True, comment="Login email")
     password_hash = Column(String(255), nullable=False, comment="Password hash")
     name = Column(String(100), nullable=False, comment="Admin display name")

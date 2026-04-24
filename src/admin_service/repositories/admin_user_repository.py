@@ -17,7 +17,7 @@ class AdminUserRepository(BaseRepository[AdminUser]):
     async def get_by_email(self, email: str) -> AdminUser | None:
         return await self.find_one(AdminUser.email == email)
 
-    async def get_by_uid(self, uid: int) -> AdminUser | None:
+    async def get_by_uid(self, uid: str) -> AdminUser | None:
         return await self.find_one(AdminUser.uid == uid)
 
     async def get_active_super_admin_by_email(self, email: str) -> AdminUser | None:
@@ -27,7 +27,7 @@ class AdminUserRepository(BaseRepository[AdminUser]):
             AdminUser.status == 1,
         )
 
-    async def get_id_by_uid(self, uid: int) -> int | None:
+    async def get_id_by_uid(self, uid: str) -> int | None:
         result = await self.session.execute(select(AdminUser.id).where(AdminUser.uid == uid))
         return result.scalar_one_or_none()
 

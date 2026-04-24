@@ -22,7 +22,7 @@ from admin_service.services.management_service import AdminManagementService
 router = APIRouter(prefix="/admin-users", tags=["admin-users"])
 
 
-@router.get("/", response_model=AdminListResponse, summary="List admin users")
+@router.get("", response_model=AdminListResponse, summary="List admin users")
 async def list_admin_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -54,7 +54,7 @@ async def list_admin_users(
     )
 
 
-@router.post("/", response_model=CreateAdminResponse, summary="Create admin user")
+@router.post("", response_model=CreateAdminResponse, summary="Create admin user")
 async def create_admin_user(
     payload: CreateAdminRequest,
     request: Request,
@@ -88,7 +88,7 @@ async def create_admin_user(
 
 @router.patch("/{uid}/status", response_model=AdminBaseResponse, summary="Update admin status")
 async def update_admin_user_status(
-    uid: int,
+    uid: str,
     payload: UpdateAdminStatusRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
@@ -110,7 +110,7 @@ async def update_admin_user_status(
     "/{uid}/reset-password", response_model=AdminBaseResponse, summary="Reset admin password"
 )
 async def reset_admin_user_password(
-    uid: int,
+    uid: str,
     payload: ResetAdminPasswordRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),

@@ -11,7 +11,7 @@ async def test_require_super_admin_allows_super_admin():
     from admin_service.models import AdminUser
 
     admin = AdminUser(
-        uid=1,
+        uid="1",
         email="super@example.com",
         password_hash="hash",
         name="Super",
@@ -31,7 +31,7 @@ async def test_require_super_admin_rejects_normal_admin():
     from admin_service.models import AdminUser
 
     admin = AdminUser(
-        uid=2,
+        uid="2",
         email="admin@example.com",
         password_hash="hash",
         name="Admin",
@@ -79,7 +79,7 @@ async def test_bootstrap_service_creates_when_missing(monkeypatch):
     calls = []
     fake_admin = SimpleNamespace(
         id=1,
-        uid=1001,
+        uid="1001",
         email="founder@example.com",
         name="Founder",
         role="super_admin",
@@ -127,7 +127,7 @@ async def test_bootstrap_service_creates_when_missing(monkeypatch):
     created = await AdminBootstrapService.ensure_super_admin()
 
     assert created is True
-    assert calls == ["acquire", "upsert", ("record", 1001, True), "release"]
+    assert calls == ["acquire", "upsert", ("record", "1001", True), "release"]
 
 
 @pytest.mark.asyncio
@@ -172,7 +172,7 @@ def test_admin_snapshot_excludes_password_hash():
     from admin_service.services.management_service import AdminManagementService
 
     admin = AdminUser(
-        uid=123,
+        uid="123",
         email="admin@example.com",
         password_hash="secret-hash",
         name="Admin",
@@ -196,7 +196,7 @@ async def test_generate_voucher_codes_endpoint_delegates_and_records_audit(monke
 
     current_admin = AdminUser(
         id=1,
-        uid=99,
+        uid="99",
         email="super@example.com",
         password_hash="hash",
         name="Super",
@@ -222,7 +222,7 @@ async def test_generate_voucher_codes_endpoint_delegates_and_records_audit(monke
                     "expires_at": expires_at,
                     "redeemed_user_id": None,
                     "redeemed_at": None,
-                    "created_by_admin_uid": 99,
+                    "created_by_admin_uid": "99",
                     "remark": "launch credit",
                     "created_at": starts_at,
                     "updated_at": starts_at,
@@ -270,7 +270,7 @@ async def test_generate_voucher_codes_endpoint_delegates_and_records_audit(monke
         "count": 1,
         "starts_at": starts_at,
         "expires_at": expires_at,
-        "operator_uid": 99,
+        "operator_uid": "99",
         "remark": "launch credit",
     }
     assert captured["audit"]["action"] == "generate_voucher_codes"
@@ -300,7 +300,7 @@ async def test_list_voucher_codes_response_does_not_expose_full_code(monkeypatch
                     "expires_at": expires_at,
                     "redeemed_user_id": None,
                     "redeemed_at": None,
-                    "created_by_admin_uid": 99,
+                    "created_by_admin_uid": "99",
                     "remark": "launch credit",
                     "created_at": starts_at,
                     "updated_at": starts_at,
@@ -321,7 +321,7 @@ async def test_list_voucher_codes_response_does_not_expose_full_code(monkeypatch
         status=None,
         _current_admin=AdminUser(
             id=1,
-            uid=99,
+            uid="99",
             email="admin@example.com",
             password_hash="hash",
             name="Admin",
@@ -344,7 +344,7 @@ async def test_create_admin_user_endpoint_returns_created_admin(monkeypatch):
 
     now = datetime.now()
     current_admin = AdminUser(
-        uid=1,
+        uid="1",
         email="super@example.com",
         password_hash="hash",
         name="Super",
@@ -352,7 +352,7 @@ async def test_create_admin_user_endpoint_returns_created_admin(monkeypatch):
         status=1,
     )
     created_admin = SimpleNamespace(
-        uid=1002,
+        uid="1002",
         email="admin@example.com",
         name="Admin",
         role="admin",
@@ -394,7 +394,7 @@ async def test_list_admin_users_endpoint_returns_paginated_items(monkeypatch):
 
     now = datetime.now()
     current_admin = AdminUser(
-        uid=1,
+        uid="1",
         email="super@example.com",
         password_hash="hash",
         name="Super",
@@ -402,7 +402,7 @@ async def test_list_admin_users_endpoint_returns_paginated_items(monkeypatch):
         status=1,
     )
     listed_admin = SimpleNamespace(
-        uid=1002,
+        uid="1002",
         email="admin@example.com",
         name="Admin",
         role="admin",
@@ -439,7 +439,7 @@ async def test_list_admin_audit_logs_endpoint_returns_paginated_items(monkeypatc
     captured = {}
     now = datetime.now()
     current_admin = AdminUser(
-        uid=1,
+        uid="1",
         email="super@example.com",
         password_hash="hash",
         name="Super",
@@ -447,13 +447,13 @@ async def test_list_admin_audit_logs_endpoint_returns_paginated_items(monkeypatc
         status=1,
     )
     actor_admin = SimpleNamespace(
-        uid=1,
+        uid="1",
         email="super@example.com",
         name="Super",
         role="super_admin",
     )
     target_admin = SimpleNamespace(
-        uid=1002,
+        uid="1002",
         email="admin@example.com",
         name="Admin",
         role="admin",
@@ -470,7 +470,7 @@ async def test_list_admin_audit_logs_endpoint_returns_paginated_items(monkeypatc
         ip_address="127.0.0.1",
         user_agent="pytest",
         before_data=None,
-        after_data={"uid": 1002},
+        after_data={"uid": "1002"},
         created_at=now,
     )
 
@@ -739,7 +739,7 @@ async def test_auth_login_success_records_success_audit(monkeypatch):
     from admin_service.services.auth_service import AdminAuthService
 
     admin = AdminUser(
-        uid=101,
+        uid="101",
         email="admin@example.com",
         password_hash="hash",
         name="Admin",
@@ -778,7 +778,7 @@ async def test_auth_login_failure_can_lock_account_and_emit_audit(monkeypatch):
     from common.core.exceptions import InvalidCredentialsException
 
     admin = AdminUser(
-        uid=102,
+        uid="102",
         email="admin@example.com",
         password_hash="hash",
         name="Admin",
@@ -817,7 +817,7 @@ async def test_auth_login_after_lock_expired_records_unlock_audit(monkeypatch):
     from admin_service.services.auth_service import AdminAuthService
 
     admin = AdminUser(
-        uid=103,
+        uid="103",
         email="admin@example.com",
         password_hash="hash",
         name="Admin",

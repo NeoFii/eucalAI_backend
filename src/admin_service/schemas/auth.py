@@ -21,7 +21,7 @@ class AdminLoginRequest(BaseModel):
 class AdminUserData(BaseModel):
     """Admin data nested in login responses."""
 
-    uid: int = Field(..., description="管理员唯一ID")
+    uid: str = Field(..., description="管理员唯一ID")
     email: str = Field(..., description="邮箱")
     name: str = Field(..., description="姓名")
     role: str = Field(..., description="角色")
@@ -44,7 +44,7 @@ class AdminLoginResponse(AdminBaseResponse):
 class AdminInfoResponseData(DateTimeModel):
     """Current admin profile response payload."""
 
-    uid: int = Field(..., description="管理员唯一ID")
+    uid: str = Field(..., description="管理员唯一ID")
     email: str = Field(..., description="邮箱")
     name: str = Field(..., description="姓名")
     role: str = Field(..., description="角色")

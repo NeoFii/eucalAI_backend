@@ -282,7 +282,7 @@ class BalanceService:
         )
 
     @staticmethod
-    async def get_user_by_uid(db: AsyncSession, uid: int) -> User:
+    async def get_user_by_uid(db: AsyncSession, uid: str) -> User:
         user = await UserRepository(db).get_by_uid(uid)
         if user is None:
             raise UserNotFoundException()

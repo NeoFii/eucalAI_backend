@@ -13,6 +13,9 @@ from common.utils.snowflake import (
     get_snowflake_generator,
 )
 
+# NanoID UID 生成
+from common.utils.nanoid_uid import generate_nanoid_uid
+
 # 密码工具
 from common.utils.password import (
     hash_password,
@@ -44,6 +47,8 @@ __all__ = [
     "SnowflakeIDGenerator",
     "generate_snowflake_id",
     "get_snowflake_generator",
+    # NanoID UID
+    "generate_nanoid_uid",
     # 密码
     "hash_password",
     "verify_password",

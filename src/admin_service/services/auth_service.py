@@ -119,7 +119,7 @@ class AdminAuthService:
         admin.last_login_ip = ip_address
 
         access_token = create_access_token(
-            data={"uid": admin.uid, "sub": str(admin.uid)},
+            data={"uid": admin.uid, "sub": admin.uid},
             secret_key=settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
             expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -191,13 +191,13 @@ class AdminAuthService:
             raise AuthenticationException(detail="Account is disabled or does not exist")
 
         new_access_token = create_access_token(
-            data={"uid": uid, "sub": str(uid)},
+            data={"uid": uid, "sub": uid},
             secret_key=settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
             expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
         )
         new_refresh_token = create_refresh_token(
-            data={"uid": uid, "sub": str(uid)},
+            data={"uid": uid, "sub": uid},
             secret_key=settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
             expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
@@ -210,7 +210,7 @@ class AdminAuthService:
         return new_access_token, new_refresh_token
 
     @staticmethod
-    async def get_current_admin(db: AsyncSession, uid: int) -> Optional[AdminUser]:
+    async def get_current_admin(db: AsyncSession, uid: str) -> Optional[AdminUser]:
         """Return the admin identified by public UID."""
         return await AdminUserRepository(db).get_by_uid(uid)
 

@@ -12,7 +12,7 @@ from admin_service.repositories import AdminUserRepository
 from admin_service.services.audit_service import AdminAuditService
 from admin_service.utils.password import check_password_strength
 from common.core.exceptions import NotFoundException, ValidationException
-from common.utils import generate_snowflake_id, hash_password
+from common.utils import generate_nanoid_uid, hash_password
 from common.utils.timezone import now
 
 
@@ -29,7 +29,7 @@ class AdminManagementService:
         return await AdminUserRepository(db).list_admins(page=page, page_size=page_size)
 
     @staticmethod
-    async def get_by_uid(db: AsyncSession, uid: int) -> AdminUser | None:
+    async def get_by_uid(db: AsyncSession, uid: str) -> AdminUser | None:
         return await AdminUserRepository(db).get_by_uid(uid)
 
     @staticmethod
@@ -52,7 +52,7 @@ class AdminManagementService:
             raise ValidationException(message)
 
         admin = AdminUser(
-            uid=generate_snowflake_id(),
+            uid=generate_nanoid_uid(),
             email=email,
             password_hash=hash_password(password),
             name=name,
@@ -87,7 +87,7 @@ class AdminManagementService:
         db: AsyncSession,
         *,
         actor_admin: AdminUser,
-        target_uid: int,
+        target_uid: str,
         status: int,
         ip_address: str | None = None,
         user_agent: str | None = None,
@@ -121,7 +121,7 @@ class AdminManagementService:
         db: AsyncSession,
         *,
         actor_admin: AdminUser,
-        target_uid: int,
+        target_uid: str,
         new_password: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
@@ -161,7 +161,7 @@ class AdminManagementService:
     async def _get_mutable_target(
         db: AsyncSession,
         actor_admin: AdminUser,
-        target_uid: int,
+        target_uid: str,
     ) -> AdminUser:
         target_admin = await AdminManagementService.get_by_uid(db, target_uid)
         if target_admin is None:

@@ -15,7 +15,7 @@ class UserRepository(BaseRepository[User]):
     async def get_by_email(self, email: str) -> User | None:
         return (await self.session.execute(select(User).where(User.email == email))).scalar_one_or_none()
 
-    async def get_by_uid(self, uid: int) -> User | None:
+    async def get_by_uid(self, uid: str) -> User | None:
         return (await self.session.execute(select(User).where(User.uid == uid))).scalar_one_or_none()
 
     async def count_all(self) -> int:

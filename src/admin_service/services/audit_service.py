@@ -101,8 +101,8 @@ class AdminAuditService:
         page_size: int = 20,
         category: AdminAuditCategory = "all",
         action: str | None = None,
-        actor_uid: int | None = None,
-        target_uid: int | None = None,
+        actor_uid: str | None = None,
+        target_uid: str | None = None,
     ) -> tuple[list[AdminAuditLog], int]:
         actor_admin_id = None
         if actor_uid is not None:

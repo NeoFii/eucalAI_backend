@@ -63,7 +63,7 @@ async def _safe_audit_commit(
         await db.rollback()
 
 
-@router.get("/", response_model=UserListResponse, summary="List users")
+@router.get("", response_model=UserListResponse, summary="List users")
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -86,7 +86,7 @@ async def list_users(
 
 @router.get("/{uid}", response_model=UserDetailResponse, summary="User detail")
 async def get_user_detail(
-    uid: int,
+    uid: str,
     _current_admin: AdminUser = Depends(require_active_admin),
 ) -> UserDetailResponse:
     data = await _gateway.get_user_detail(uid)
@@ -99,7 +99,7 @@ async def get_user_detail(
     summary="Enable/disable user",
 )
 async def update_user_status(
-    uid: int,
+    uid: str,
     payload: UpdateUserStatusRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
@@ -130,7 +130,7 @@ async def update_user_status(
     summary="Reset user password",
 )
 async def reset_user_password(
-    uid: int,
+    uid: str,
     payload: ResetUserPasswordRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
@@ -158,7 +158,7 @@ async def reset_user_password(
     summary="Manual topup",
 )
 async def topup_user(
-    uid: int,
+    uid: str,
     payload: TopupUserRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
@@ -192,7 +192,7 @@ async def topup_user(
     summary="Adjust user balance",
 )
 async def adjust_user_balance(
-    uid: int,
+    uid: str,
     payload: AdjustUserBalanceRequest,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
@@ -226,7 +226,7 @@ async def adjust_user_balance(
     summary="List user transactions",
 )
 async def list_user_transactions(
-    uid: int,
+    uid: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     _current_admin: AdminUser = Depends(require_active_admin),
@@ -244,7 +244,7 @@ async def list_user_transactions(
 
 @router.get("/{uid}/api-keys", response_model=UserApiKeyListResponse, summary="List user API keys")
 async def list_user_api_keys(
-    uid: int,
+    uid: str,
     _current_admin: AdminUser = Depends(require_active_admin),
 ) -> UserApiKeyListResponse:
     items = await _gateway.list_user_api_keys(uid)
@@ -257,7 +257,7 @@ async def list_user_api_keys(
     summary="Disable user API key",
 )
 async def disable_user_api_key(
-    uid: int,
+    uid: str,
     key_id: int,
     request: Request,
     current_admin: AdminUser = Depends(require_super_admin),

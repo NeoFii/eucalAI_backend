@@ -25,6 +25,7 @@ from common.core.exceptions import (
 from common.utils import (
     create_access_token,
     create_refresh_token,
+    generate_nanoid_uid,
     generate_snowflake_id,
     hash_password,
     verify_password,
@@ -73,7 +74,7 @@ class AuthService:
         )
 
         # 生成雪花 ID 作为 uid
-        uid = generate_snowflake_id()
+        uid = generate_nanoid_uid()
 
         password_hash = hash_password(data.password)
 
@@ -200,14 +201,14 @@ class AuthService:
             raise UserNotFoundException(detail="用户不存在或已被禁用")
 
         new_access_token = create_access_token(
-            data={"uid": user.uid, "sub": str(user.uid)},
+            data={"uid": user.uid, "sub": user.uid},
             secret_key=settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
             expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
         )
 
         new_refresh_token = create_refresh_token(
-            data={"uid": user.uid, "sub": str(user.uid)},
+            data={"uid": user.uid, "sub": user.uid},
             secret_key=settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
             expire_days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS,
@@ -223,7 +224,7 @@ class AuthService:
         return new_access_token, new_refresh_token
 
     @staticmethod
-    async def get_current_user(db: AsyncSession, uid: int) -> Optional[User]:
+    async def get_current_user(db: AsyncSession, uid: str) -> Optional[User]:
         """通过 uid 获取当前用户"""
         return await UserRepository(db).get_by_uid(uid)
 
@@ -271,7 +272,7 @@ class AuthService:
         ip_address: Optional[str] = None,
     ) -> tuple[str, str]:
         access_token = create_access_token(
-            data={"uid": user.uid, "sub": str(user.uid)},
+            data={"uid": user.uid, "sub": user.uid},
             secret_key=settings.JWT_SECRET_KEY,
             algorithm=settings.JWT_ALGORITHM,
             expire_minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES,

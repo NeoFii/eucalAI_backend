@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
-BIG_UID = 9223372036854775807
+BIG_UID = "9223372036854775807"
 
 
 def _build_user_management_test_client(monkeypatch, gateway: object) -> TestClient:
@@ -68,7 +68,7 @@ def test_user_management_public_routes_serialize_uid_as_string(monkeypatch):
                 "page_size": 20,
             }
 
-        async def get_user_detail(self, uid: int) -> dict:
+        async def get_user_detail(self, uid: str) -> dict:
             assert uid == BIG_UID
             return {
                 "uid": BIG_UID,
@@ -118,7 +118,7 @@ def test_user_management_detail_returns_404_for_missing_user(monkeypatch):
     from common.core.exceptions import NotFoundException
 
     class FakeGateway:
-        async def get_user_detail(self, uid: int) -> dict:
+        async def get_user_detail(self, uid: str) -> dict:
             assert uid == BIG_UID
             raise NotFoundException("User not found")
 

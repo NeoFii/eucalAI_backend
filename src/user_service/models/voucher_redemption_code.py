@@ -37,5 +37,5 @@ class VoucherRedemptionCode(Base, SnowflakeIdMixin, TimestampMixin):
         comment="Redeeming users.id",
     )
     redeemed_at = Column(DateTime, nullable=True, comment="Redeemed at")
-    created_by_admin_uid = Column(BigInteger, nullable=True, index=True, comment="Creator admin uid")
+    created_by_admin_uid = Column(String(20), nullable=True, index=True, comment="Creator admin uid (NanoID)")
     remark = Column(String(255), nullable=True, comment="Admin note")
