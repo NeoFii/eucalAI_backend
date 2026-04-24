@@ -73,7 +73,7 @@ def test_catalog_service_serializes_supported_model_with_vendor_and_categories()
     assert item.price_output_per_m_fen == 240
     assert item.capability_tags == ["chat", "coding", "reasoning"]
     assert [category.key for category in item.categories] == ["reasoning", "coding"]
-    assert item.offerings == []
+    assert "offerings" not in item.model_dump()
 
 
 async def _fake_list_vendors(db, *, page, page_size, active_only):
@@ -170,7 +170,6 @@ async def _fake_create_model(db, payload, **kwargs):
         sort_order=payload.sort_order,
         vendor=ModelVendorBrief(id=1, slug="deepseek", name="DeepSeek"),
         categories=[ModelCategoryBrief(key="reasoning", name="Reasoning", sort_order=1)],
-        offerings=[],
     )
 
 
@@ -199,7 +198,6 @@ async def _fake_update_model(db, slug, payload, **kwargs):
         sort_order=payload.sort_order or 30,
         vendor=ModelVendorBrief(id=1, slug="deepseek", name="DeepSeek"),
         categories=[ModelCategoryBrief(key="reasoning", name="Reasoning", sort_order=1)],
-        offerings=[],
     )
 
 
@@ -229,7 +227,6 @@ async def _fake_get_model(db, slug, *, active_only):
         sort_order=20,
         vendor=ModelVendorBrief(id=1, slug="deepseek", name="DeepSeek"),
         categories=[ModelCategoryBrief(key="reasoning", name="Reasoning", sort_order=1)],
-        offerings=[],
     )
 
 
@@ -275,7 +272,7 @@ async def test_public_catalog_endpoints_delegate_filters_and_wrap_responses(monk
     assert models.data.items[0].name == "DeepSeek-V3.2"
     assert models.data.items[0].summary == "General-purpose flagship for coding workflows"
     assert models.data.items[0].price_input_per_m_fen == 120
-    assert detail.data.offerings == []
+    assert "offerings" not in detail.data.model_dump()
     assert detail.data.description == "Full detail body for detail page"
     assert detail.data.price_output_per_m_fen == 240
 

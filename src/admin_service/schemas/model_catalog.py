@@ -44,16 +44,6 @@ class ModelCategoryBrief(BaseModel):
     sort_order: int
 
 
-class ModelOfferingItem(BaseModel):
-    id: int
-    provider: dict
-    price_input_per_m: float | None = None
-    price_output_per_m: float | None = None
-    price_updated_at: datetime | None = None
-    is_active: bool = True
-    metrics: dict | None = None
-
-
 class SupportedModelItem(DateTimeModel):
     id: int
     slug: str
@@ -73,7 +63,6 @@ class SupportedModelItem(DateTimeModel):
 
 class SupportedModelDetail(SupportedModelItem):
     is_active: bool
-    offerings: list[ModelOfferingItem] = Field(default_factory=list)
 
 
 class ModelVendorCreate(BaseModel):

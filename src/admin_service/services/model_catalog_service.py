@@ -96,7 +96,7 @@ class ModelCatalogService:
             "categories": categories,
         }
         if detail:
-            return SupportedModelDetail(**payload, is_active=model.is_active, offerings=[])
+            return SupportedModelDetail(**payload, is_active=model.is_active)
         return SupportedModelItem(**payload)
 
     @staticmethod
