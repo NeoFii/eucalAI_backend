@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Generic, Sequence, TypeVar
 
 from common.core.exceptions import ValidationException
+from common.utils.timezone import now, to_shanghai_naive
 
 T = TypeVar("T")
 
@@ -34,8 +35,10 @@ class ListParams:
         if self.time_field is None:
             return None, None
 
-        effective_end = self.end or default_end or datetime.now(timezone.utc)
-        effective_start = self.start or (effective_end - timedelta(days=default_days))
+        effective_end = to_shanghai_naive(self.end or default_end or now())
+        effective_start = to_shanghai_naive(
+            self.start or (effective_end - timedelta(days=default_days))
+        )
         if effective_start >= effective_end:
             raise ValidationException(detail="开始时间必须早于结束时间")
         if effective_end - effective_start > timedelta(days=self.max_span_days):

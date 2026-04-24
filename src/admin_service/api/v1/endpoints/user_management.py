@@ -38,6 +38,7 @@ from admin_service.schemas.user_management import (
 )
 from admin_service.services.audit_service import AdminAuditService
 from common.api import PaginatedResponse
+from common.utils.timezone import format_iso
 
 logger = logging.getLogger(__name__)
 
@@ -297,8 +298,8 @@ async def list_usage_logs(
         user_id=user_id,
         model_name=model_name,
         request_id=request_id,
-        start=start.isoformat() if start else None,
-        end=end.isoformat() if end else None,
+        start=format_iso(start),
+        end=format_iso(end),
     )
     return UserUsageLogListResponse(
         data=PaginatedResponse[UserUsageLogItem](
@@ -321,7 +322,7 @@ async def list_usage_stats(
     items = await _gateway.list_usage_stats(
         user_id=user_id,
         model_name=model_name,
-        start=start.isoformat() if start else None,
-        end=end.isoformat() if end else None,
+        start=format_iso(start),
+        end=format_iso(end),
     )
     return UserUsageStatListResponse(data=[UserUsageStatItem(**item) for item in items])

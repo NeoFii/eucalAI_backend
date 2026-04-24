@@ -4,7 +4,7 @@
 """
 
 # 时区工具
-from common.utils.timezone import now, now_with_tz, utc_to_shanghai, format_iso
+from common.utils.timezone import format_iso, now, now_with_tz, to_shanghai_naive, utc_to_shanghai
 
 # 雪花 ID 生成
 from common.utils.snowflake import (
@@ -41,6 +41,7 @@ __all__ = [
     # 时区
     "now",
     "now_with_tz",
+    "to_shanghai_naive",
     "utc_to_shanghai",
     "format_iso",
     # 雪花 ID

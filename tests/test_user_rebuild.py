@@ -96,8 +96,10 @@ async def test_voucher_service_generates_hash_only_redemption_codes(monkeypatch)
     from user_service.models import VoucherRedemptionCode
     from user_service.services.voucher_service import VoucherService
 
-    starts_at = datetime(2026, 5, 1, 12, 0, 0)
-    expires_at = datetime(2026, 6, 1, 12, 0, 0)
+    from datetime import timezone
+
+    starts_at = datetime(2026, 5, 1, 4, 0, 0, tzinfo=timezone.utc)
+    expires_at = datetime(2026, 6, 1, 4, 0, 0, tzinfo=timezone.utc)
     generated_codes = iter(["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "f6e5d4c3b2a1f8e7d6c5b4a3f2e1d0c9"])
     monkeypatch.setattr(VoucherService, "_generate_plain_code", staticmethod(lambda: next(generated_codes)))
 
@@ -135,8 +137,8 @@ async def test_voucher_service_generates_hash_only_redemption_codes(monkeypatch)
     assert db.added[0].code_suffix == "c5d6"
     assert db.added[0].amount == 800
     assert db.added[0].status == VoucherRedemptionCode.STATUS_ACTIVE
-    assert db.added[0].starts_at == starts_at
-    assert db.added[0].expires_at == expires_at
+    assert db.added[0].starts_at == datetime(2026, 5, 1, 12, 0, 0)
+    assert db.added[0].expires_at == datetime(2026, 6, 1, 12, 0, 0)
     assert db.added[0].created_by_admin_uid == 99
     assert db.added[0].remark == "launch credit"
     assert db.commit_calls == 1
@@ -1523,6 +1525,70 @@ async def test_voucher_repository_list_for_user_redemptions_filters_user_and_sta
     assert "voucher_redemption_codes.status" in compiled
     assert result.total == 1
     assert result.items == ["redeemed-voucher"]
+
+
+def test_internal_voucher_item_exposes_redeemed_user_uid_without_internal_fk():
+    from user_service.api.v1.endpoints.internal import InternalVoucherItem
+    from user_service.models import VoucherRedemptionCode
+
+    voucher = VoucherRedemptionCode(
+        id=10,
+        code_hash="secret-hash",
+        code_prefix="VC-A",
+        code_suffix="0001",
+        amount=800,
+        status=VoucherRedemptionCode.STATUS_REDEEMED,
+        starts_at=datetime(2026, 5, 1, 12, 0, 0),
+        expires_at=datetime(2026, 6, 1, 12, 0, 0),
+        redeemed_user_id=7,
+        redeemed_at=datetime(2026, 5, 2, 12, 0, 0),
+        created_at=datetime(2026, 5, 1, 12, 0, 0),
+        updated_at=datetime(2026, 5, 2, 12, 0, 0),
+    )
+    voucher.redeemed_user = SimpleNamespace(uid="usr_nan0id123")
+
+    item = InternalVoucherItem.model_validate(voucher)
+    payload = item.model_dump()
+
+    assert item.redeemed_user_uid == "usr_nan0id123"
+    assert "redeemed_user_id" not in payload
+
+
+@pytest.mark.asyncio
+async def test_user_repository_searches_trimmed_uid_or_email_with_escaped_like():
+    from user_service.repositories.user_repository import UserRepository
+
+    class CountResult:
+        def scalar(self):
+            return 0
+
+    class ItemsResult:
+        def scalars(self):
+            return SimpleNamespace(all=lambda: [])
+
+    class FakeSession:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                return CountResult()
+            return ItemsResult()
+
+    db = FakeSession()
+    await UserRepository(db).list_users(search=" usr_100% ")
+
+    compiled = "\n".join(str(statement) for statement in db.statements)
+    params = {}
+    for statement in db.statements:
+        params.update(statement.compile().params)
+
+    assert "users.uid =" in compiled
+    assert "users.uid LIKE" in compiled
+    assert "users.email LIKE" in compiled
+    assert any(value == "usr_100%" for value in params.values())
+    assert any(value == "usr\\_100\\%%" for value in params.values())
 
 
 @pytest.mark.asyncio

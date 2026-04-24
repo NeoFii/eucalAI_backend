@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import UserNotFoundException, ValidationException
 from common.db import ListParams, PaginatedResult
-from common.utils.timezone import now
+from common.utils.timezone import now, to_shanghai_naive
 from user_service.models import BalanceTransaction, VoucherRedemptionCode
 from user_service.repositories import (
     BalanceTxRepository,
@@ -59,6 +59,8 @@ class VoucherService:
             raise ValidationException(detail="生成数量必须大于 0")
         if count > 1000:
             raise ValidationException(detail="单次最多生成 1000 个兑换码")
+        starts_at = to_shanghai_naive(starts_at)
+        expires_at = to_shanghai_naive(expires_at)
         if starts_at >= expires_at:
             raise ValidationException(detail="开始时间必须早于过期时间")
 
@@ -143,7 +145,7 @@ class VoucherService:
         raw_code: str,
         redeemed_at: datetime | None = None,
     ) -> VoucherRedemptionCode:
-        redeemed_at = redeemed_at or now()
+        redeemed_at = to_shanghai_naive(redeemed_at) or now()
         code_hash = VoucherService.hash_code(raw_code)
         code_repo = VoucherRedemptionCodeRepository(db)
         code = await code_repo.get_by_hash(code_hash, for_update=True)

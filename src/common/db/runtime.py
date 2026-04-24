@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
@@ -32,7 +33,17 @@ class ServiceDatabaseRuntime:
             max_overflow=max_overflow,
             pool_pre_ping=True,
         )
+        if self._engine.sync_engine.dialect.name == "mysql":
+            event.listen(self._engine.sync_engine, "connect", self._set_mysql_time_zone)
         return self._engine
+
+    @staticmethod
+    def _set_mysql_time_zone(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SET time_zone = '+08:00'")
+        finally:
+            cursor.close()
 
     def get_engine(self) -> AsyncEngine:
         """Return the initialized engine."""

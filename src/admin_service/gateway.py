@@ -28,6 +28,7 @@ from common.internal import (
     post_internal_json,
     request_internal_json,
 )
+from common.utils.timezone import format_iso
 
 IDENTITY_TIMEOUT_SECONDS = 3.0
 
@@ -299,8 +300,8 @@ class UserManagementGateway(BaseGateway):
                 json_body={
                     "amount": amount,
                     "count": count,
-                    "starts_at": starts_at.isoformat(),
-                    "expires_at": expires_at.isoformat() if expires_at else None,
+                    "starts_at": format_iso(starts_at),
+                    "expires_at": format_iso(expires_at),
                     "operator_uid": operator_uid,
                     "remark": remark,
                 },

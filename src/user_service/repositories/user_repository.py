@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from common.db import BaseRepository
 from user_service.models import User
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class UserRepository(BaseRepository[User]):
@@ -38,7 +42,16 @@ class UserRepository(BaseRepository[User]):
     ) -> tuple[list[User], int]:
         stmt = select(User)
         if search:
-            stmt = stmt.where(User.email.like(f"{search}%"))
+            search_value = search.strip()
+            if search_value:
+                escaped = _escape_like(search_value)
+                stmt = stmt.where(
+                    or_(
+                        User.uid == search_value,
+                        User.uid.like(f"{escaped}%", escape="\\"),
+                        User.email.like(f"%{escaped}%", escape="\\"),
+                    )
+                )
         if status is not None:
             stmt = stmt.where(User.status == status)
         stmt = stmt.order_by(User.created_at.desc(), User.id.desc())

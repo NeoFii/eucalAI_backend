@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import asc, desc, func, select
+from sqlalchemy.orm import selectinload
 
 from common.db import BaseRepository, ListParams, PaginatedResult
 from user_service.models import VoucherRedemptionCode
@@ -23,7 +24,11 @@ class VoucherRedemptionCodeRepository(BaseRepository[VoucherRedemptionCode]):
         *,
         for_update: bool = False,
     ) -> VoucherRedemptionCode | None:
-        statement = select(VoucherRedemptionCode).where(VoucherRedemptionCode.id == code_id)
+        statement = (
+            select(VoucherRedemptionCode)
+            .options(selectinload(VoucherRedemptionCode.redeemed_user))
+            .where(VoucherRedemptionCode.id == code_id)
+        )
         if for_update:
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
@@ -48,7 +53,28 @@ class VoucherRedemptionCodeRepository(BaseRepository[VoucherRedemptionCode]):
         filters = []
         if status is not None:
             filters.append(VoucherRedemptionCode.status == status)
-        return await self.get_list(params, extra_filters=filters)
+        statement = select(VoucherRedemptionCode).options(
+            selectinload(VoucherRedemptionCode.redeemed_user)
+        )
+        if filters:
+            statement = statement.where(*filters)
+
+        if params.order_by:
+            order_column = getattr(VoucherRedemptionCode, params.order_by)
+            order_fn = asc if params.order_dir.lower() == "asc" else desc
+            statement = statement.order_by(order_fn(order_column))
+
+        count_statement = select(func.count()).select_from(statement.order_by(None).subquery())
+        total = int((await self.session.execute(count_statement)).scalar() or 0)
+
+        offset = (params.page - 1) * params.page_size
+        rows = await self.session.execute(statement.offset(offset).limit(params.page_size))
+        return PaginatedResult(
+            items=list(rows.scalars().all()),
+            total=total,
+            page=params.page,
+            page_size=params.page_size,
+        )
 
     async def list_for_user_redemptions(
         self,
