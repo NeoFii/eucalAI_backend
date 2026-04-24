@@ -129,11 +129,13 @@ CREATE TABLE IF NOT EXISTS `provider_credentials` (
     `is_active` BOOL NOT NULL DEFAULT 1 COMMENT 'Whether credential is active',
     `remark` VARCHAR(256) NULL COMMENT 'Remark',
     `created_by` BIGINT NOT NULL COMMENT 'Creator admin id',
+    `updated_by` BIGINT NULL COMMENT 'Admin who last updated this credential',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_provider_credentials_slug` (`slug`),
-    CONSTRAINT `fk_provider_credentials_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT
+    CONSTRAINT `fk_provider_credentials_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT,
+    CONSTRAINT `fk_provider_credentials_updated_by` FOREIGN KEY (`updated_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Provider credentials';
 
 CREATE TABLE IF NOT EXISTS `routing_configs` (

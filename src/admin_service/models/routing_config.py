@@ -57,5 +57,12 @@ class ProviderCredential(SnowflakeIdMixin, TimestampMixin, Base):
         nullable=False,
         comment="Admin who created this credential",
     )
+    updated_by = Column(
+        BigInteger,
+        ForeignKey("admin_users.id", ondelete="RESTRICT"),
+        nullable=True,
+        comment="Admin who last updated this credential",
+    )
 
     creator = relationship("AdminUser", foreign_keys=[created_by], lazy="noload")
+    updater = relationship("AdminUser", foreign_keys=[updated_by], lazy="noload")

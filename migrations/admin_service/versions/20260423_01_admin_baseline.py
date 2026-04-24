@@ -236,6 +236,7 @@ def upgrade() -> None:
             `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether credential is usable',
             `remark` VARCHAR(256) NULL COMMENT 'Optional note',
             `created_by` BIGINT NOT NULL COMMENT 'Admin who created this credential',
+            `updated_by` BIGINT NULL COMMENT 'Admin who last updated this credential',
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
             `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
@@ -243,6 +244,9 @@ def upgrade() -> None:
             UNIQUE KEY `uk_provider_credentials_slug` (`slug`),
             CONSTRAINT `fk_provider_credentials_created_by`
                 FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`)
+                ON DELETE RESTRICT,
+            CONSTRAINT `fk_provider_credentials_updated_by`
+                FOREIGN KEY (`updated_by`) REFERENCES `admin_users` (`id`)
                 ON DELETE RESTRICT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
           COMMENT='Provider credentials'

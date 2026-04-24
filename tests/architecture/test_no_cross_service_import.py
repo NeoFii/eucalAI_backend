@@ -83,6 +83,10 @@ def test_gateway_implementations_share_base_gateway():
             "from common.gateway.base import BaseGateway",
             "class UserIdentityGateway(BaseGateway):",
         ],
+        SRC_ROOT / "user_service" / "gateway.py": [
+            "from common.gateway.base import BaseGateway",
+            "class ModelCatalogGateway(BaseGateway):",
+        ],
     }
 
     for path, markers in expected_markers.items():
