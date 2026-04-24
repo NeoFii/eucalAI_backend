@@ -90,7 +90,7 @@ class ApiKeyService:
         expires_at: datetime | None = None,
         provided_fields: set[str],
     ) -> UserApiKey:
-        api_key = await ApiKeyService._get_owned_key(db, key_id, user_id)
+        api_key = await ApiKeyService.verify_key_ownership(db, key_id, user_id)
         if "name" in provided_fields and name is not None:
             api_key.name = name
         if "quota_limit" in provided_fields and new_quota_limit is not None:
@@ -113,13 +113,13 @@ class ApiKeyService:
 
     @staticmethod
     async def disable(db: AsyncSession, key_id: int, user_id: int) -> None:
-        api_key = await ApiKeyService._get_owned_key(db, key_id, user_id)
+        api_key = await ApiKeyService.verify_key_ownership(db, key_id, user_id)
         api_key.status = UserApiKey.STATUS_DISABLED
         await db.commit()
 
     @staticmethod
     async def delete(db: AsyncSession, key_id: int, user_id: int) -> None:
-        api_key = await ApiKeyService._get_owned_key(db, key_id, user_id)
+        api_key = await ApiKeyService.verify_key_ownership(db, key_id, user_id)
         api_key.deleted_at = now()
         await db.commit()
 
@@ -178,7 +178,7 @@ class ApiKeyService:
         raise ApiKeyNotFoundException()
 
     @staticmethod
-    async def _get_owned_key(db: AsyncSession, key_id: int, user_id: int) -> UserApiKey:
+    async def verify_key_ownership(db: AsyncSession, key_id: int, user_id: int) -> UserApiKey:
         api_key = await ApiKeyRepository(db).get_owned_key(key_id, user_id)
         if api_key is None:
             raise ApiKeyNotFoundException()

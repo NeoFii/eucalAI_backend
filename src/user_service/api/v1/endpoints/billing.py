@@ -26,6 +26,7 @@ from user_service.schemas import (
     VoucherRedeemResponseData,
     VoucherRedemptionItem,
 )
+from user_service.services.api_key_service import ApiKeyService
 from user_service.services.balance_service import BalanceService
 from user_service.services.topup_order_service import TopupOrderService
 from user_service.services.usage_stat_service import UsageStatService
@@ -202,6 +203,8 @@ async def list_usage_stats(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
+    if api_key_id is not None:
+        await ApiKeyService.verify_key_ownership(db, api_key_id, int(current_user.id))
     params = _build_list_params(start=start, end=end, time_field="stat_hour")
     items = await UsageStatService.get_user_stats(
         db,
@@ -257,6 +260,8 @@ async def list_usage_logs(
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
+    if api_key_id is not None:
+        await ApiKeyService.verify_key_ownership(db, api_key_id, int(current_user.id))
     params = _build_list_params(
         page=page,
         page_size=page_size,
