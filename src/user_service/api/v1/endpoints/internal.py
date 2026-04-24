@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -238,6 +238,13 @@ class InternalVoucherGenerateRequest(BaseModel):
     operator_uid: str | None = None
     remark: str | None = Field(default=None, max_length=255)
 
+    @field_validator("starts_at", "expires_at", mode="after")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        from common.utils.timezone import to_shanghai_naive
+
+        return to_shanghai_naive(value)
+
 
 class InternalVoucherDisableRequest(BaseModel):
     operator_uid: str | None = None
@@ -251,7 +258,7 @@ class InternalVoucherItem(BaseModel):
     status: int
     starts_at: datetime
     expires_at: datetime
-    redeemed_user_id: int | None = None
+    redeemed_user_uid: str | None = None
     redeemed_at: datetime | None = None
     created_by_admin_uid: str | None = None
     remark: str | None = None

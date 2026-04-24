@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from admin_service.schemas.common import AdminBaseResponse, DateTimeModel
 from common.api import PaginatedResponse
@@ -16,6 +16,13 @@ class GenerateVoucherCodesRequest(BaseModel):
     starts_at: datetime = Field(..., description="Validity start")
     expires_at: datetime = Field(..., description="Validity end")
     remark: str | None = Field(default=None, max_length=255, description="Admin note")
+
+    @field_validator("starts_at", "expires_at", mode="after")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        from common.utils.timezone import to_shanghai_naive
+
+        return to_shanghai_naive(value)
 
     @model_validator(mode="after")
     def validate_window(self):
@@ -36,7 +43,7 @@ class VoucherCodeItem(DateTimeModel):
     status: int
     starts_at: datetime
     expires_at: datetime
-    redeemed_user_id: int | None = None
+    redeemed_user_uid: str | None = None
     redeemed_at: datetime | None = None
     created_by_admin_uid: str | None = None
     remark: str | None = None

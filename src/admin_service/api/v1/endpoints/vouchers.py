@@ -29,6 +29,7 @@ from admin_service.schemas.voucher import (
 )
 from admin_service.services.audit_service import AdminAuditService
 from common.api import PaginatedResponse
+from common.utils.timezone import format_iso
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,8 @@ async def generate_voucher_codes(
         after_data={
             "amount": payload.amount,
             "count": payload.count,
-            "starts_at": payload.starts_at.isoformat(),
-            "expires_at": payload.expires_at.isoformat(),
+            "starts_at": format_iso(payload.starts_at),
+            "expires_at": format_iso(payload.expires_at),
             "remark": payload.remark,
         },
         ip_address=ip_address,

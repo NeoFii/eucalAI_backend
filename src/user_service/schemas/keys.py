@@ -7,6 +7,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from common.utils.timezone import to_shanghai_naive
 from user_service.schemas.common import DateTimeModel
 from user_service.utils.api_key_policy import normalize_allow_ips, normalize_allowed_models
 
@@ -47,6 +48,11 @@ class ApiKeyCreateRequest(BaseModel):
     def normalize_allow_ips_field(cls, value: Optional[str]) -> Optional[str]:
         return normalize_allow_ips(value)
 
+    @field_validator("expires_at", mode="after")
+    @classmethod
+    def normalize_expires_at(cls, value: Optional[datetime]) -> Optional[datetime]:
+        return to_shanghai_naive(value)
+
 
 class ApiKeyCreateData(BaseModel):
     key: str
@@ -70,3 +76,8 @@ class ApiKeyUpdateRequest(BaseModel):
     @classmethod
     def normalize_allow_ips_field(cls, value: Optional[str]) -> Optional[str]:
         return normalize_allow_ips(value)
+
+    @field_validator("expires_at", mode="after")
+    @classmethod
+    def normalize_expires_at(cls, value: Optional[datetime]) -> Optional[datetime]:
+        return to_shanghai_naive(value)

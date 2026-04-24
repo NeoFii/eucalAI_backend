@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, SmallInteger, String
+from sqlalchemy.orm import relationship
 
 from common.db.base import SnowflakeIdMixin, TimestampMixin
 from user_service.db import Base
@@ -39,3 +40,11 @@ class VoucherRedemptionCode(Base, SnowflakeIdMixin, TimestampMixin):
     redeemed_at = Column(DateTime, nullable=True, comment="Redeemed at")
     created_by_admin_uid = Column(String(20), nullable=True, index=True, comment="Creator admin uid (NanoID)")
     remark = Column(String(255), nullable=True, comment="Admin note")
+
+    redeemed_user = relationship("User", lazy="selectin")
+
+    @property
+    def redeemed_user_uid(self) -> str | None:
+        if self.redeemed_user is None:
+            return None
+        return self.redeemed_user.uid

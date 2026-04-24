@@ -1,7 +1,8 @@
-"""时区工具模块 - 统一使用上海时区 (UTC+8)
+"""Timezone helpers for business datetimes.
 
-本模块提供统一的时间获取和转换函数，确保全系统使用上海时区（北京时间）。
-数据库存储为不带时区的 naive datetime，但值本身代表上海时间。
+Business datetimes are stored as naive values whose wall-clock meaning is
+Asia/Shanghai. API payloads include the +08:00 offset so clients do not reinterpret
+those values in the browser or server local timezone.
 """
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -50,17 +51,18 @@ def utc_to_shanghai(dt: datetime) -> datetime:
     return dt.astimezone(SHANGHAI_TZ).replace(tzinfo=None)
 
 
-def format_iso(dt: datetime | None) -> str | None:
-    """将 datetime 格式化为 ISO 8601 字符串（不带时区后缀）
-
-    用于 API 响应中的时间字段序列化。
-
-    Args:
-        dt: datetime 对象，可为 None
-
-    Returns:
-        ISO 8601 格式字符串（如 "2026-03-04T13:43:20"），或 None
-    """
+def to_shanghai_naive(dt: datetime | None) -> datetime | None:
+    """Normalize a datetime to the project's Shanghai-naive storage contract."""
     if dt is None:
         return None
-    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(SHANGHAI_TZ).replace(tzinfo=None)
+
+
+def format_iso(dt: datetime | None) -> str | None:
+    """Serialize a business datetime as ISO 8601 with explicit +08:00 offset."""
+    if dt is None:
+        return None
+    shanghai_dt = to_shanghai_naive(dt)
+    return shanghai_dt.replace(tzinfo=SHANGHAI_TZ).isoformat(timespec="seconds")

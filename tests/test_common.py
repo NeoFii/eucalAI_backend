@@ -57,7 +57,16 @@ class TestTimezoneUtils:
         from datetime import datetime
         from common.utils.timezone import format_iso
 
-        assert "2024" in format_iso(datetime(2024, 1, 1, 12, 0, 0))
+        assert format_iso(datetime(2024, 1, 1, 12, 0, 0)) == "2024-01-01T12:00:00+08:00"
+
+    def test_to_shanghai_naive_converts_aware_datetimes(self):
+        from datetime import datetime, timezone
+        from common.utils.timezone import to_shanghai_naive
+
+        value = to_shanghai_naive(datetime(2026, 4, 24, 4, 30, 0, tzinfo=timezone.utc))
+
+        assert value == datetime(2026, 4, 24, 12, 30, 0)
+        assert value.tzinfo is None
 
 
 class TestSnowflakeUtils:
@@ -216,6 +225,18 @@ class TestDatabaseRefactorPrimitives:
 
         with pytest.raises(ValidationException, match="时间范围不能超过 7 天"):
             too_wide.validate_time_range()
+
+    def test_list_params_default_end_uses_shanghai_now(self, monkeypatch):
+        from common.db import query as query_module
+        from common.db.query import ListParams
+
+        shanghai_now = datetime(2026, 4, 24, 20, 0, 0)
+        monkeypatch.setattr(query_module, "now", lambda: shanghai_now)
+
+        start, end = ListParams(time_field="created_at").validate_time_range(default_days=1)
+
+        assert start == datetime(2026, 4, 23, 20, 0, 0)
+        assert end == shanghai_now
 
     def test_paginated_result_preserves_payload(self):
         from common.db.query import PaginatedResult

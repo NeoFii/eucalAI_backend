@@ -1,8 +1,14 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+import os
 from types import SimpleNamespace
 
 import pytest
+
+os.environ.setdefault(
+    "PROVIDER_SECRET_MASTER_KEY",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+)
 
 
 @pytest.mark.asyncio
@@ -220,7 +226,7 @@ async def test_generate_voucher_codes_endpoint_delegates_and_records_audit(monke
                     "status": 1,
                     "starts_at": starts_at,
                     "expires_at": expires_at,
-                    "redeemed_user_id": None,
+                    "redeemed_user_uid": None,
                     "redeemed_at": None,
                     "created_by_admin_uid": "99",
                     "remark": "launch credit",
@@ -298,7 +304,7 @@ async def test_list_voucher_codes_response_does_not_expose_full_code(monkeypatch
                     "status": 1,
                     "starts_at": starts_at,
                     "expires_at": expires_at,
-                    "redeemed_user_id": None,
+                    "redeemed_user_uid": "usr_nan0id123",
                     "redeemed_at": None,
                     "created_by_admin_uid": "99",
                     "remark": "launch credit",
@@ -333,6 +339,8 @@ async def test_list_voucher_codes_response_does_not_expose_full_code(monkeypatch
     item = response.data.items[0]
     assert item.code_prefix == "a1b2"
     assert item.code_suffix == "c5d6"
+    assert item.redeemed_user_uid == "usr_nan0id123"
+    assert "redeemed_user_id" not in item.model_dump()
     assert not hasattr(item, "code")
 
 
