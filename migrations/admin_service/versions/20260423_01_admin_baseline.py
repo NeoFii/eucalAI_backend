@@ -1,4 +1,4 @@
-"""Admin service baseline — all 9 tables + seed catalog data."""
+"""Admin service baseline — all tables + seed catalog data."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def upgrade() -> None:
         """
         CREATE TABLE IF NOT EXISTS `admin_users` (
             `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-            `uid` BIGINT NOT NULL COMMENT 'Public admin UID',
+            `uid` VARCHAR(20) NOT NULL COMMENT 'Public admin UID (NanoID)',
             `email` VARCHAR(255) NOT NULL COMMENT 'Login email',
             `password_hash` VARCHAR(255) NOT NULL COMMENT 'Password hash',
             `name` VARCHAR(100) NOT NULL COMMENT 'Admin display name',
@@ -47,31 +47,6 @@ def upgrade() -> None:
                 ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
           COMMENT='Admin users'
-        """
-    )
-    op.execute(
-        """
-        CREATE TABLE IF NOT EXISTS `invitation_codes` (
-            `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-            `code` VARCHAR(64) NOT NULL COMMENT 'Invitation code',
-            `status` SMALLINT NOT NULL DEFAULT 0 COMMENT '0=unused 1=used 2=disabled',
-            `created_by` BIGINT NULL COMMENT 'Creator admin id',
-            `used_by` BIGINT NULL COMMENT 'Used-by user UID',
-            `used_at` DATETIME NULL COMMENT 'Used at',
-            `expires_at` DATETIME NULL COMMENT 'Expires at',
-            `remark` TEXT NULL COMMENT 'Remark',
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
-            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
-            PRIMARY KEY (`id`),
-            UNIQUE KEY `uk_invitation_codes_code` (`code`),
-            KEY `idx_invitation_codes_created_by` (`created_by`),
-            KEY `idx_invitation_codes_used_by` (`used_by`),
-            CONSTRAINT `fk_invitation_codes_created_by`
-                FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`)
-                ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-          COMMENT='Invitation codes'
         """
     )
 
@@ -342,6 +317,6 @@ def downgrade() -> None:
         "provider_credentials", "routing_configs",
         "supported_model_category_map", "supported_models",
         "model_categories", "model_vendors",
-        "admin_audit_logs", "invitation_codes", "admin_users",
+        "admin_audit_logs", "admin_users",
     ]:
         op.execute(f"DROP TABLE IF EXISTS `{table}`")

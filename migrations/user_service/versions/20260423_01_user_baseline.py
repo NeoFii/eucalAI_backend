@@ -1,4 +1,4 @@
-"""User service baseline — all 10 tables with full indexes and constraints."""
+"""User service baseline — all tables with full indexes and constraints."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def upgrade() -> None:
         """
         CREATE TABLE IF NOT EXISTS `users` (
             `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-            `uid` BIGINT NOT NULL COMMENT 'Public user UID',
+            `uid` VARCHAR(20) NOT NULL COMMENT 'Public user UID (NanoID)',
             `email` VARCHAR(255) NOT NULL COMMENT 'Login email',
             `password_hash` VARCHAR(255) NOT NULL COMMENT 'Password hash',
             `status` SMALLINT NOT NULL DEFAULT 1 COMMENT '0=disabled 1=active 2=pending',
@@ -58,24 +58,6 @@ def upgrade() -> None:
             KEY `idx_codes_email_purpose` (`email`, `purpose`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
           COMMENT='Email verification codes'
-        """
-    )
-
-    op.execute(
-        """
-        CREATE TABLE IF NOT EXISTS `invitation_release_outbox` (
-            `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Internal primary key',
-            `code` VARCHAR(64) NOT NULL COMMENT 'Invitation code to release',
-            `used_by_uid` BIGINT NOT NULL COMMENT 'Snowflake uid of the failed registrant',
-            `retry_count` INT NOT NULL DEFAULT 0 COMMENT 'Worker retry counter',
-            `last_error` VARCHAR(255) NULL COMMENT 'Last worker error message',
-            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
-            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                ON UPDATE CURRENT_TIMESTAMP COMMENT 'Updated at',
-            PRIMARY KEY (`id`),
-            KEY `idx_invitation_release_outbox_retry` (`retry_count`, `updated_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-          COMMENT='Compensation outbox for failed invitation-code releases'
         """
     )
 
@@ -288,7 +270,7 @@ def upgrade() -> None:
             `expires_at` DATETIME NOT NULL COMMENT 'Code validity end',
             `redeemed_user_id` BIGINT NULL COMMENT 'Redeeming users.id',
             `redeemed_at` DATETIME NULL COMMENT 'Redeemed at',
-            `created_by_admin_uid` BIGINT NULL COMMENT 'Creator admin uid',
+            `created_by_admin_uid` VARCHAR(20) NULL COMMENT 'Creator admin uid (NanoID)',
             `remark` VARCHAR(255) NULL COMMENT 'Admin note',
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Created at',
             `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -313,7 +295,6 @@ def downgrade() -> None:
     for table in [
         "voucher_redemption_codes", "usage_stats", "api_call_logs",
         "topup_orders", "balance_transactions", "user_api_keys",
-        "user_sessions", "invitation_release_outbox",
-        "email_verification_codes", "users",
+        "user_sessions", "email_verification_codes", "users",
     ]:
         op.execute(f"DROP TABLE IF EXISTS `{table}`")
