@@ -16,8 +16,8 @@ from typing import NoReturn
 from admin_service.config import settings
 from admin_service.exceptions import AdminConflictException, AdminPermissionDeniedException
 from common.core.exceptions import (
+    NotFoundException,
     ServiceUnavailableException,
-    UserNotFoundException,
     ValidationException,
 )
 from common.gateway.base import BaseGateway
@@ -99,7 +99,7 @@ class UserManagementGateway(BaseGateway):
     def _handle_error(self, exc: InternalServiceError) -> NoReturn:
         if isinstance(exc, InternalServiceResponseError):
             if exc.status_code == 404:
-                raise UserNotFoundException(detail=exc.detail or "User not found") from exc
+                raise NotFoundException(detail=exc.detail or "User not found") from exc
             if exc.status_code == 422:
                 raise ValidationException(detail=exc.detail or "Validation error") from exc
             if exc.status_code == 403:

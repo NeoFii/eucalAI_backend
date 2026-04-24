@@ -59,7 +59,7 @@ class AdjustUserBalanceRequest(BaseModel):
 
 
 class UserListItem(DateTimeModel):
-    uid: int
+    uid: str
     email: str
     status: int
     email_verified_at: Optional[datetime] = None
@@ -67,13 +67,20 @@ class UserListItem(DateTimeModel):
     balance: int
     created_at: datetime
 
+    @field_validator("uid", mode="before")
+    @classmethod
+    def stringify_uid(cls, value: Any) -> Any:
+        if value is None:
+            return value
+        return str(value)
+
 
 class UserListResponse(AdminBaseResponse):
     data: Optional[PaginatedResponse[UserListItem]] = None
 
 
 class UserDetailData(DateTimeModel):
-    uid: int
+    uid: str
     email: str
     status: int
     email_verified_at: Optional[datetime] = None
@@ -86,6 +93,13 @@ class UserDetailData(DateTimeModel):
     total_tokens: int
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("uid", mode="before")
+    @classmethod
+    def stringify_uid(cls, value: Any) -> Any:
+        if value is None:
+            return value
+        return str(value)
 
 
 class UserDetailResponse(AdminBaseResponse):
