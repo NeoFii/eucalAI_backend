@@ -1,124 +1,190 @@
-# Deployment Layout
+# 部署总览
 
-This directory contains the split multi-host deployment for the agreed production topology:
+Eucal AI 后端采用多机 Docker Compose 部署，按服务职责拆分为 3 个节点。
 
-- backend node: `user-service`, `admin-service`, `user-worker`, MySQL, Redis
-- router node: `router-service`
-- GPU node: `inference-service`
+## 架构拓扑
 
-All service-to-service traffic is expected to stay inside one cloud VPC/private network.
-
-## Files
-
-- `docker-compose.backend.yml` - backend node services and stateful dependencies
-- `docker-compose.router.yml` - public LLM gateway on the router node
-- `docker-compose.inference.yml` - GPU inference node
-- `docker-compose.local-infra.yml` - local MySQL + Redis only, for host-based development
-- `env/backend.env.example` - backend node environment template
-- `env/router.env.example` - router node environment template
-- `env/inference.env.example` - inference node environment template
-- `init-db.sql` - first-boot MySQL schema creation
-- `router/runtime_config.json` - router runtime policy fallback
-- `router/model_paths.json` - inference model asset paths inside the container
-
-## Public Endpoints
-
-Recommended public DNS layout:
-
-- `api.eucal.ai` -> router node -> `router-service:8003`
-- `user-api.eucal.ai` -> backend node -> `user-service:8000`
-- `admin-api.eucal.ai` -> backend node -> `admin-service:8001`
-
-Router already exposes OpenAI-compatible endpoints under `/v1/*`, so the primary client entrypoint is:
-
-```text
-https://api.eucal.ai/v1/chat/completions
+```
+┌─────────────────────────────────────────────────────────┐
+│  Backend 节点 (10.0.0.10)                                │
+│                                                          │
+│  docker-compose.infra.yml     docker-compose.backend.yml │
+│  ┌────────┐ ┌───────┐        ┌──────────────────┐       │
+│  │ MySQL  │ │ Redis │        │ user-service     │       │
+│  │ :3306  │ │ :6379 │        │ :8000            │       │
+│  └────────┘ └───────┘        ├──────────────────┤       │
+│                               │ admin-service    │       │
+│                               │ :8001            │       │
+│                               ├──────────────────┤       │
+│                               │ user-worker      │       │
+│                               │ (arq)            │       │
+│                               └──────────────────┘       │
+└──────────────────────────────────────────────────────────┘
+                    ▲                    ▲
+               HMAC │               HMAC │
+                    │                    │
+┌───────────────────┴────────────────────┴─────────────────┐
+│  Router 节点 (独立机器, CPU)                               │
+│                                                           │
+│  docker-compose.router.yml                                │
+│  ┌─────────────────────────────────────┐                  │
+│  │ router-service :8003                │                  │
+│  │ 公网 API 网关 (OpenAI 兼容)          │                  │
+│  └─────────────────────────────────────┘                  │
+└──────────────────────────┬────────────────────────────────┘
+                    Secret │
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│  GPU 节点 (10.0.0.20)                                     │
+│                                                           │
+│  docker-compose.inference.yml                             │
+│  ┌─────────────────────────────────────┐                  │
+│  │ inference-service :8004             │                  │
+│  │ Qwen2.5-7B + CG-TabM 分类          │                  │
+│  └─────────────────────────────────────┘                  │
+└──────────────────────────────────────────────────────────┘
 ```
 
-## Internal Topology
+## 服务清单
 
-```text
-router-service  -> user-service      (API key validation, call logs)
-router-service  -> admin-service     (routing config)
-router-service  -> inference-service (classification)
-inference-service -> admin-service   (routing config)
-admin-service   -> user-service      (admin user-management data)
+| 服务 | 端口 | 数据库 | 节点 | 文档 |
+|------|------|--------|------|------|
+| MySQL + Redis | 3306 / 6379 | — | Backend | [docs/infra.md](docs/infra.md) |
+| user-service | 8000 | `eucal_ai_user` | Backend | [docs/user-service.md](docs/user-service.md) |
+| admin-service | 8001 | `eucal_ai_admin` | Backend | [docs/admin-service.md](docs/admin-service.md) |
+| user-worker | — | `eucal_ai_user` | Backend | [docs/user-worker.md](docs/user-worker.md) |
+| router-service | 8003 | 无 | Router | [docs/router-service.md](docs/router-service.md) |
+| inference-service | 8004 | 无 | GPU | [docs/inference-service.md](docs/inference-service.md) |
+
+## 文件结构
+
+```
+deploy/
+├── docs/                          # 各服务部署文档
+│   ├── infra.md
+│   ├── user-service.md
+│   ├── admin-service.md
+│   ├── user-worker.md
+│   ├── router-service.md
+│   └── inference-service.md
+├── Dockerfile.user-service        # user-service 镜像
+├── Dockerfile.admin-service       # admin-service 镜像
+├── Dockerfile.user-worker         # user-worker 镜像
+├── Dockerfile.router-cpu          # router-service 镜像 (CPU-only)
+├── Dockerfile.inference           # inference-service 镜像 (GPU)
+├── docker-compose.infra.yml       # 基础设施 (MySQL + Redis)
+├── docker-compose.backend.yml     # 应用服务 (user + admin + worker)
+├── docker-compose.router.yml      # 路由网关
+├── docker-compose.inference.yml   # GPU 推理
+├── docker-compose.local-infra.yml # 本地开发用基础设施
+├── init-db.sql                    # MySQL 初始化建库
+├── env/                           # 环境变量模板
+│   ├── backend.env.example
+│   ├── router.env.example
+│   └── inference.env.example
+└── router/                        # 路由策略配置
+    ├── runtime_config.json
+    └── model_paths.json
 ```
 
-## Environment Setup
+## 快速部署（全流程）
 
-Copy the example file that matches each node:
+### 1. 准备环境文件
 
 ```bash
-cp deploy/env/backend.env.example deploy/env/backend.env
-cp deploy/env/router.env.example deploy/env/router.env
+cp deploy/env/backend.env.example   deploy/env/backend.env
+cp deploy/env/router.env.example    deploy/env/router.env
 cp deploy/env/inference.env.example deploy/env/inference.env
 ```
 
-Fill in real secrets and private hostnames or VPC IPs before starting containers.
+编辑各 `.env` 文件，填入真实的密钥和网络地址。
 
-## Backend Node
-
-Bring up stateful dependencies first:
+### 2. Backend 节点
 
 ```bash
-docker compose --env-file deploy/env/backend.env -f deploy/docker-compose.backend.yml up -d mysql redis
+# 启动基础设施
+docker compose --env-file deploy/env/backend.env \
+  -f deploy/docker-compose.infra.yml up -d
+
+# 等待 MySQL 就绪
+docker compose -f deploy/docker-compose.infra.yml ps
+
+# 运行数据库迁移
+docker compose --env-file deploy/env/backend.env \
+  -f deploy/docker-compose.backend.yml \
+  run --rm admin-service \
+  python scripts/migrate.py --service admin-service upgrade head
+
+docker compose --env-file deploy/env/backend.env \
+  -f deploy/docker-compose.backend.yml \
+  run --rm user-service \
+  python scripts/migrate.py --service user-service upgrade head
+
+# 启动应用服务
+docker compose --env-file deploy/env/backend.env \
+  -f deploy/docker-compose.backend.yml up -d
 ```
 
-Run migrations:
+### 3. GPU 节点
 
 ```bash
-docker compose --env-file deploy/env/backend.env -f deploy/docker-compose.backend.yml run --rm admin-service python scripts/migrate.py --service admin-service upgrade head
-docker compose --env-file deploy/env/backend.env -f deploy/docker-compose.backend.yml run --rm user-service python scripts/migrate.py --service user-service upgrade head
+# 确认 GPU 环境
+nvidia-smi
+
+# 放置模型权重到 /srv/eucal/models/
+
+# 启动推理服务
+docker compose --env-file deploy/env/inference.env \
+  -f deploy/docker-compose.inference.yml up -d
 ```
 
-Start the backend APIs and worker:
+### 4. Router 节点
 
 ```bash
-docker compose --env-file deploy/env/backend.env -f deploy/docker-compose.backend.yml up -d user-service admin-service user-worker
+docker compose --env-file deploy/env/router.env \
+  -f deploy/docker-compose.router.yml up -d
 ```
 
-## GPU Node
-
-Place the model weights on the host at the path configured by `MODEL_WEIGHTS_HOST_PATH`.
-The container mounts that directory to `/app/models`, and `deploy/router/model_paths.json`
-must match the directory layout inside `/app/models`.
-
-Start inference:
+### 5. 验证
 
 ```bash
-docker compose --env-file deploy/env/inference.env -f deploy/docker-compose.inference.yml up -d
+# Backend 节点
+curl -s http://localhost:8000/ready   # user-service
+curl -s http://localhost:8001/ready   # admin-service
+
+# Router 节点
+curl -s http://localhost:8003/ready   # router-service
+
+# GPU 节点
+curl -s http://localhost:8004/ready   # inference-service
 ```
 
-## Router Node
+## 公网域名
 
-Start the public API gateway:
+| 域名 | 目标 | 说明 |
+|------|------|------|
+| `api.eucal.ai` | router-service:8003 | OpenAI 兼容 API 入口 |
+| `user-api.eucal.ai` | user-service:8000 | 用户端 API |
+| `admin-api.eucal.ai` | admin-service:8001 | 管理端 API |
+
+TLS 在云负载均衡器或反向代理层终止。
+
+## 安全组
+
+| 规则 | 说明 |
+|------|------|
+| 公网 → Router:8003 | 仅 HTTPS |
+| Router → Backend:8000, 8001 | VPC 内网 |
+| Router → GPU:8004 | VPC 内网 |
+| GPU → Backend:8001 | VPC 内网 |
+| MySQL:3306, Redis:6379 | 仅 Backend 节点内部 Docker 网络 |
+
+## 共享密钥
+
+所有节点必须使用相同的 `INTERNAL_SECRET` 进行 HMAC 签名通信。
+Router 和 GPU 节点还需要共享 `INFERENCE_SERVICE_SECRET`。
 
 ```bash
-docker compose --env-file deploy/env/router.env -f deploy/docker-compose.router.yml up -d
+# 生成安全密钥
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
-
-Terminate TLS at the cloud load balancer or a reverse proxy in front of `router-service:8003`.
-
-## Health Checks
-
-- backend user API: `python scripts/runtime_probe.py http-ready --port 8000`
-- backend admin API: `python scripts/runtime_probe.py http-ready --port 8001`
-- backend worker: `python scripts/runtime_probe.py worker-ready --database-url-env USER_DATABASE_URL --redis-url-env USER_QUEUE_REDIS_URL`
-- router: `python scripts/runtime_probe.py http-ready --port 8003`
-- inference: `python scripts/runtime_probe.py http-ready --port 8004`
-
-## Security Groups
-
-- expose `8003` to the public internet only through HTTPS ingress
-- allow router node -> backend node `8000`, `8001`
-- allow router node -> GPU node `8004`
-- allow GPU node -> backend node `8001`
-- keep MySQL and Redis private to the backend node's Docker network or private subnet only
-
-## Persistent Data Ownership
-
-- `user-service` database: users, API keys, call logs, usage stats, billing data
-- `admin-service` database: routing config, provider credentials, model catalog, admin audit
-- `router-service`: stateless, no database required in this deployment
-

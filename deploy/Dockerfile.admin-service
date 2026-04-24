@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# admin-service: admin auth, model catalog, routing config, audit logs
 
 FROM python:3.11-slim AS builder
 
@@ -31,14 +32,12 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --chown=appuser:appuser src/common/ /app/src/common/
-COPY --chown=appuser:appuser src/user_service/ /app/src/user_service/
 COPY --chown=appuser:appuser src/admin_service/ /app/src/admin_service/
-COPY --chown=appuser:appuser src/router_service/ /app/src/router_service/
-COPY --chown=appuser:appuser migrations/ /app/migrations/
+COPY --chown=appuser:appuser migrations/__init__.py migrations/_env_shared.py migrations/helpers.py /app/migrations/
+COPY --chown=appuser:appuser migrations/admin_service/ /app/migrations/admin_service/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
 COPY --chown=appuser:appuser deploy/router/ /app/deploy/router/
 COPY --chown=appuser:appuser pyproject.toml README.md /app/
-COPY --chown=appuser:appuser .env.example /app/.env.example
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH=/app/src \
@@ -47,6 +46,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 USER appuser
 
-EXPOSE 8000 8001 8003 8004
+EXPOSE 8001
 
-CMD ["/app/.venv/bin/uvicorn", "user_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["/app/.venv/bin/uvicorn", "admin_service.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
