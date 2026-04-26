@@ -11,14 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from common.cache import close_cache_redis, init_cache_redis
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
-from common.observability import configure_logging, install_observability
+from common.observability import configure_logging_from_settings, install_observability, log_event
 from common.redis import check_redis_ready, close_redis, init_redis
-
 from user_service import db
 from user_service.api.v1.router import api_router
 from user_service.config import settings
 
-configure_logging(settings.LOG_LEVEL)
+configure_logging_from_settings(settings)
 logger = logging.getLogger(settings.SERVICE_NAME)
 
 
@@ -28,12 +27,12 @@ async def lifespan(app: FastAPI):
     db.init_session_factory()
     await init_redis(settings.REDIS_URL)
     await init_cache_redis(settings.CACHE_REDIS_URL)
-    logger.info("user-service started (standalone)")
+    log_event(logger, logging.INFO, "service_started", service=settings.SERVICE_NAME)
     yield
     await close_cache_redis()
     await close_redis()
     await db.close_db()
-    logger.info("user-service stopped")
+    log_event(logger, logging.INFO, "service_stopped", service=settings.SERVICE_NAME)
 
 
 app = FastAPI(

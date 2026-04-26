@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -68,9 +67,15 @@ def test_docs_and_scripts_describe_alembic_as_only_schema_path():
 
 
 def test_docker_image_includes_migrations_for_runtime_revision_checks():
-    dockerfile = (ROOT / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+    dockerfiles = [
+        (ROOT / "deploy" / "Dockerfile.admin-service").read_text(encoding="utf-8"),
+        (ROOT / "deploy" / "Dockerfile.user-service").read_text(encoding="utf-8"),
+        (ROOT / "deploy" / "Dockerfile.user-worker").read_text(encoding="utf-8"),
+    ]
 
-    assert "COPY --chown=appuser:appuser migrations/ /app/migrations/" in dockerfile
+    for dockerfile in dockerfiles:
+        assert "COPY --chown=appuser:appuser migrations/__init__.py" in dockerfile
+        assert "COPY --chown=appuser:appuser migrations/" in dockerfile
 
 
 @pytest.mark.asyncio

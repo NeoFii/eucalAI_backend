@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI
 
+from common.observability import configure_logging, log_event
 from inference_service.config import (
     DEFAULT_INFERENCE_HOST,
     DEFAULT_INFERENCE_PORT,
@@ -61,21 +62,6 @@ def get_settings() -> InferenceSettings:
     return _settings
 
 
-def _setup_logging(log_dir: str = "logs") -> None:
-    os.makedirs(log_dir, exist_ok=True)
-    svc_logger = logging.getLogger("inference_service")
-    if svc_logger.handlers:
-        return
-    svc_logger.setLevel(logging.INFO)
-    svc_logger.propagate = False
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
-    svc_logger.addHandler(handler)
-
-
 def create_app(
     runtime_config_path: str | None = None,
     model_paths_config: str | None = None,
@@ -97,7 +83,15 @@ def create_app(
     )
     log_dir = log_dir or _settings.log_dir
 
-    _setup_logging(log_dir)
+    configure_logging(
+        _settings.log_level,
+        service_name="inference_service",
+        log_dir=log_dir,
+        enable_file_logging=_settings.log_to_file,
+        file_prefix="inference_service",
+        file_max_bytes=_settings.log_file_max_bytes,
+        file_backup_count=_settings.log_file_backup_count,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -105,7 +99,7 @@ def create_app(
         from inference_service.services.config_manager import ConfigManager
         from inference_service.services.router_engine import HybridIntegratedDifficultyRouter
 
-        logger.info("initializing inference engine...")
+        log_event(logger, logging.INFO, "service_starting", service="inference_service")
         model_paths = load_model_paths(model_paths_config)
 
         config_mgr = ConfigManager(
@@ -119,10 +113,10 @@ def create_app(
             model_paths,
             runtime_config=config_mgr.load(),
         )
-        logger.info("inference engine ready")
+        log_event(logger, logging.INFO, "service_ready", service="inference_service")
         yield
         await config_mgr.stop()
-        logger.info("shutting down")
+        log_event(logger, logging.INFO, "service_stopping", service="inference_service")
 
     from inference_service.api import classify
 
@@ -134,6 +128,7 @@ def create_app(
 
     from common.observability import install_observability
     from inference_service.error_handlers import install_error_handlers
+
     install_observability(app, service_name="inference_service")
     install_error_handlers(app)
 
@@ -163,7 +158,11 @@ def cli() -> None:
         type=str,
         default=_default_asset("model_paths.json", "ROUTER_MODEL_PATHS"),
     )
-    parser.add_argument("--log-dir", type=str, default=os.getenv("INFERENCE_LOG_DIR", "logs"))
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        default=os.getenv("INFERENCE_LOG_DIR", os.getenv("LOG_DIR", "logs")),
+    )
     args = parser.parse_args()
 
     import uvicorn

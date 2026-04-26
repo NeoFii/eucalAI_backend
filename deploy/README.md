@@ -159,6 +159,19 @@ curl -s http://localhost:8003/ready   # router-service
 curl -s http://localhost:8004/ready   # inference-service
 ```
 
+## 日志
+
+所有服务默认向 stdout 输出结构化 JSON 日志，字段包含 `timestamp`、`service`、`event`、`level`、`request_id`。Compose 文件同时将 `/app/logs` 挂载为可选文件日志目录，并默认启用 `LOG_TO_FILE=true`，可通过环境变量统一调整：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `LOG_LEVEL` | `INFO` | stdout 与文件日志级别 |
+| `LOG_TO_FILE` | `true` | 是否写入 `/app/logs/<service>.log` |
+| `LOG_FILE_MAX_BYTES` | `52428800` | 单个日志文件轮转大小 |
+| `LOG_FILE_BACKUP_COUNT` | `5` | 保留轮转文件数 |
+
+router-service 额外保留业务观测 JSONL：`/app/logs/routing.jsonl` 与 `/app/logs/upstream.jsonl`。这两个文件包含统一的 `ts`、`service`、`event`、`request_id`、`router_trace_id` 字段，并对 prompt/response 预览做截断和敏感信息脱敏。
+
 ## 公网域名
 
 | 域名 | 目标 | 说明 |

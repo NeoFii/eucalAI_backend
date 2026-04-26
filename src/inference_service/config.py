@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
+
+from common.observability import parse_bool_env
 
 # ---------------------------------------------------------------------------
 # Five-way route order (fixed, must match training)
@@ -133,6 +135,10 @@ class InferenceSettings:
     model_paths_config: str = ""
     runtime_config_path: str = ""
     log_dir: str = "logs"
+    log_level: str = "INFO"
+    log_to_file: bool = False
+    log_file_max_bytes: int = 50 * 1024 * 1024
+    log_file_backup_count: int = 5
     admin_service_url: str = "http://127.0.0.1:8001"
     internal_secret: str = ""
     config_refresh_interval_seconds: int = 60
@@ -147,15 +153,13 @@ class InferenceSettings:
             allow_insecure_dev=os.getenv("INFERENCE_ALLOW_INSECURE_DEV") == "1",
             model_paths_config=os.getenv("ROUTER_MODEL_PATHS", ""),
             runtime_config_path=os.getenv("ROUTER_RUNTIME_CONFIG", ""),
-            log_dir=os.getenv("INFERENCE_LOG_DIR", "logs"),
-            admin_service_url=os.getenv(
-                "ADMIN_SERVICE_URL", "http://127.0.0.1:8001"
-            ),
+            log_dir=os.getenv("INFERENCE_LOG_DIR", os.getenv("LOG_DIR", "logs")),
+            log_level=os.getenv("LOG_LEVEL", "INFO"),
+            log_to_file=parse_bool_env(os.getenv("LOG_TO_FILE"), default=False),
+            log_file_max_bytes=int(os.getenv("LOG_FILE_MAX_BYTES", str(50 * 1024 * 1024))),
+            log_file_backup_count=int(os.getenv("LOG_FILE_BACKUP_COUNT", "5")),
+            admin_service_url=os.getenv("ADMIN_SERVICE_URL", "http://127.0.0.1:8001"),
             internal_secret=os.getenv("INTERNAL_SECRET", ""),
-            config_refresh_interval_seconds=int(
-                os.getenv("CONFIG_REFRESH_INTERVAL_SECONDS", "60")
-            ),
-            config_fetch_timeout_seconds=float(
-                os.getenv("CONFIG_FETCH_TIMEOUT_SECONDS", "5.0")
-            ),
+            config_refresh_interval_seconds=int(os.getenv("CONFIG_REFRESH_INTERVAL_SECONDS", "60")),
+            config_fetch_timeout_seconds=float(os.getenv("CONFIG_FETCH_TIMEOUT_SECONDS", "5.0")),
         )
