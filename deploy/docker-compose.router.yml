@@ -9,6 +9,11 @@ services:
     environment:
       ROUTER_RUNTIME_CONFIG: "/app/deploy/router/runtime_config.json"
       ROUTER_LOG_DIR: "/app/logs"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: "/app/logs"
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_MAX_BYTES: ${LOG_FILE_MAX_BYTES:-52428800}
+      LOG_FILE_BACKUP_COUNT: ${LOG_FILE_BACKUP_COUNT:-5}
       USER_SERVICE_URL: ${USER_SERVICE_URL:-http://10.0.0.10:8000}
       ADMIN_SERVICE_URL: ${ADMIN_SERVICE_URL:-http://10.0.0.10:8001}
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://10.0.0.20:8004}
@@ -39,4 +44,3 @@ services:
 volumes:
   router_logs:
     name: eucal_router_logs
-

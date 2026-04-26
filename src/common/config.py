@@ -69,6 +69,9 @@ class BaseServiceSettings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_MAX_DAYS: int = 30
     LOG_FILE_PREFIX: str = "service"
+    LOG_TO_FILE: bool = False
+    LOG_FILE_MAX_BYTES: int = 50 * 1024 * 1024
+    LOG_FILE_BACKUP_COUNT: int = 5
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod

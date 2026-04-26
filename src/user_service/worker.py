@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import user_service.models  # noqa: F401
-
+from common.observability import configure_logging_from_settings
+from user_service.config import settings
 from user_service.jobs import get_worker_settings_kwargs
+
+configure_logging_from_settings(settings)
 
 
 class WorkerSettings:

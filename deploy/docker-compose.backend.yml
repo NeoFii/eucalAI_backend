@@ -32,6 +32,12 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_TLS: ${SMTP_TLS:-true}
       SMTP_FROM: ${SMTP_FROM:-Eucal AI}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: "/app/logs"
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PREFIX: "user"
+      LOG_FILE_MAX_BYTES: ${LOG_FILE_MAX_BYTES:-52428800}
+      LOG_FILE_BACKUP_COUNT: ${LOG_FILE_BACKUP_COUNT:-5}
       DEBUG: ${DEBUG:-false}
     command: ["/app/.venv/bin/uvicorn", "user_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
     ports:
@@ -77,6 +83,12 @@ services:
       BOOTSTRAP_SUPERADMIN_NAME: ${BOOTSTRAP_SUPERADMIN_NAME:-}
       BOOTSTRAP_SUPERADMIN_RESET_PASSWORD_IF_EXISTS: ${BOOTSTRAP_SUPERADMIN_RESET_PASSWORD_IF_EXISTS:-false}
       BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS: ${BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: "/app/logs"
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PREFIX: "admin"
+      LOG_FILE_MAX_BYTES: ${LOG_FILE_MAX_BYTES:-52428800}
+      LOG_FILE_BACKUP_COUNT: ${LOG_FILE_BACKUP_COUNT:-5}
       DEBUG: ${DEBUG:-false}
     command: ["/app/.venv/bin/uvicorn", "admin_service.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
     ports:
@@ -100,9 +112,16 @@ services:
     environment:
       USER_DATABASE_URL: "mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-change-me}@mysql:3306/eucal_ai_user"
       USER_QUEUE_REDIS_URL: ${USER_QUEUE_REDIS_URL:-redis://redis:6379/1}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
       INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me}
       ADMIN_SERVICE_URL: "http://admin-service:8001"
       SNOWFLAKE_DATACENTER_ID: ${SNOWFLAKE_DATACENTER_ID:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: "/app/logs"
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PREFIX: "user-worker"
+      LOG_FILE_MAX_BYTES: ${LOG_FILE_MAX_BYTES:-52428800}
+      LOG_FILE_BACKUP_COUNT: ${LOG_FILE_BACKUP_COUNT:-5}
       DEBUG: ${DEBUG:-false}
     command: ["/app/.venv/bin/arq", "user_service.worker.WorkerSettings"]
     volumes:

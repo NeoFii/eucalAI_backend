@@ -6,9 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
-from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 os.environ["INTERNAL_SECRET"] = "test_internal_secret_32chars_long!"
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_32bytes_long!!"
@@ -191,6 +191,7 @@ def test_user_internal_endpoint_rejects_untrusted_caller():
 @pytest.mark.asyncio
 async def test_router_api_key_dependency_uses_user_internal_contract(monkeypatch):
     import json
+
     from starlette.requests import Request
 
     from router_service.dependencies import require_api_key
@@ -253,6 +254,7 @@ async def test_router_api_key_dependency_uses_user_internal_contract(monkeypatch
 async def test_router_api_key_dependency_maps_invalid_key_to_401(monkeypatch):
     from fastapi import HTTPException
     from starlette.requests import Request
+
     from common.internal import InternalServiceResponseError
     from router_service.dependencies import require_api_key
 
@@ -745,9 +747,7 @@ async def test_router_user_identity_gateway_maps_payload(monkeypatch):
     from router_service.gateway import UserIdentityGateway
     from router_service.settings import RouterSettings
 
-    monkeypatch.setattr(
-        "router_service.dependencies._settings", RouterSettings.from_env()
-    )
+    monkeypatch.setattr("router_service.dependencies._settings", RouterSettings.from_env())
 
     captured = {}
 
@@ -781,13 +781,11 @@ async def test_router_user_identity_gateway_maps_payload(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_router_user_identity_gateway_maps_timeout(monkeypatch):
+    from common.core.exceptions import ServiceUnavailableException
     from router_service.gateway import UserIdentityGateway
     from router_service.settings import RouterSettings
-    from common.core.exceptions import ServiceUnavailableException
 
-    monkeypatch.setattr(
-        "router_service.dependencies._settings", RouterSettings.from_env()
-    )
+    monkeypatch.setattr("router_service.dependencies._settings", RouterSettings.from_env())
 
     async def fake_timeout(**_kwargs):
         raise ServiceUnavailableException("Identity service unavailable")
@@ -805,14 +803,22 @@ def test_split_deployment_compose_and_dockerfile_expose_expected_services():
     router_compose = (repo_root / "deploy" / "docker-compose.router.yml").read_text(
         encoding="utf-8"
     )
-    inference_compose = (
-        repo_root / "deploy" / "docker-compose.inference.yml"
-    ).read_text(encoding="utf-8")
-    dockerfile = (repo_root / "deploy" / "Dockerfile").read_text(encoding="utf-8")
-    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
-    start_services = (repo_root / "scripts" / "start_services.py").read_text(
+    inference_compose = (repo_root / "deploy" / "docker-compose.inference.yml").read_text(
         encoding="utf-8"
     )
+    dockerfiles = {
+        name: (repo_root / "deploy" / name).read_text(encoding="utf-8")
+        for name in (
+            "Dockerfile.user-service",
+            "Dockerfile.admin-service",
+            "Dockerfile.user-worker",
+            "Dockerfile.router-cpu",
+            "Dockerfile.inference",
+        )
+    }
+    dockerfile_text = "\n".join(dockerfiles.values())
+    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+    start_services = (repo_root / "scripts" / "start_services.py").read_text(encoding="utf-8")
     removed_worker = "testing" + "-worker"
     removed_queue_env = "BENCHMARK" + "_QUEUE_REDIS_URL"
 
@@ -824,10 +830,13 @@ def test_split_deployment_compose_and_dockerfile_expose_expected_services():
     assert removed_worker + ":" not in backend_compose
     assert removed_queue_env not in backend_compose
     # src/ layout: services are COPY'd from src/ into /app in the image.
-    assert "src/router_service" in dockerfile
-    assert "scripts" in dockerfile
-    assert "EXPOSE 8000 8001 8003 8004" in dockerfile
-    assert "backend_app" not in dockerfile
+    assert "src/router_service" in dockerfiles["Dockerfile.router-cpu"]
+    assert all("scripts" in dockerfile for dockerfile in dockerfiles.values())
+    assert "EXPOSE 8000" in dockerfiles["Dockerfile.user-service"]
+    assert "EXPOSE 8001" in dockerfiles["Dockerfile.admin-service"]
+    assert "EXPOSE 8003" in dockerfiles["Dockerfile.router-cpu"]
+    assert "EXPOSE 8004" in dockerfiles["Dockerfile.inference"]
+    assert "backend_app" not in dockerfile_text
     assert "backend_app" not in pyproject
     assert "backend-app" not in start_services
     assert "backend_app" not in start_services
@@ -853,9 +862,9 @@ def test_router_settings_default_user_service_url_points_to_user_port(monkeypatc
 def test_runtime_entrypoints_require_alembic_head_before_followup_work():
     repo_root = Path(__file__).resolve().parent.parent
     admin_main = (repo_root / "src" / "admin_service" / "main.py").read_text(encoding="utf-8")
-    bootstrap_cli = (
-        repo_root / "src" / "admin_service" / "bootstrap_superadmin.py"
-    ).read_text(encoding="utf-8")
+    bootstrap_cli = (repo_root / "src" / "admin_service" / "bootstrap_superadmin.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'ensure_database_at_head(service_name="admin-service"' in admin_main
     assert 'ensure_database_at_head(service_name="admin-service"' in bootstrap_cli

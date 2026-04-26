@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 
+from common.observability import log_event
 from router_service.config import DEFAULT_SERVICE_HOST, DEFAULT_SERVICE_PORT
 from router_service.dependencies import init_globals
-from router_service.logging import setup_logging, get_app_logger
+from router_service.logging import get_app_logger, setup_logging
 from router_service.routers import chat, completions, meta
-
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_ROUTER_ASSETS = _BACKEND_ROOT / "deploy" / "router"
@@ -38,9 +39,15 @@ def create_app(
     runtime_config_path = runtime_config_path or _default_asset(
         "runtime_config.json", "ROUTER_RUNTIME_CONFIG"
     )
-    log_dir = log_dir or os.getenv("ROUTER_LOG_DIR", "logs")
+    log_dir = log_dir or settings.log_dir
 
-    setup_logging(log_dir=log_dir)
+    setup_logging(
+        log_dir=log_dir,
+        level=settings.log_level,
+        enable_file_logging=settings.log_to_file,
+        file_max_bytes=settings.log_file_max_bytes,
+        file_backup_count=settings.log_file_backup_count,
+    )
     logger = get_app_logger()
 
     inference_client = InferenceClient(
@@ -59,18 +66,18 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logger.info("initializing router gateway...")
+        log_event(logger, logging.INFO, "service_starting", service="router_service")
         await config_manager.start()
         init_globals(
             config_manager=config_manager,
             settings=settings,
             inference_client=inference_client,
         )
-        logger.info("router gateway ready")
+        log_event(logger, logging.INFO, "service_ready", service="router_service")
         yield
         await config_manager.stop()
         await inference_client.close()
-        logger.info("shutting down")
+        log_event(logger, logging.INFO, "service_stopping", service="router_service")
 
     app = FastAPI(
         title="Router Service",
@@ -79,6 +86,7 @@ def create_app(
     )
 
     from common.observability import install_observability
+
     install_observability(app, service_name="router_service")
 
     app.include_router(meta.router)
@@ -99,7 +107,11 @@ def cli():
         type=str,
         default=_default_asset("runtime_config.json", "ROUTER_RUNTIME_CONFIG"),
     )
-    parser.add_argument("--log-dir", type=str, default=os.getenv("ROUTER_LOG_DIR", "logs"))
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        default=os.getenv("ROUTER_LOG_DIR", os.getenv("LOG_DIR", "logs")),
+    )
     args = parser.parse_args()
 
     import uvicorn

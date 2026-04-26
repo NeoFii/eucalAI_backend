@@ -21,11 +21,11 @@ from admin_service.services.bootstrap_service import AdminBootstrapService
 from common.db import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
-from common.observability import configure_logging, install_observability, log_event
+from common.observability import configure_logging_from_settings, install_observability, log_event
 from common.redis import check_redis_ready, close_redis, init_redis
 from common.utils.snowflake import configure_snowflake
 
-configure_logging(settings.LOG_LEVEL)
+configure_logging_from_settings(settings)
 logger = logging.getLogger(settings.SERVICE_NAME)
 
 
