@@ -86,9 +86,11 @@ async def get_active_routing_config_full(
         tier_models = list(base["tier_model_map"].values())
         all_model_slugs = list(set(tier_models))
         model_channels = await PoolService.resolve_model_channels(db, all_model_slugs)
+        model_prices = await ModelCatalogService.get_prices_by_slugs(db, all_model_slugs)
         return {
             **base,
             "model_channels": model_channels,
+            "model_prices": model_prices,
         }
     except NotFoundException as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc

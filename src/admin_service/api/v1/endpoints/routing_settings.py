@@ -29,22 +29,6 @@ async def list_settings(
     return RoutingSettingGroupResponse(data=grouped)
 
 
-@router.put("/{key}", response_model=RoutingSettingResponse, summary="Update single setting")
-async def update_setting(
-    key: str,
-    payload: RoutingSettingUpdate,
-    http_request: Request,
-    current_admin: AdminUser = Depends(require_super_admin),
-    db: AsyncSession = Depends(get_db_session),
-) -> RoutingSettingResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    item = await RoutingSettingService.update_setting(
-        db, key, payload.value, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
-    return RoutingSettingResponse(data=item)
-
-
 @router.put("/batch", response_model=RoutingSettingGroupResponse, summary="Batch update settings")
 async def batch_update_settings(
     payload: RoutingSettingBatchUpdate,
@@ -54,8 +38,26 @@ async def batch_update_settings(
 ) -> RoutingSettingGroupResponse:
     ip_address, user_agent = get_request_meta(http_request)
     items_tuples = [(item.key, item.value) for item in payload.items]
+    await RoutingSettingService.validate_tier_model_coverage(db, items_tuples)
     grouped = await RoutingSettingService.batch_update(
         db, items_tuples, actor_admin_id=current_admin.id,
         ip_address=ip_address, user_agent=user_agent,
     )
     return RoutingSettingGroupResponse(data=grouped)
+
+
+@router.put("/{key}", response_model=RoutingSettingResponse, summary="Update single setting")
+async def update_setting(
+    key: str,
+    payload: RoutingSettingUpdate,
+    http_request: Request,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> RoutingSettingResponse:
+    ip_address, user_agent = get_request_meta(http_request)
+    await RoutingSettingService.validate_tier_model_coverage(db, [(key, payload.value)])
+    item = await RoutingSettingService.update_setting(
+        db, key, payload.value, actor_admin_id=current_admin.id,
+        ip_address=ip_address, user_agent=user_agent,
+    )
+    return RoutingSettingResponse(data=item)

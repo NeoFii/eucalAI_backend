@@ -18,6 +18,7 @@ from router_service.logging import get_app_logger, log_upstream_call
 from router_service.schemas.requests import ChatCompletionRequest
 from router_service.services.routing import RoutingError, route_and_resolve, sanitize_error
 from router_service.services.upstream import strip_think_tags
+from router_service.utils.billing import compute_cost
 from router_service.utils.text import stringify_message_content
 
 router = APIRouter()
@@ -57,6 +58,18 @@ async def chat_completions(
         status=0,
     )
     call_log_created = create_result is not None
+
+    if principal.balance <= 0:
+        if call_log_created:
+            await CallLogGateway.update_call_log(
+                settings=settings,
+                request_id=request_id,
+                status=2,
+                error_code="insufficient_balance",
+                error_msg="余额不足",
+                duration_ms=int((time.monotonic() - t_start) * 1000),
+            )
+        raise HTTPException(status_code=402, detail="insufficient balance")
 
     try:
         selected_model, target_info, route_result, route_meta = await route_and_resolve(
@@ -104,6 +117,8 @@ async def chat_completions(
         exclude={"model", "messages", "stream"},
         exclude_none=True,
     )
+    if is_stream:
+        forward_payload.setdefault("stream_options", {"include_usage": True})
 
     t_upstream = time.monotonic()
     channel_slug = target_info.get("channel_slug")
@@ -175,11 +190,15 @@ async def chat_completions(
     if is_stream:
         async def _stream_sse():
             collected_content = ""
+            stream_usage = {}
             stream_ok = False
             try:
                 async for chunk in litellm_response:
                     chunk_dict = chunk.model_dump(exclude_none=True)
                     chunk_dict["model"] = selected_model
+                    chunk_usage = chunk_dict.get("usage")
+                    if chunk_usage:
+                        stream_usage = chunk_usage
                     choices = chunk_dict.get("choices") or []
                     for c in choices:
                         delta = c.get("delta") or {}
@@ -212,13 +231,38 @@ async def chat_completions(
                 )
                 if call_log_created:
                     final_status = 1 if stream_ok else 4
-                    await CallLogGateway.update_call_log(
-                        settings=settings,
-                        request_id=request_id,
-                        status=final_status,
-                        duration_ms=int((time.monotonic() - t_start) * 1000),
-                        error_code="client_aborted" if not stream_ok else None,
-                    )
+                    update_kwargs: dict = {
+                        "settings": settings,
+                        "request_id": request_id,
+                        "status": final_status,
+                        "duration_ms": int((time.monotonic() - t_start) * 1000),
+                        "error_code": "client_aborted" if not stream_ok else None,
+                    }
+                    if stream_ok and stream_usage:
+                        prompt_tokens = stream_usage.get("prompt_tokens", 0)
+                        completion_tokens = stream_usage.get("completion_tokens", 0)
+                        cached_tokens = stream_usage.get("cached_tokens", 0)
+                        total_tokens = stream_usage.get("total_tokens", 0)
+                        user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
+                        cost, provider_cost, cost_detail = compute_cost(
+                            prompt_tokens, completion_tokens, cached_tokens,
+                            user_input_price=user_prices.get("input", 0),
+                            user_output_price=user_prices.get("output", 0),
+                            user_cached_price=user_prices.get("cached_input", 0),
+                            provider_input_price=target_info.get("input_price_per_million", 0),
+                            provider_output_price=target_info.get("output_price_per_million", 0),
+                            provider_cached_price=target_info.get("cached_input_price_per_million", 0),
+                        )
+                        update_kwargs.update(
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            cached_tokens=cached_tokens,
+                            total_tokens=total_tokens,
+                            cost=cost,
+                            provider_cost=provider_cost,
+                            cost_detail=cost_detail,
+                        )
+                    await CallLogGateway.update_call_log(**update_kwargs)
 
         return StreamingResponse(
             _stream_sse(),
@@ -264,14 +308,31 @@ async def chat_completions(
 
     if call_log_created:
         usage = response_payload.get("usage") or {}
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        cached_tokens = usage.get("cached_tokens", 0)
+        total_tokens = usage.get("total_tokens", 0)
+        user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
+        cost, provider_cost, cost_detail = compute_cost(
+            prompt_tokens, completion_tokens, cached_tokens,
+            user_input_price=user_prices.get("input", 0),
+            user_output_price=user_prices.get("output", 0),
+            user_cached_price=user_prices.get("cached_input", 0),
+            provider_input_price=target_info.get("input_price_per_million", 0),
+            provider_output_price=target_info.get("output_price_per_million", 0),
+            provider_cached_price=target_info.get("cached_input_price_per_million", 0),
+        )
         await CallLogGateway.update_call_log(
             settings=settings,
             request_id=request_id,
             status=1,
-            prompt_tokens=usage.get("prompt_tokens", 0),
-            completion_tokens=usage.get("completion_tokens", 0),
-            cached_tokens=usage.get("cached_tokens", 0),
-            total_tokens=usage.get("total_tokens", 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+            total_tokens=total_tokens,
+            cost=cost,
+            provider_cost=provider_cost,
+            cost_detail=cost_detail,
             duration_ms=int((time.monotonic() - t_start) * 1000),
         )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,8 @@ from common.core.exceptions import NotFoundException, ValidationException
 _logger = logging.getLogger(__name__)
 
 FIVEWAY_ROUTE_ORDER = ["纠错", "工具调用", "通用任务", "任务拆解", "编程"]
+
+_TIER_MODEL_KEY_RE = re.compile(r"^tier_[1-5]_model$")
 
 _TYPE_VALIDATORS = {
     "float": lambda v: float(v),
@@ -138,6 +141,32 @@ class RoutingSettingService:
         )
         await db.commit()
         return await RoutingSettingService.list_all(db)
+
+    @staticmethod
+    async def validate_tier_model_coverage(
+        db: AsyncSession, items: list[tuple[str, str]],
+    ) -> None:
+        """Raise ValidationException if any tier model slug has no pool coverage."""
+        from admin_service.repositories.pool_repository import PoolRepository
+
+        tier_models = [
+            (k, v.strip()) for k, v in items
+            if _TIER_MODEL_KEY_RE.match(k) and v.strip()
+        ]
+        if not tier_models:
+            return
+
+        slugs = list({v for _, v in tier_models})
+        available = await PoolRepository(db).get_available_model_slugs()
+        available_set = {row[0] for row in available}
+
+        missing = []
+        for key, slug in tier_models:
+            if slug not in available_set:
+                tier_num = key.replace("tier_", "").replace("_model", "")
+                missing.append(f"tier {tier_num} 模型 '{slug}' 在号池中无可用通道")
+        if missing:
+            raise ValidationException("；".join(missing))
 
     @staticmethod
     async def resolve_for_internal(db: AsyncSession) -> dict[str, Any]:

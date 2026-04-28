@@ -19,6 +19,9 @@ from common.utils.timezone import now
 from user_service.config import settings
 from user_service.dependencies import get_db_session
 from user_service.models.api_call_log import ApiCallLog
+from user_service.models.balance_transaction import BalanceTransaction
+from user_service.repositories.api_key_repository import ApiKeyRepository
+from user_service.repositories.balance_tx_repository import BalanceTxRepository
 from user_service.repositories.user_repository import UserRepository
 from user_service.services.api_key_service import ApiKeyService
 from user_service.services.auth_service import AuthService
@@ -63,6 +66,7 @@ class InternalApiKeyValidateResponse(BaseModel):
     id: int
     user_id: int
     name: str
+    balance: int
 
 
 # --- Admin user-management schemas ---
@@ -318,10 +322,12 @@ async def validate_api_key(
         model=payload.model,
         client_ip=payload.client_ip,
     )
+    user = await UserRepository(db).get_by_id(api_key.user_id)
     return InternalApiKeyValidateResponse(
         id=int(api_key.id),
         user_id=int(api_key.user_id),
         name=api_key.name,
+        balance=int(user.balance) if user else 0,
     )
 
 
@@ -687,6 +693,7 @@ class InternalUpdateCallLogRequest(BaseModel):
     error_code: str | None = Field(None, max_length=32)
     error_msg: str | None = Field(None, max_length=1024)
     cost: int | None = None
+    provider_cost: int | None = None
     cost_detail: dict | None = None
 
 
@@ -696,7 +703,7 @@ _CALL_LOG_UPDATE_FIELDS = {
     "inference_config_source", "routing_tier", "score_source",
     "router_trace_id", "inference_error_code", "prompt_tokens",
     "completion_tokens", "cached_tokens", "total_tokens", "duration_ms",
-    "error_code", "error_msg", "cost", "cost_detail",
+    "error_code", "error_msg", "cost", "provider_cost", "cost_detail",
 }
 
 
@@ -775,4 +782,42 @@ async def update_call_log(
             setattr(log, field_name, value)
     log.updated_at = now()
     await db.commit()
+
+    cost = updates.get("cost", 0) or 0
+    final_status = updates.get("status")
+    if cost > 0 and final_status == 1:
+        tx_repo = BalanceTxRepository(db)
+        already_billed = await tx_repo.exists_by_ref(
+            tx_type=BalanceTransaction.TYPE_CONSUME,
+            ref_type="api_call",
+            ref_id=request_id,
+        )
+        if not already_billed:
+            user = await UserRepository(db).get_by_id(log.user_id, for_update=True)
+            if user is not None:
+                balance_before = int(user.balance)
+                user.balance = max(int(user.balance) - cost, 0)
+                user.used_amount += cost
+                user.total_requests += 1
+                total_tokens = updates.get("total_tokens", 0) or 0
+                user.total_tokens += total_tokens
+                tx_repo.add(
+                    BalanceTransaction(
+                        user_id=user.id,
+                        type=BalanceTransaction.TYPE_CONSUME,
+                        amount=-cost,
+                        balance_before=balance_before,
+                        balance_after=int(user.balance),
+                        ref_type="api_call",
+                        ref_id=request_id,
+                    )
+                )
+                if log.api_key_id:
+                    api_key = await ApiKeyRepository(db).get_owned_key(
+                        log.api_key_id, user.id, for_update=True,
+                    )
+                    if api_key is not None:
+                        api_key.quota_used += cost
+                await db.commit()
+
     return {"ok": True}

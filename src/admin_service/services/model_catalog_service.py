@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,6 +82,7 @@ class ModelCatalogService:
             "description": model.description,
             "price_input_per_m_fen": model.price_input_per_m_fen,
             "price_output_per_m_fen": model.price_output_per_m_fen,
+            "price_cached_input_per_m_fen": model.price_cached_input_per_m_fen,
             "capability_tags": list(model.capability_tags or []),
             "context_window": model.context_window,
             "max_output_tokens": model.max_output_tokens,
@@ -365,6 +366,7 @@ class ModelCatalogService:
             description=payload.description,
             price_input_per_m_fen=payload.price_input_per_m_fen,
             price_output_per_m_fen=payload.price_output_per_m_fen,
+            price_cached_input_per_m_fen=payload.price_cached_input_per_m_fen,
             capability_tags=payload.capability_tags,
             context_window=payload.context_window,
             max_output_tokens=payload.max_output_tokens,
@@ -461,3 +463,28 @@ class ModelCatalogService:
                 user_agent=user_agent,
             )
         await db.commit()
+
+    @staticmethod
+    async def get_prices_by_slugs(
+        db: AsyncSession, slugs: list[str],
+    ) -> dict[str, dict[str, Any]]:
+        """Return user-facing prices keyed by model slug."""
+        if not slugs:
+            return {}
+        from sqlalchemy import select
+        rows = await db.execute(
+            select(
+                SupportedModel.slug,
+                SupportedModel.price_input_per_m_fen,
+                SupportedModel.price_output_per_m_fen,
+                SupportedModel.price_cached_input_per_m_fen,
+            ).where(SupportedModel.slug.in_(slugs))
+        )
+        result: dict[str, dict[str, Any]] = {}
+        for slug, inp, out, cached in rows.all():
+            result[slug] = {
+                "input": inp or 0,
+                "output": out or 0,
+                "cached_input": cached or 0,
+            }
+        return result

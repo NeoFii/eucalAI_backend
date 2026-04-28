@@ -67,6 +67,7 @@ def build_default_runtime_config() -> Dict[str, Any]:
         },
         "model_providers": {},
         "model_channels": {},
+        "model_prices": {},
     }
 
 
@@ -180,9 +181,24 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
                     "upstream_model": str(ch["upstream_model"]).strip(),
                     "priority": int(ch.get("priority", 0)),
                     "weight": int(ch.get("weight", 1)),
+                    "input_price_per_million": int(ch.get("input_price_per_million", 0)),
+                    "output_price_per_million": int(ch.get("output_price_per_million", 0)),
+                    "cached_input_price_per_million": int(ch.get("cached_input_price_per_million", 0)),
                 })
             if validated:
                 model_channels[str(model_name).strip()] = validated
+
+    # Model prices (user-facing, from supported_models)
+    model_prices_raw = raw.get("model_prices", {})
+    model_prices: Dict[str, Dict[str, int]] = {}
+    if isinstance(model_prices_raw, dict):
+        for model_name, prices in model_prices_raw.items():
+            if isinstance(prices, dict):
+                model_prices[str(model_name).strip()] = {
+                    "input": int(prices.get("input", 0)),
+                    "output": int(prices.get("output", 0)),
+                    "cached_input": int(prices.get("cached_input", 0)),
+                }
 
     return {
         "router_alias": router_alias,
@@ -193,6 +209,7 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
         "tier_model_map": tier_model_map,
         "model_providers": model_providers,
         "model_channels": model_channels,
+        "model_prices": model_prices,
     }
 
 
@@ -206,6 +223,7 @@ def clone_runtime_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "tier_model_map": dict(config["tier_model_map"]),
         "model_providers": {k: dict(v) for k, v in config.get("model_providers", {}).items()},
         "model_channels": {k: [dict(c) for c in v] for k, v in config.get("model_channels", {}).items()},
+        "model_prices": {k: dict(v) for k, v in config.get("model_prices", {}).items()},
     }
 
 

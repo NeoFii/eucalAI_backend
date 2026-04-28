@@ -61,6 +61,23 @@ class PoolRepository(BaseRepository[Pool]):
         )
         return list(rows.all())
 
+    async def get_available_model_slugs(self) -> list[tuple[str, str]]:
+        """Return (model_slug, pool_name) pairs for models with active routing coverage."""
+        stmt = (
+            select(PoolModel.model_slug, Pool.name)
+            .join(Pool, Pool.id == PoolModel.pool_id)
+            .join(PoolAccount, Pool.id == PoolAccount.pool_id)
+            .where(
+                Pool.is_enabled.is_(True),
+                PoolModel.is_enabled.is_(True),
+                PoolAccount.status == "active",
+            )
+            .group_by(PoolModel.model_slug, Pool.id, Pool.name)
+            .order_by(PoolModel.model_slug, Pool.priority.desc())
+        )
+        rows = await self.session.execute(stmt)
+        return [(row[0], row[1]) for row in rows.all()]
+
 
 class PoolModelRepository(BaseRepository[PoolModel]):
     def __init__(self, session: AsyncSession) -> None:

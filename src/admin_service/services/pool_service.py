@@ -388,6 +388,21 @@ class PoolService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    async def get_available_model_slugs(
+        db: AsyncSession,
+    ) -> list[dict[str, Any]]:
+        """Return model slugs that have active pool coverage, with pool names."""
+        repo = PoolRepository(db)
+        pairs = await repo.get_available_model_slugs()
+        grouped: dict[str, list[str]] = {}
+        for slug, pool_name in pairs:
+            grouped.setdefault(slug, []).append(pool_name)
+        return [
+            {"model_slug": slug, "pool_names": names}
+            for slug, names in grouped.items()
+        ]
+
+    @staticmethod
     async def resolve_model_channels(
         db: AsyncSession, model_slugs: list[str],
     ) -> dict[str, list[dict[str, Any]]]:
@@ -408,6 +423,9 @@ class PoolService:
                 "upstream_model": pool_model.upstream_model_id,
                 "priority": pool.priority,
                 "weight": account.weight,
+                "input_price_per_million": pool_model.input_price_per_million,
+                "output_price_per_million": pool_model.output_price_per_million,
+                "cached_input_price_per_million": pool_model.cached_input_price_per_million or 0,
             }
             result.setdefault(pool_model.model_slug, []).append(entry)
         return result

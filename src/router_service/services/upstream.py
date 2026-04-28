@@ -99,6 +99,9 @@ def resolve_model_channel_target(
         "api_key": api_key,
         "api_base": api_base,
         "upstream_model": upstream_model,
+        "input_price_per_million": selected.get("input_price_per_million", 0),
+        "output_price_per_million": selected.get("output_price_per_million", 0),
+        "cached_input_price_per_million": selected.get("cached_input_price_per_million", 0),
     }
 
 

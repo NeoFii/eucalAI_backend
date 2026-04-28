@@ -52,6 +52,7 @@ class SupportedModelItem(DateTimeModel):
     description: str | None = None
     price_input_per_m_fen: int | None = None
     price_output_per_m_fen: int | None = None
+    price_cached_input_per_m_fen: int | None = None
     capability_tags: list[str] = Field(default_factory=list)
     context_window: int | None = None
     max_output_tokens: int | None = None
@@ -101,6 +102,7 @@ class SupportedModelCreate(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     price_input_per_m_fen: int | None = Field(default=None, ge=0)
     price_output_per_m_fen: int | None = Field(default=None, ge=0)
+    price_cached_input_per_m_fen: int | None = Field(default=None, ge=0)
     capability_tags: list[str] = Field(default_factory=list, max_length=20)
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
@@ -142,6 +144,7 @@ class SupportedModelUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     price_input_per_m_fen: int | None = Field(default=None, ge=0)
     price_output_per_m_fen: int | None = Field(default=None, ge=0)
+    price_cached_input_per_m_fen: int | None = Field(default=None, ge=0)
     capability_tags: list[str] | None = None
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)

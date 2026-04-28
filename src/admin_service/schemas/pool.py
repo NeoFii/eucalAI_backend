@@ -190,3 +190,16 @@ class SyncModelsResponse(AdminBaseResponse):
 
 class CheckBalancesResponse(AdminBaseResponse):
     data: CheckBalancesResult | None = None
+
+
+# ---------------------------------------------------------------------------
+# Available model slugs (for tier model selection)
+# ---------------------------------------------------------------------------
+
+class AvailableModelSlugItem(BaseModel):
+    model_slug: str
+    pool_names: list[str]
+
+
+class AvailableModelSlugsResponse(AdminBaseResponse):
+    data: list[AvailableModelSlugItem] | None = None

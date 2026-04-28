@@ -10,6 +10,7 @@ from admin_service.dependencies import get_db_session, get_request_meta
 from admin_service.models import AdminUser
 from admin_service.policies import require_super_admin
 from admin_service.schemas.pool import (
+    AvailableModelSlugsResponse,
     CheckBalancesResponse,
     PoolAccountCreate,
     PoolAccountResponse,
@@ -63,6 +64,19 @@ async def list_pools(
     return PoolListResponse(
         data=PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
     )
+
+
+@router.get(
+    "/available-models",
+    response_model=AvailableModelSlugsResponse,
+    summary="List model slugs with active pool coverage",
+)
+async def list_available_model_slugs(
+    _current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> AvailableModelSlugsResponse:
+    items = await PoolService.get_available_model_slugs(db)
+    return AvailableModelSlugsResponse(data=items)
 
 
 @router.get("/{slug}", response_model=PoolDetailResponse, summary="Pool detail")

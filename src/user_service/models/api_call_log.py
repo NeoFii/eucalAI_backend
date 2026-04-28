@@ -66,6 +66,7 @@ class ApiCallLog(Base, SnowflakeIdMixin):
     cached_tokens = Column(Integer, default=0, nullable=False, comment="Cache-hit tokens")
     total_tokens = Column(Integer, default=0, nullable=False, comment="prompt+completion+cached")
     cost = Column(Integer, default=0, nullable=False, comment="User-side total charge (分)")
+    provider_cost = Column(Integer, default=0, nullable=False, comment="Provider-side cost (分)")
     cost_detail = Column(JSON, nullable=True, comment="Admin-only unit price breakdown")
     status = Column(
         SmallInteger,
