@@ -85,12 +85,14 @@ def create_app(
 
     configure_logging(
         _settings.log_level,
-        service_name="inference_service",
+        service_name="inference-service",
+        env=_settings.env,
         log_dir=log_dir,
         enable_file_logging=_settings.log_to_file,
         file_prefix="inference_service",
         file_max_bytes=_settings.log_file_max_bytes,
         file_backup_count=_settings.log_file_backup_count,
+        ring_buffer_capacity=int(os.getenv("LOG_RING_BUFFER_CAPACITY", "2000")),
     )
 
     @asynccontextmanager
@@ -99,7 +101,7 @@ def create_app(
         from inference_service.services.config_manager import ConfigManager
         from inference_service.services.router_engine import HybridIntegratedDifficultyRouter
 
-        log_event(logger, logging.INFO, "service_starting", service="inference_service")
+        log_event(logger, logging.INFO, "serviceStarting", service="inference-service")
         model_paths = load_model_paths(model_paths_config)
 
         config_mgr = ConfigManager(
@@ -113,10 +115,10 @@ def create_app(
             model_paths,
             runtime_config=config_mgr.load(),
         )
-        log_event(logger, logging.INFO, "service_ready", service="inference_service")
+        log_event(logger, logging.INFO, "serviceReady", service="inference-service")
         yield
         await config_mgr.stop()
-        log_event(logger, logging.INFO, "service_stopping", service="inference_service")
+        log_event(logger, logging.INFO, "serviceStopping", service="inference-service")
 
     from inference_service.api import classify
 
@@ -126,13 +128,21 @@ def create_app(
         lifespan=lifespan,
     )
 
+    from common.internal import build_internal_auth_dependency
+    from common.internal_logs import build_internal_logs_router
     from common.observability import install_observability
     from inference_service.error_handlers import install_error_handlers
 
-    install_observability(app, service_name="inference_service")
+    install_observability(app, service_name="inference-service")
     install_error_handlers(app)
 
     app.include_router(classify.router)
+
+    _logs_auth = build_internal_auth_dependency(
+        _settings.internal_secret,
+        allowed_callers={"admin-service"},
+    )
+    app.include_router(build_internal_logs_router(_logs_auth))
 
     @app.get("/ready")
     def ready() -> Dict[str, str]:

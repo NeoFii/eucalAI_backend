@@ -21,6 +21,8 @@ from admin_service.services.bootstrap_service import AdminBootstrapService
 from common.db import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
+from common.internal import build_internal_auth_dependency
+from common.internal_logs import build_internal_logs_router
 from common.observability import configure_logging_from_settings, install_observability, log_event
 from common.redis import check_redis_ready, close_redis, init_redis
 from common.utils.snowflake import configure_snowflake
@@ -89,6 +91,13 @@ install_observability(app, service_name=settings.SERVICE_NAME)
 
 register_exception_handlers(app)
 app.include_router(api_router)
+
+_logs_auth = build_internal_auth_dependency(
+    settings.INTERNAL_SECRET,
+    request_ttl_seconds=settings.INTERNAL_REQUEST_TTL_SECONDS,
+    allowed_callers={"admin-service"},
+)
+app.include_router(build_internal_logs_router(_logs_auth))
 
 
 @app.get("/health", tags=["health"])

@@ -14,6 +14,7 @@ from common.internal import InternalServiceError, InternalServiceResponseError
 from router_service.gateway import UserIdentityGateway, ValidatedApiKey
 
 if TYPE_CHECKING:
+    from router_service.services.channel_selector import ChannelSelector
     from router_service.services.config_manager import ConfigManager
     from router_service.services.inference_client import InferenceClient
     from router_service.settings import RouterSettings
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 _inference_client: Optional["InferenceClient"] = None
 _config_manager: Optional["ConfigManager"] = None
 _settings: Optional["RouterSettings"] = None
+_channel_selector: Optional["ChannelSelector"] = None
 
 # API key cache: sha256(raw_key) -> ValidatedApiKey
 _API_KEY_CACHE_TTL = 60.0
@@ -35,12 +37,14 @@ def init_globals(
     config_manager: "ConfigManager",
     settings: "RouterSettings",
     inference_client: "InferenceClient",
+    channel_selector: "ChannelSelector",
 ) -> None:
-    global _inference_client, _config_manager, _settings
+    global _inference_client, _config_manager, _settings, _channel_selector
 
     _settings = settings
     _inference_client = inference_client
     _config_manager = config_manager
+    _channel_selector = channel_selector
 
 
 def get_config_manager() -> "ConfigManager":
@@ -63,6 +67,12 @@ def get_settings() -> "RouterSettings":
     if _settings is None:
         raise RuntimeError("settings not initialized")
     return _settings
+
+
+def get_channel_selector() -> "ChannelSelector":
+    if _channel_selector is None:
+        raise RuntimeError("channel selector not initialized")
+    return _channel_selector
 
 
 def extract_client_ip(request: Request) -> str | None:

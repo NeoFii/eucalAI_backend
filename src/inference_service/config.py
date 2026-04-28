@@ -65,14 +65,11 @@ DEFAULT_INFERENCE_PORT = 8004
 # Model paths loader
 # ---------------------------------------------------------------------------
 class ModelPathsConfig:
-    """Loads model file paths from model_paths.json."""
+    """Loads model file paths from a dict or JSON file."""
 
     DEFAULT_HOOK_TARGET_TEMPLATE = "model.layers.{layer}.self_attn.o_proj"
 
-    def __init__(self, config_path: str):
-        with open(config_path, "r", encoding="utf-8") as f:
-            raw: Dict[str, Any] = json.load(f)
-
+    def __init__(self, raw: Dict[str, Any]):
         self.qwen_backbone: str = raw["qwen_backbone"]
         self.device: str = raw.get("device", "cuda:0")
         self.max_input_length: int = raw.get("max_input_length", 4096)
@@ -92,6 +89,12 @@ class ModelPathsConfig:
             if "meta" in cfg:
                 entry["meta"] = cfg["meta"]
             self.routers[name] = entry
+
+    @classmethod
+    def from_file(cls, config_path: str) -> "ModelPathsConfig":
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw: Dict[str, Any] = json.load(f)
+        return cls(raw)
 
     def get_heads(self, name: str) -> List[Tuple[int, int]]:
         return self.routers[name]["heads"]
@@ -120,7 +123,7 @@ def load_model_paths(config_path: str | None = None) -> ModelPathsConfig:
     if config_path is None:
         config_path = os.path.join(os.path.dirname(__file__), "..", "..", "model_paths.json")
         config_path = os.path.abspath(config_path)
-    return ModelPathsConfig(config_path)
+    return ModelPathsConfig.from_file(config_path)
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +139,7 @@ class InferenceSettings:
     runtime_config_path: str = ""
     log_dir: str = "logs"
     log_level: str = "INFO"
+    env: str = "development"
     log_to_file: bool = False
     log_file_max_bytes: int = 50 * 1024 * 1024
     log_file_backup_count: int = 5
@@ -155,6 +159,7 @@ class InferenceSettings:
             runtime_config_path=os.getenv("ROUTER_RUNTIME_CONFIG", ""),
             log_dir=os.getenv("INFERENCE_LOG_DIR", os.getenv("LOG_DIR", "logs")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
+            env=os.getenv("ENV", "development"),
             log_to_file=parse_bool_env(os.getenv("LOG_TO_FILE"), default=False),
             log_file_max_bytes=int(os.getenv("LOG_FILE_MAX_BYTES", str(50 * 1024 * 1024))),
             log_file_backup_count=int(os.getenv("LOG_FILE_BACKUP_COUNT", "5")),

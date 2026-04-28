@@ -124,7 +124,7 @@ class VoucherService:
         db: AsyncSession,
         *,
         code_id: int,
-        operator_id: int | None = None,
+        operator_id: str | None = None,
     ) -> VoucherRedemptionCode:
         _ = operator_id
         code = await VoucherRedemptionCodeRepository(db).get_by_id(code_id, for_update=True)

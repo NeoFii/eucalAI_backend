@@ -12,11 +12,10 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Any, Dict
 
-from common.observability import configure_logging
+from common.observability import configure_logging, get_ring_buffer, utc_now_iso
 
 LOGGER_APP = "router_service"
 LOGGER_ROUTING = "router_service.routing"
@@ -45,13 +44,9 @@ class JsonLineFormatter(logging.Formatter):
             data = record.msg
         else:
             data["message"] = record.getMessage()
-        if "ts" not in data:
-            data["ts"] = _utc_ts()
+        if "timestamp" not in data:
+            data["timestamp"] = utc_now_iso()
         return json.dumps(data, ensure_ascii=False, default=str)
-
-
-def _utc_ts() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _clear_handlers(logger: logging.Logger) -> None:
@@ -77,9 +72,11 @@ def setup_logging(
     log_dir: str = "logs",
     level: str = "INFO",
     *,
+    env: str = "development",
     enable_file_logging: bool = False,
     file_max_bytes: int = 50 * 1024 * 1024,
     file_backup_count: int = 5,
+    ring_buffer_capacity: int = 2000,
 ) -> None:
     global _initialized
     if _initialized:
@@ -91,12 +88,14 @@ def setup_logging(
 
     configure_logging(
         level,
-        service_name="router_service",
+        service_name="router-service",
+        env=env,
         log_dir=log_dir,
         enable_file_logging=enable_file_logging,
         file_prefix="app",
         file_max_bytes=file_max_bytes,
         file_backup_count=file_backup_count,
+        ring_buffer_capacity=ring_buffer_capacity,
     )
 
     # --- App logger: inherited JSON stdout/file handlers ---
@@ -135,6 +134,11 @@ def setup_logging(
     upstream_handler.setFormatter(JsonLineFormatter())
     upstream_logger.addHandler(upstream_handler)
 
+    ring = get_ring_buffer()
+    if ring is not None:
+        routing_logger.addHandler(ring)
+        upstream_logger.addHandler(ring)
+
 
 def get_app_logger() -> logging.Logger:
     return logging.getLogger(LOGGER_APP)
@@ -170,9 +174,9 @@ def log_routing_decision(
     inference_config_source: str | None = None,
 ) -> None:
     record: Dict[str, Any] = {
-        "ts": _utc_ts(),
-        "service": "router_service",
-        "event": "routing_decision",
+        "timestamp": utc_now_iso(),
+        "service": "router-service",
+        "event": "routingDecision",
         "request_id": request_id,
         "router_trace_id": router_trace_id,
         "requested_model": requested_model,
@@ -217,9 +221,9 @@ def log_upstream_call(
     router_trace_id: str | None = None,
 ) -> None:
     record: Dict[str, Any] = {
-        "ts": _utc_ts(),
-        "service": "router_service",
-        "event": "upstream_call",
+        "timestamp": utc_now_iso(),
+        "service": "router-service",
+        "event": "upstreamCall",
         "request_id": request_id,
         "router_trace_id": router_trace_id,
         "selected_model": selected_model,

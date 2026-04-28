@@ -22,6 +22,7 @@ from common.core.exceptions import (
     UserNotFoundException,
     WeakPasswordException,
 )
+from common.observability import log_event
 from common.utils import (
     create_access_token,
     create_refresh_token,
@@ -91,7 +92,7 @@ class AuthService:
         await db.commit()
         await db.refresh(user)
 
-        logger.info("用户注册成功: uid=%s", user.uid)
+        log_event(logger, logging.INFO, "userRegisterSuccess", uid=user.uid)
         return user
 
     @staticmethod
@@ -103,7 +104,7 @@ class AuthService:
         ip_address: Optional[str] = None,
     ) -> tuple[User, str, str]:
         """用户登录"""
-        logger.info("尝试登录: uid lookup for %s", email)
+        log_event(logger, logging.INFO, "userLoginAttempt", email=email)
         email = normalize_email(email)
         user_repo = UserRepository(db)
         user = await user_repo.get_by_email(email)
@@ -122,7 +123,7 @@ class AuthService:
 
             if user.login_fail_count >= LOGIN_MAX_FAILURES:
                 user.login_locked_until = now() + timedelta(hours=LOGIN_LOCK_DURATION_HOURS)
-                logger.warning("用户登录失败次数过多，账户已被锁定: uid=%s", user.uid)
+                log_event(logger, logging.WARNING, "userLoginLocked", uid=user.uid)
                 await db.commit()
                 raise InvalidCredentialsException(
                     detail=f"登录失败次数过多，账户已被锁定，请{int(LOGIN_LOCK_DURATION_HOURS * 60)}分钟后再试"
@@ -145,7 +146,7 @@ class AuthService:
         )
         await db.commit()
 
-        logger.info("用户登录成功: uid=%s", user.uid)
+        log_event(logger, logging.INFO, "userLoginSuccess", uid=user.uid)
         return user, access_token, refresh_token
 
     @staticmethod
@@ -166,7 +167,7 @@ class AuthService:
 
         session_repo.revoke(session)
         await db.commit()
-        logger.info("用户登出成功")
+        log_event(logger, logging.INFO, "userLogout")
 
     @staticmethod
     async def refresh_access_token(db: AsyncSession, refresh_token: str) -> tuple[str, str]:
@@ -220,7 +221,7 @@ class AuthService:
         session.expires_at = now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         await db.commit()
 
-        logger.info("刷新 access_token 成功: uid=%s", user.uid)
+        log_event(logger, logging.INFO, "userTokenRefreshed", uid=user.uid)
         return new_access_token, new_refresh_token
 
     @staticmethod
@@ -262,7 +263,7 @@ class AuthService:
         user.password_hash = hash_password(new_password)
         await AuthService._revoke_all_user_sessions(db, user.id)
         await db.commit()
-        logger.info("用户修改密码成功: uid=%s", user.uid)
+        log_event(logger, logging.INFO, "userPasswordChanged", uid=user.uid)
 
     @staticmethod
     async def _create_session_and_tokens(
@@ -338,7 +339,7 @@ class AuthService:
         email_service.mark_code_used(code_record)
         await db.commit()
 
-        logger.info("用户验证码登录成功: uid=%s", user.uid)
+        log_event(logger, logging.INFO, "userCodeLoginSuccess", uid=user.uid)
         return user, access_token, refresh_token
 
     @staticmethod
@@ -365,4 +366,4 @@ class AuthService:
         email_service.mark_code_used(code_record)
         await AuthService._revoke_all_user_sessions(db, user.id)
         await db.commit()
-        logger.info("用户重置密码成功: uid=%s", user.uid)
+        log_event(logger, logging.INFO, "userPasswordReset", uid=user.uid)

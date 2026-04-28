@@ -14,6 +14,7 @@ from common.core.exceptions import (
     InvalidTokenException,
     UserNotFoundException,
 )
+from common.observability import set_uid
 from user_service.db import get_db
 from common.utils.jwt import decode_token
 from user_service.config import settings
@@ -78,4 +79,5 @@ async def get_current_user(
     if not user:
         raise UserNotFoundException()
 
+    set_uid(user.uid)
     return user

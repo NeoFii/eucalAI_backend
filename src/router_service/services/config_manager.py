@@ -7,13 +7,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+from common.internal import InternalServiceResponseError
+from common.observability import log_event
 from router_service.gateway_admin import AdminConfigGateway
 from router_service.utils.runtime_config import (
     RuntimeConfigStore,
     normalize_runtime_config,
 )
-
-from common.internal import InternalServiceResponseError
 
 _logger = logging.getLogger("router_service")
 
@@ -65,9 +65,7 @@ class ConfigManager:
                 self._config_version = admin_config.get("version")
                 self._config_source = "admin"
                 self._last_updated_at = datetime.now(timezone.utc)
-                _logger.info(
-                    "loaded routing config from admin-service v%s", self._config_version
-                )
+                log_event(_logger, logging.INFO, "configLoadedFromAdmin", version=self._config_version)
             except Exception:
                 _logger.warning("admin config normalization failed, trying local fallback", exc_info=True)
                 admin_config = None
@@ -84,7 +82,7 @@ class ConfigManager:
                 self._config_version = None
                 self._config_source = "local_fallback"
                 self._last_updated_at = datetime.now(timezone.utc)
-                _logger.info("loaded routing config from local fallback")
+                log_event(_logger, logging.INFO, "configLoadedFromLocal")
             except RuntimeError:
                 raise
             except Exception:
@@ -119,9 +117,7 @@ class ConfigManager:
                 new_config = normalize_runtime_config(resp)
                 new_version = resp.get("version")
                 if new_version != self._config_version:
-                    _logger.info(
-                        "config updated: v%s → v%s", self._config_version, new_version
-                    )
+                    log_event(_logger, logging.INFO, "configUpdated", oldVersion=self._config_version, newVersion=new_version)
                 self._cached_config = new_config
                 self._config_version = new_version
                 self._config_source = "admin"

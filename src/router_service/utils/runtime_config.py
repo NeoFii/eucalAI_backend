@@ -66,6 +66,7 @@ def build_default_runtime_config() -> Dict[str, Any]:
             "5": "GLM4.7-Flash",
         },
         "model_providers": {},
+        "model_channels": {},
     }
 
 
@@ -157,6 +158,32 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
                 f"model_providers[{model_name}].api_key resolved to empty or unresolved value"
             )
 
+    # Model channels (v2 format from admin-service)
+    model_channels_raw = raw.get("model_channels", {})
+    model_channels: Dict[str, list] = {}
+    if isinstance(model_channels_raw, dict):
+        for model_name, channels in model_channels_raw.items():
+            if not isinstance(channels, list):
+                continue
+            validated = []
+            for ch in channels:
+                if not isinstance(ch, dict):
+                    continue
+                for key in ("channel_slug", "provider_slug", "api_key", "api_base", "upstream_model"):
+                    if key not in ch or not str(ch[key]).strip():
+                        raise ValueError(f"model_channels[{model_name}] channel missing {key}")
+                validated.append({
+                    "channel_slug": str(ch["channel_slug"]).strip(),
+                    "provider_slug": str(ch["provider_slug"]).strip(),
+                    "api_key": str(ch["api_key"]).strip(),
+                    "api_base": str(ch["api_base"]).strip(),
+                    "upstream_model": str(ch["upstream_model"]).strip(),
+                    "priority": int(ch.get("priority", 0)),
+                    "weight": int(ch.get("weight", 1)),
+                })
+            if validated:
+                model_channels[str(model_name).strip()] = validated
+
     return {
         "router_alias": router_alias,
         "route_order": list(FIVEWAY_ROUTE_ORDER),
@@ -165,6 +192,7 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
         "score_bands": score_bands,
         "tier_model_map": tier_model_map,
         "model_providers": model_providers,
+        "model_channels": model_channels,
     }
 
 
@@ -176,7 +204,8 @@ def clone_runtime_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "score_bands_raw": config["score_bands_raw"],
         "score_bands": list(config["score_bands"]),
         "tier_model_map": dict(config["tier_model_map"]),
-        "model_providers": {k: dict(v) for k, v in config["model_providers"].items()},
+        "model_providers": {k: dict(v) for k, v in config.get("model_providers", {}).items()},
+        "model_channels": {k: [dict(c) for c in v] for k, v in config.get("model_channels", {}).items()},
     }
 
 

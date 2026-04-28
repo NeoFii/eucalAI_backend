@@ -42,4 +42,4 @@ class TopupOrder(Base, SnowflakeIdMixin, TimestampMixin):
     payment_raw = Column(JSON, nullable=True, comment="Third-party callback raw payload")
     paid_at = Column(DateTime, nullable=True, comment="Paid timestamp")
     remark = Column(String(255), nullable=True, comment="Admin note")
-    operator_id = Column(BigInteger, nullable=True, comment="Admin uid for manual top-ups")
+    operator_id = Column(String(20), nullable=True, comment="Admin NanoID uid for manual top-ups")

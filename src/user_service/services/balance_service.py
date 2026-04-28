@@ -185,7 +185,7 @@ class BalanceService:
         user_id: int,
         amount: int,
         order_no: str,
-        operator_id: int | None,
+        operator_id: str | None,
         remark: str = "",
     ) -> None:
         if amount <= 0:
@@ -229,7 +229,7 @@ class BalanceService:
         db: AsyncSession,
         user_id: int,
         amount: int,
-        operator_id: int,
+        operator_id: str | None,
         remark: str,
     ) -> None:
         if amount == 0:

@@ -99,3 +99,6 @@ asyncio_mode = "auto"
 filterwarnings = [
     "ignore:'crypt' is deprecated and slated for removal in Python 3\\.13:DeprecationWarning:passlib\\.utils",
 ]
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

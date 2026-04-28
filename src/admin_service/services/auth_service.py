@@ -19,6 +19,7 @@ from common.core.exceptions import (
     TokenExpiredException,
     WeakPasswordException,
 )
+from common.observability import log_event
 from common.token_blacklist import blacklist_token, is_token_blacklisted
 from common.utils import (
     create_access_token,
@@ -59,7 +60,7 @@ class AdminAuthService:
         ip_address: Optional[str] = None,
     ) -> tuple[AdminUser, str]:
         """Authenticate an admin and issue an access token."""
-        logger.info("Admin login attempt: %s", email)
+        log_event(logger, logging.INFO, "adminLoginAttempt", email=email)
         user_repo = AdminUserRepository(db)
         admin = await user_repo.get_by_email(email)
 
@@ -149,7 +150,7 @@ class AdminAuthService:
             )
 
         await db.commit()
-        logger.info("Admin login succeeded: %s", email)
+        log_event(logger, logging.INFO, "adminLoginSuccess", email=email)
         return admin, access_token
 
     @staticmethod
@@ -159,7 +160,7 @@ class AdminAuthService:
         refresh_token: str | None = None,
     ) -> None:
         """Log out an admin and revoke active tokens."""
-        logger.info("Admin logout: %s", admin.email)
+        log_event(logger, logging.INFO, "adminLogout", email=admin.email)
         if access_token:
             remaining = _remaining_ttl(access_token)
             await blacklist_token(get_token_jti(access_token), remaining)
@@ -260,4 +261,4 @@ class AdminAuthService:
                         admin.uid,
                     )
 
-        logger.info("Admin password changed: uid=%s", admin.uid)
+        log_event(logger, logging.INFO, "adminPasswordChanged", uid=admin.uid)

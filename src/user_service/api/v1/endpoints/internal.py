@@ -140,7 +140,7 @@ class InternalTransactionItem(BaseModel):
     ref_type: str | None = None
     ref_id: str | None = None
     remark: str | None = None
-    operator_id: int | None = None
+    operator_id: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -505,7 +505,6 @@ async def topup_user(
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     user = await _get_user_or_404(db, uid)
-    # operator_uid is admin's snowflake uid, passed through as operator_id
     order = await TopupOrderService.create_manual(
         db,
         user_id=int(user.id),
@@ -528,7 +527,6 @@ async def adjust_user_balance(
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     user = await _get_user_or_404(db, uid)
-    # operator_uid is admin's snowflake uid, passed through as operator_id
     await BalanceService.admin_adjust(
         db,
         user_id=int(user.id),

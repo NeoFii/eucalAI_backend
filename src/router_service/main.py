@@ -33,6 +33,7 @@ def create_app(
 ) -> FastAPI:
     from router_service.services.config_manager import ConfigManager
     from router_service.services.inference_client import InferenceClient
+    from router_service.services.channel_selector import ChannelSelector
     from router_service.settings import RouterSettings
 
     settings = RouterSettings.from_env()
@@ -44,9 +45,11 @@ def create_app(
     setup_logging(
         log_dir=log_dir,
         level=settings.log_level,
+        env=settings.env,
         enable_file_logging=settings.log_to_file,
         file_max_bytes=settings.log_file_max_bytes,
         file_backup_count=settings.log_file_backup_count,
+        ring_buffer_capacity=int(os.getenv("LOG_RING_BUFFER_CAPACITY", "2000")),
     )
     logger = get_app_logger()
 
@@ -64,20 +67,23 @@ def create_app(
         runtime_config_path=runtime_config_path,
     )
 
+    channel_selector = ChannelSelector()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        log_event(logger, logging.INFO, "service_starting", service="router_service")
+        log_event(logger, logging.INFO, "serviceStarting", service="router-service")
         await config_manager.start()
         init_globals(
             config_manager=config_manager,
             settings=settings,
             inference_client=inference_client,
+            channel_selector=channel_selector,
         )
-        log_event(logger, logging.INFO, "service_ready", service="router_service")
+        log_event(logger, logging.INFO, "serviceReady", service="router-service")
         yield
         await config_manager.stop()
         await inference_client.close()
-        log_event(logger, logging.INFO, "service_stopping", service="router_service")
+        log_event(logger, logging.INFO, "serviceStopping", service="router-service")
 
     app = FastAPI(
         title="Router Service",
@@ -85,13 +91,21 @@ def create_app(
         lifespan=lifespan,
     )
 
+    from common.internal import build_internal_auth_dependency
+    from common.internal_logs import build_internal_logs_router
     from common.observability import install_observability
 
-    install_observability(app, service_name="router_service")
+    install_observability(app, service_name="router-service")
 
     app.include_router(meta.router)
     app.include_router(chat.router)
     app.include_router(completions.router)
+
+    _logs_auth = build_internal_auth_dependency(
+        settings.internal_secret,
+        allowed_callers={"admin-service"},
+    )
+    app.include_router(build_internal_logs_router(_logs_auth))
     return app
 
 

@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 import httpx
 from fastapi import Header, HTTPException, Request, status
 
-from common.observability import REQUEST_ID_HEADER, get_request_id
+from common.observability import REQUEST_ID_HEADER, get_request_id, TRACE_ID_HEADER, get_trace_id
 
 INTERNAL_CALLER_HEADER = "X-Internal-Service"
 INTERNAL_TIMESTAMP_HEADER = "X-Internal-Timestamp"
@@ -251,6 +251,9 @@ def build_internal_headers(
     request_id = get_request_id()
     if request_id:
         headers[REQUEST_ID_HEADER] = request_id
+    trace_id = get_trace_id()
+    if trace_id:
+        headers[TRACE_ID_HEADER] = trace_id
     return headers
 
 

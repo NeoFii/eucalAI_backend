@@ -71,6 +71,37 @@ def resolve_model_provider_target(
     }
 
 
+def resolve_model_channel_target(
+    logical_model: str,
+    model_channels: Dict[str, list],
+    channel_selector: Any,
+) -> Dict[str, str]:
+    """Resolve a model to a specific channel from the pool."""
+    channels = model_channels.get(logical_model)
+    if not channels:
+        raise KeyError(f"no channels available for model: {logical_model}")
+
+    selected = channel_selector.select(logical_model, channels)
+    api_base = normalize_api_base(str(selected["api_base"]))
+    api_key = str(selected["api_key"]).strip()
+    upstream_model = str(selected["upstream_model"]).strip()
+
+    if not api_key:
+        raise ValueError(f"missing api_key for channel {selected.get('channel_slug')}")
+    if not api_base:
+        raise ValueError(f"missing api_base for channel {selected.get('channel_slug')}")
+    _validate_upstream_url(api_base)
+
+    return {
+        "logical_model": logical_model,
+        "channel_slug": selected["channel_slug"],
+        "provider_slug": selected["provider_slug"],
+        "api_key": api_key,
+        "api_base": api_base,
+        "upstream_model": upstream_model,
+    }
+
+
 _THINK_TAG_RE = re.compile(r"<think>[\s\S]*?</think>\s*", re.IGNORECASE)
 
 

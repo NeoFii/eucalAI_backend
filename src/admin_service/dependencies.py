@@ -14,6 +14,7 @@ from admin_service.db import get_db
 from admin_service.models import AdminUser
 from admin_service.services.auth_service import AdminAuthService
 from common.core.exceptions import AuthenticationException, InvalidTokenException
+from common.observability import set_uid
 from common.token_blacklist import is_token_blacklisted
 from common.utils.jwt import decode_token, get_token_jti
 
@@ -82,6 +83,7 @@ async def get_current_admin(
     if not admin:
         raise AuthenticationException(detail="管理员不存在")
 
+    set_uid(admin.uid)
     return admin
 
 

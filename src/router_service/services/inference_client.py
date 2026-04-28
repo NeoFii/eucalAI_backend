@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 
 import httpx
 
-from common.observability import REQUEST_ID_HEADER, get_request_id
+from common.observability import REQUEST_ID_HEADER, TRACE_ID_HEADER, get_request_id, get_trace_id, log_event
 
 logger = logging.getLogger("router_service")
 
@@ -71,9 +71,9 @@ class InferenceClient:
         self._cb_failures += 1
         if self._cb_failures >= self._cb_threshold:
             self._cb_open_until = time.monotonic() + self._cb_cooldown
-            logger.warning(
-                "inference-service circuit breaker opened after %d failures, cooldown %.1fs",
-                self._cb_failures, self._cb_cooldown,
+            log_event(
+                logger, logging.WARNING, "inferenceCircuitBreakerOpen",
+                failures=self._cb_failures, cooldownSeconds=self._cb_cooldown,
             )
 
     async def classify(
@@ -91,6 +91,9 @@ class InferenceClient:
         rid = get_request_id()
         if rid:
             headers[REQUEST_ID_HEADER] = rid
+        tid = get_trace_id()
+        if tid:
+            headers[TRACE_ID_HEADER] = tid
 
         payload: Dict[str, Any] = {"messages": messages}
         if request_id:
@@ -154,7 +157,10 @@ class InferenceClient:
                 await asyncio.sleep(self._retry_backoff)
 
         self._record_failure()
-        logger.error("inference-service failed after %d attempts: %s", attempts, last_exc)
+        log_event(
+            logger, logging.ERROR, "inferenceAllAttemptsFailed",
+            attempts=attempts, lastError=str(last_exc),
+        )
         return ClassifyResult(
             success=False,
             error_code="unavailable",

@@ -27,6 +27,7 @@ class RouterSettings:
     config_fetch_timeout_seconds: float = 5.0
     log_level: str = "INFO"
     log_dir: str = "logs"
+    env: str = "development"
     log_to_file: bool = False
     log_file_max_bytes: int = 50 * 1024 * 1024
     log_file_backup_count: int = 5
@@ -53,6 +54,7 @@ class RouterSettings:
             config_fetch_timeout_seconds=float(os.getenv("CONFIG_FETCH_TIMEOUT_SECONDS", "5.0")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             log_dir=os.getenv("ROUTER_LOG_DIR", os.getenv("LOG_DIR", "logs")),
+            env=os.getenv("ENV", "development"),
             log_to_file=parse_bool_env(os.getenv("LOG_TO_FILE"), default=False),
             log_file_max_bytes=int(os.getenv("LOG_FILE_MAX_BYTES", str(50 * 1024 * 1024))),
             log_file_backup_count=int(os.getenv("LOG_FILE_BACKUP_COUNT", "5")),

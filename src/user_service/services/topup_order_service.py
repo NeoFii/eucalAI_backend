@@ -25,7 +25,7 @@ class TopupOrderService:
         db: AsyncSession,
         user_id: int,
         amount: int,
-        operator_id: int,
+        operator_id: str | None = None,
         remark: str = "",
     ) -> TopupOrder:
         if amount <= 0:

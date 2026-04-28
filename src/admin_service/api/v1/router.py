@@ -9,7 +9,10 @@ from admin_service.api.v1.endpoints import (
     internal,
     model_catalog,
     model_catalog_admin,
+    pools,
     routing_config,
+    routing_settings,
+    service_logs,
     user_management,
     vouchers,
 )
@@ -22,5 +25,8 @@ api_router.include_router(vouchers.router)
 api_router.include_router(model_catalog.router)
 api_router.include_router(model_catalog_admin.router, prefix="/admin")
 api_router.include_router(routing_config.router, prefix="/admin")
+api_router.include_router(routing_settings.router, prefix="/admin")
+api_router.include_router(pools.router, prefix="/admin")
+api_router.include_router(service_logs.router, prefix="/admin")
 api_router.include_router(internal.router)
 api_router.include_router(user_management.router)

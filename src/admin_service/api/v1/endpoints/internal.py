@@ -12,7 +12,8 @@ from admin_service.schemas.routing_config import (
     InternalRoutingConfigFull,
     InternalRoutingConfigInference,
 )
-from admin_service.services.routing_config_service import RoutingConfigService
+from admin_service.services.pool_service import PoolService
+from admin_service.services.routing_setting_service import RoutingSettingService
 from admin_service.services.model_catalog_service import ModelCatalogService
 from admin_service.utils.parsing import parse_comma_separated
 from common.core.exceptions import (
@@ -74,15 +75,21 @@ verify_routing_config_inference = build_internal_auth_dependency(
 
 @router.get(
     "/routing-config/active/full",
-    response_model=InternalRoutingConfigFull,
-    summary="Active routing config for router-service",
+    summary="Active routing config for router-service (v2: from routing_settings + pools)",
 )
 async def get_active_routing_config_full(
     _: None = Depends(verify_routing_config_full),
     db: AsyncSession = Depends(get_db_session),
-) -> InternalRoutingConfigFull:
+):
     try:
-        return await RoutingConfigService.resolve_active_full(db)
+        base = await RoutingSettingService.resolve_for_internal(db)
+        tier_models = list(base["tier_model_map"].values())
+        all_model_slugs = list(set(tier_models))
+        model_channels = await PoolService.resolve_model_channels(db, all_model_slugs)
+        return {
+            **base,
+            "model_channels": model_channels,
+        }
     except NotFoundException as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
     except ValidationException as exc:
@@ -99,7 +106,15 @@ async def get_active_routing_config_inference(
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalRoutingConfigInference:
     try:
-        return await RoutingConfigService.resolve_active_inference(db)
+        base = await RoutingSettingService.resolve_for_internal(db)
+        return InternalRoutingConfigInference(
+            version=0,
+            status="active",
+            route_order=base["route_order"],
+            weights=base["weights"],
+            score_bands=base["score_bands"],
+            tier_model_map=base["tier_model_map"],
+        )
     except NotFoundException as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
 

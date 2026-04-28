@@ -39,5 +39,5 @@ class BalanceTransaction(Base, SnowflakeIdMixin):
     ref_type = Column(String(32), nullable=True, comment="topup_order / api_call / voucher_code")
     ref_id = Column(String(64), nullable=True, comment="related document id")
     remark = Column(String(255), nullable=True, comment="admin/system note")
-    operator_id = Column(BigInteger, nullable=True, comment="admin uid when type=ADMIN_ADJUST")
+    operator_id = Column(String(20), nullable=True, comment="admin NanoID uid when type=ADMIN_ADJUST")
     created_at = Column(DateTime, default=now, nullable=False, comment="Created at")

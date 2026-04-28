@@ -24,6 +24,7 @@ class BaseServiceSettings(BaseSettings):
     PORT: int = 8000
 
     DEBUG: bool = False
+    ENV: str = "development"
 
     ALLOWED_HOSTS: Union[str, List[str]] = [
         "http://localhost:5173",
@@ -72,6 +73,7 @@ class BaseServiceSettings(BaseSettings):
     LOG_TO_FILE: bool = False
     LOG_FILE_MAX_BYTES: int = 50 * 1024 * 1024
     LOG_FILE_BACKUP_COUNT: int = 5
+    LOG_RING_BUFFER_CAPACITY: int = 2000
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod

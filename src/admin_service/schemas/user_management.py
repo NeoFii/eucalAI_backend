@@ -134,7 +134,7 @@ class UserTransactionItem(DateTimeModel):
     ref_type: Optional[str] = None
     ref_id: Optional[str] = None
     remark: Optional[str] = None
-    operator_id: Optional[int] = None
+    operator_id: Optional[str] = None
     created_at: datetime
 
 

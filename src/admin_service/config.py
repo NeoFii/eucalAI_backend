@@ -38,6 +38,8 @@ class Settings(BaseServiceSettings):
 
     INTERNAL_API_PREFIX: str = "/internal"
     USER_SERVICE_URL: str = "http://127.0.0.1:8000"
+    ROUTER_SERVICE_URL: str = "http://127.0.0.1:8003"
+    INFERENCE_SERVICE_URL: str = "http://127.0.0.1:8004"
 
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"

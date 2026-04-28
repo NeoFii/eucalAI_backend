@@ -8,9 +8,9 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from router_service.dependencies import get_config_manager, get_inference_client
+from router_service.dependencies import get_config_manager, get_inference_client, get_channel_selector
 from router_service.logging import log_routing_decision
-from router_service.services.upstream import resolve_model_provider_target
+from router_service.services.upstream import resolve_model_provider_target, resolve_model_channel_target
 
 
 class RoutingError(HTTPException):
@@ -101,7 +101,7 @@ async def route_and_resolve(
                 )
 
             tier3_model = config["tier_model_map"].get(3)
-            if tier3_model and tier3_model in config["model_providers"]:
+            if tier3_model and tier3_model in _available_models(config):
                 selected_model = tier3_model
                 logger.warning(
                     "inference classify failed (error_code=%s), falling back to tier 3: %s",
@@ -126,12 +126,25 @@ async def route_and_resolve(
                     detail="inference service unavailable and no fallback model available",
                 )
 
-    elif requested_model not in config["model_providers"]:
+    elif requested_model not in _available_models(config):
         raise RoutingError(
             status_code=404,
             error_code="model_not_found",
             detail=f"unsupported model: {requested_model}",
         )
 
-    target_info = resolve_model_provider_target(selected_model, config["model_providers"])
+    target_info = _resolve_target(selected_model, config)
     return selected_model, target_info, route_result, route_meta
+
+
+def _available_models(config: dict) -> set:
+    if "model_channels" in config:
+        return set(config["model_channels"].keys())
+    return set(config.get("model_providers", {}).keys())
+
+
+def _resolve_target(model: str, config: dict) -> dict:
+    if "model_channels" in config and config["model_channels"]:
+        selector = get_channel_selector()
+        return resolve_model_channel_target(model, config["model_channels"], selector)
+    return resolve_model_provider_target(model, config.get("model_providers", {}))
