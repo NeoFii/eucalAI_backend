@@ -1,4 +1,4 @@
-# Backend node: user-service + admin-service + user-worker.
+# Backend node: user-service + admin-service + user-worker + admin-worker.
 # Requires infra (MySQL + Redis) to be running first:
 #   docker compose -f deploy/docker-compose.infra.yml up -d
 
@@ -133,6 +133,44 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "scripts/runtime_probe.py", "worker-ready", "--database-url-env", "USER_DATABASE_URL", "--redis-url-env", "USER_QUEUE_REDIS_URL"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - backend
+
+  admin-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.admin-worker
+    restart: unless-stopped
+    environment:
+      ADMIN_DATABASE_URL: "mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-change-me}@mysql:3306/eucal_ai_admin"
+      ADMIN_QUEUE_REDIS_URL: ${ADMIN_QUEUE_REDIS_URL:-redis://redis:6379/3}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      PROVIDER_SECRET_MASTER_KEY: ${PROVIDER_SECRET_MASTER_KEY:-change-me}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me}
+      HEALTH_CHECK_LLM_PROBE_ENABLED: ${HEALTH_CHECK_LLM_PROBE_ENABLED:-true}
+      HEALTH_CHECK_TIMEOUT_SECONDS: ${HEALTH_CHECK_TIMEOUT_SECONDS:-15}
+      HEALTH_CHECK_RATE_LIMIT_DELAY: ${HEALTH_CHECK_RATE_LIMIT_DELAY:-0.5}
+      SNOWFLAKE_DATACENTER_ID: ${SNOWFLAKE_DATACENTER_ID:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: "/app/logs"
+      LOG_TO_FILE: ${LOG_TO_FILE:-true}
+      LOG_FILE_PREFIX: "admin-worker"
+      LOG_FILE_MAX_BYTES: ${LOG_FILE_MAX_BYTES:-52428800}
+      LOG_FILE_BACKUP_COUNT: ${LOG_FILE_BACKUP_COUNT:-5}
+      DEBUG: ${DEBUG:-false}
+    command: ["/app/.venv/bin/arq", "admin_service.worker.WorkerSettings"]
+    volumes:
+      - backend_logs:/app/logs
+    depends_on:
+      admin-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "worker-ready", "--database-url-env", "ADMIN_DATABASE_URL", "--redis-url-env", "ADMIN_QUEUE_REDIS_URL"]
       interval: 30s
       timeout: 10s
       retries: 3

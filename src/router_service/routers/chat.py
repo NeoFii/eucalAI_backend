@@ -122,9 +122,12 @@ async def chat_completions(
 
     t_upstream = time.monotonic()
     channel_slug = target_info.get("channel_slug")
-    max_channel_retries = 2 if channel_slug else 0
+    max_channel_retries = settings.channel_max_retries if channel_slug else 0
+    tried_slugs: set[str] = set()
 
     for _attempt in range(max_channel_retries + 1):
+        if channel_slug:
+            tried_slugs.add(channel_slug)
         try:
             litellm_response = await litellm.acompletion(
                 model=target_info["upstream_model"],
@@ -141,15 +144,27 @@ async def chat_completions(
                 get_channel_selector().report_success(channel_slug)
             break
         except Exception as exc:
+            from router_service.services.retry_policy import extract_status_code, should_retry
+
+            status_code = extract_status_code(exc)
             if channel_slug:
                 get_channel_selector().report_failure(channel_slug)
-            if _attempt < max_channel_retries:
+            if _attempt < max_channel_retries and should_retry(exc, status_code):
                 from router_service.services.routing import _resolve_target
                 config = get_config_manager().load()
                 try:
-                    target_info = _resolve_target(selected_model, config)
+                    target_info = _resolve_target(
+                        selected_model, config,
+                        excluded_slugs=frozenset(tried_slugs),
+                        retry_tier=_attempt + 1,
+                    )
                     channel_slug = target_info.get("channel_slug")
                     t_upstream = time.monotonic()
+                    logger.warning(
+                        "retrying upstream call (attempt %d/%d) for %s, switching to %s",
+                        _attempt + 1, max_channel_retries,
+                        selected_model, channel_slug or target_info["provider_slug"],
+                    )
                     continue
                 except Exception:
                     pass

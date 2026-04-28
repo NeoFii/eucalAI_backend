@@ -78,6 +78,7 @@ class PoolAccount(SnowflakeIdMixin, TimestampMixin, Base):
     tpm_limit = Column(Integer, nullable=True, comment="每分钟 token 上限")
     weight = Column(Integer, nullable=False, default=1, comment="轮转权重")
     last_checked_at = Column(DateTime, nullable=True, comment="上次检查时间")
+    last_health_check_error = Column(String(512), nullable=True, comment="上次健康检查错误信息")
     remark = Column(String(256), nullable=True)
     created_by = Column(
         BigInteger, ForeignKey("admin_users.id", ondelete="RESTRICT"), nullable=False,

@@ -143,8 +143,17 @@ def _available_models(config: dict) -> set:
     return set(config.get("model_providers", {}).keys())
 
 
-def _resolve_target(model: str, config: dict) -> dict:
+def _resolve_target(
+    model: str,
+    config: dict,
+    *,
+    excluded_slugs: frozenset[str] | None = None,
+    retry_tier: int = 0,
+) -> dict:
     if "model_channels" in config and config["model_channels"]:
         selector = get_channel_selector()
-        return resolve_model_channel_target(model, config["model_channels"], selector)
+        return resolve_model_channel_target(
+            model, config["model_channels"], selector,
+            excluded_slugs=excluded_slugs, retry_tier=retry_tier,
+        )
     return resolve_model_provider_target(model, config.get("model_providers", {}))

@@ -31,6 +31,12 @@ class RouterSettings:
     log_to_file: bool = False
     log_file_max_bytes: int = 50 * 1024 * 1024
     log_file_backup_count: int = 5
+    channel_max_retries: int = 2
+    channel_cooldown_seconds: float = 30.0
+    channel_auto_disable_enabled: bool = True
+    channel_auto_disable_failure_threshold: int = 5
+    channel_auto_disable_cooldown_seconds: float = 300.0
+    channel_health_redis_url: str = ""
 
     @classmethod
     def from_env(cls) -> "RouterSettings":
@@ -58,4 +64,16 @@ class RouterSettings:
             log_to_file=parse_bool_env(os.getenv("LOG_TO_FILE"), default=False),
             log_file_max_bytes=int(os.getenv("LOG_FILE_MAX_BYTES", str(50 * 1024 * 1024))),
             log_file_backup_count=int(os.getenv("LOG_FILE_BACKUP_COUNT", "5")),
+            channel_max_retries=int(os.getenv("CHANNEL_MAX_RETRIES", "2")),
+            channel_cooldown_seconds=float(os.getenv("CHANNEL_COOLDOWN_SECONDS", "30.0")),
+            channel_auto_disable_enabled=parse_bool_env(
+                os.getenv("CHANNEL_AUTO_DISABLE_ENABLED"), default=True,
+            ),
+            channel_auto_disable_failure_threshold=int(
+                os.getenv("CHANNEL_AUTO_DISABLE_FAILURE_THRESHOLD", "5")
+            ),
+            channel_auto_disable_cooldown_seconds=float(
+                os.getenv("CHANNEL_AUTO_DISABLE_COOLDOWN_SECONDS", "300.0")
+            ),
+            channel_health_redis_url=os.getenv("CHANNEL_HEALTH_REDIS_URL", ""),
         )

@@ -82,6 +82,14 @@ class Settings(BaseServiceSettings):
 
     PROVIDER_SECRET_MASTER_KEY: str = ""
 
+    ADMIN_QUEUE_REDIS_URL: str = "redis://127.0.0.1:6379/3"
+    ADMIN_WORKER_CONCURRENCY: int = 3
+    ADMIN_JOB_TIMEOUT_SECONDS: int = 600
+    HEALTH_CHECK_TIMEOUT_SECONDS: float = 15.0
+    HEALTH_CHECK_LLM_PROBE_ENABLED: bool = True
+    HEALTH_CHECK_LLM_PROBE_MAX_TOKENS: int = 5
+    HEALTH_CHECK_RATE_LIMIT_DELAY: float = 0.5
+
     LOG_FILE_PREFIX: str = "admin"
 
     @model_validator(mode="after")

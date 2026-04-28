@@ -67,10 +67,18 @@ def create_app(
         runtime_config_path=runtime_config_path,
     )
 
-    channel_selector = ChannelSelector()
+    channel_selector = ChannelSelector(
+        cooldown_seconds=settings.channel_cooldown_seconds,
+        auto_disable_enabled=settings.channel_auto_disable_enabled,
+        auto_disable_threshold=settings.channel_auto_disable_failure_threshold,
+        auto_disable_cooldown_seconds=settings.channel_auto_disable_cooldown_seconds,
+    )
+
+    _health_refresh_task = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        nonlocal _health_refresh_task
         log_event(logger, logging.INFO, "serviceStarting", service="router-service")
         await config_manager.start()
         init_globals(
@@ -79,8 +87,17 @@ def create_app(
             inference_client=inference_client,
             channel_selector=channel_selector,
         )
+        if settings.channel_health_redis_url:
+            import asyncio
+            _health_refresh_task = asyncio.create_task(
+                _health_cache_loop(settings.channel_health_redis_url, channel_selector, logger)
+            )
         log_event(logger, logging.INFO, "serviceReady", service="router-service")
         yield
+        if _health_refresh_task is not None:
+            _health_refresh_task.cancel()
+            import asyncio
+            await asyncio.gather(_health_refresh_task, return_exceptions=True)
         await config_manager.stop()
         await inference_client.close()
         log_event(logger, logging.INFO, "serviceStopping", service="router-service")
@@ -107,6 +124,51 @@ def create_app(
     )
     app.include_router(build_internal_logs_router(_logs_auth))
     return app
+
+
+async def _health_cache_loop(redis_url: str, selector: "ChannelSelector", logger: "logging.Logger") -> None:
+    import asyncio
+    import redis.asyncio as aioredis
+
+    conn = None
+    try:
+        conn = aioredis.from_url(redis_url, decode_responses=True)
+        await conn.ping()
+        log_event(logger, logging.INFO, "healthCacheRedisConnected")
+    except Exception:
+        logger.warning("health cache Redis unavailable, running without health data")
+        return
+
+    try:
+        while True:
+            await asyncio.sleep(30)
+            try:
+                keys = []
+                async for key in conn.scan_iter(match="channel_health:*", count=500):
+                    keys.append(key)
+                if not keys:
+                    selector.update_health_cache({})
+                    continue
+                values = await conn.mget(keys)
+                import json
+                cache: dict[str, str] = {}
+                for key, val in zip(keys, values):
+                    if val is None:
+                        continue
+                    suffix = key[len("channel_health:"):]
+                    try:
+                        data = json.loads(val)
+                        cache[suffix] = data.get("status", "unknown")
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                selector.update_health_cache(cache)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("health cache refresh failed", exc_info=True)
+    finally:
+        if conn:
+            await conn.aclose()
 
 
 app = create_app()

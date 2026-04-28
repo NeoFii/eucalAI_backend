@@ -75,13 +75,19 @@ def resolve_model_channel_target(
     logical_model: str,
     model_channels: Dict[str, list],
     channel_selector: Any,
+    *,
+    excluded_slugs: frozenset[str] | None = None,
+    retry_tier: int = 0,
 ) -> Dict[str, str]:
     """Resolve a model to a specific channel from the pool."""
     channels = model_channels.get(logical_model)
     if not channels:
         raise KeyError(f"no channels available for model: {logical_model}")
 
-    selected = channel_selector.select(logical_model, channels)
+    selected = channel_selector.select(
+        logical_model, channels,
+        excluded_slugs=excluded_slugs, retry_tier=retry_tier,
+    )
     api_base = normalize_api_base(str(selected["api_base"]))
     api_key = str(selected["api_key"]).strip()
     upstream_model = str(selected["upstream_model"]).strip()

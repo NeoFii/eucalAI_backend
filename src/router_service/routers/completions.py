@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from common.observability import get_request_id
-from router_service.dependencies import extract_client_ip, get_settings, require_api_key
+from router_service.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_settings, require_api_key
 from router_service.gateway import ValidatedApiKey
 from router_service.gateway_calllog import CallLogGateway
 from router_service.logging import log_upstream_call
@@ -126,43 +126,72 @@ async def completions(
     )
 
     t_upstream = time.monotonic()
-    try:
-        litellm_response = await litellm.acompletion(
-            model=target_info["upstream_model"],
-            messages=messages,
-            api_key=target_info["api_key"],
-            api_base=target_info["api_base"],
-            base_url=target_info["api_base"],
-            custom_llm_provider="openai",
-            stream=False,
-            timeout=45.0,
-            **forward_payload,
-        )
-    except Exception as exc:
-        upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
-        log_upstream_call(
-            request_id=request_id,
-            selected_model=selected_model,
-            provider_slug=target_info["provider_slug"],
-            upstream_model=target_info["upstream_model"],
-            api_base=target_info["api_base"],
-            status_code=502, ok=False,
-            latency_ms=upstream_latency_ms,
-            error=sanitize_error(exc),
-            config_version=config_version,
-            config_source=config_source,
-            router_trace_id=router_trace_id,
-        )
-        if call_log_created:
-            await CallLogGateway.update_call_log(
-                settings=settings,
-                request_id=request_id,
-                status=2,
-                error_code="upstream_error",
-                error_msg=sanitize_error(exc)[:512],
-                duration_ms=int((time.monotonic() - t_start) * 1000),
+    channel_slug = target_info.get("channel_slug")
+    max_channel_retries = settings.channel_max_retries if channel_slug else 0
+    tried_slugs: set[str] = set()
+
+    for _attempt in range(max_channel_retries + 1):
+        if channel_slug:
+            tried_slugs.add(channel_slug)
+        try:
+            litellm_response = await litellm.acompletion(
+                model=target_info["upstream_model"],
+                messages=messages,
+                api_key=target_info["api_key"],
+                api_base=target_info["api_base"],
+                base_url=target_info["api_base"],
+                custom_llm_provider="openai",
+                stream=False,
+                timeout=45.0,
+                **forward_payload,
             )
-        raise HTTPException(status_code=502, detail="upstream service error") from exc
+            if channel_slug:
+                get_channel_selector().report_success(channel_slug)
+            break
+        except Exception as exc:
+            from router_service.services.retry_policy import extract_status_code, should_retry
+
+            status_code = extract_status_code(exc)
+            if channel_slug:
+                get_channel_selector().report_failure(channel_slug)
+            if _attempt < max_channel_retries and should_retry(exc, status_code):
+                from router_service.services.routing import _resolve_target
+                config = get_config_manager().load()
+                try:
+                    target_info = _resolve_target(
+                        selected_model, config,
+                        excluded_slugs=frozenset(tried_slugs),
+                        retry_tier=_attempt + 1,
+                    )
+                    channel_slug = target_info.get("channel_slug")
+                    t_upstream = time.monotonic()
+                    continue
+                except Exception:
+                    pass
+            upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
+            log_upstream_call(
+                request_id=request_id,
+                selected_model=selected_model,
+                provider_slug=target_info["provider_slug"],
+                upstream_model=target_info["upstream_model"],
+                api_base=target_info["api_base"],
+                status_code=502, ok=False,
+                latency_ms=upstream_latency_ms,
+                error=sanitize_error(exc),
+                config_version=config_version,
+                config_source=config_source,
+                router_trace_id=router_trace_id,
+            )
+            if call_log_created:
+                await CallLogGateway.update_call_log(
+                    settings=settings,
+                    request_id=request_id,
+                    status=2,
+                    error_code="upstream_error",
+                    error_msg=sanitize_error(exc)[:512],
+                    duration_ms=int((time.monotonic() - t_start) * 1000),
+                )
+            raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
 
     response_json = litellm_response.model_dump(exclude_none=True)
