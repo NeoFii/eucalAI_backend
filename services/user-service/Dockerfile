@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+# user-service: user auth, billing, API keys, call logs
+
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev pkg-config && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+COPY pyproject.toml ./
+COPY src/ src/
+COPY scripts/ scripts/
+COPY migrations/ migrations/
+
+RUN uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    uv lock && uv sync --frozen --no-dev
+
+FROM python:3.11-slim AS runner
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash appuser && \
+    mkdir -p /app/logs && chown -R appuser:appuser /app
+
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+COPY --chown=appuser:appuser migrations/ /app/migrations/
+COPY --chown=appuser:appuser scripts/ /app/scripts/
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER appuser
+EXPOSE 8000
+
+CMD ["uvicorn", "user_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

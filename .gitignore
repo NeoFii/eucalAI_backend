@@ -41,6 +41,8 @@ venv.bak/
 .env
 .env.local
 .env.*.local
+services/*/.env
+services/*/.env.local
 
 # Testing
 .pytest_cache/

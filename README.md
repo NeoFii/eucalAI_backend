@@ -1,113 +1,77 @@
 # Eucal AI Backend
 
-This repository contains the active Eucal AI backend services.
+AI 智能路由平台后端。通过 ML 模型对用户 prompt 进行难度分类，然后路由到合适的上游 LLM 供应商。
 
-## Phase 4 Status
+## 架构
 
-The active Phase 4 runtime uses `/ready` probes, `X-Request-ID` propagation, and
-signed internal calls between backend services.
+| 服务 | 端口 | 存储 | 说明 |
+| --- | ---: | --- | --- |
+| admin-service | 8001 | MySQL `eucal_ai_admin` | 管理员认证、模型目录、路由配置、审计日志 |
+| user-service | 8000 | MySQL `eucal_ai_user` | 用户认证、计费、API Key、用量统计 |
+| router-service | 8003 | 无（可选 Redis） | 公共 API 网关、智能路由、上游 LLM 转发 |
+| inference-service | 8004 | 无（需要 GPU） | ML 推理，prompt 难度分类 |
 
-## Active Services
+每个服务完全自包含在 `services/<name>/` 下，拥有独立的 Dockerfile、docker-compose.yml、.env.example 和配置文件。
 
-| Service | Module | Port | Storage |
-| --- | --- | ---: | --- |
-| admin-service | `admin_service.main:app` | 8001 | admin MySQL schema |
-| user-service | `user_service.main:app` | 8000 | user MySQL schema |
-| router-service | `router_service.main:app` | 8003 | none |
-| inference-service | `inference_service.main:app` | 8004 | none |
+## 项目结构
 
-`admin-service` and `user-service` are separate control-plane services in the real
-deployment topology. Each owns its own MySQL schema and exposes `/health` and `/ready`.
+```
+services/
+├── admin-service/           # 管理控制面
+├── user-service/            # 用户侧 API
+├── router-service/          # 公共 API 网关
+└── inference-service/       # GPU ML 推理
+infra/
+├── docker-compose.yml       # 生产环境 MySQL + Redis
+└── docker-compose.local.yml # 本地开发 MySQL + Redis
+```
 
-`router-service` and `inference-service` are DB-less runtime services. Router reads
-its model routing configuration from `deploy/router/runtime_config.json`; inference
-loads model paths from `deploy/router/model_paths.json`.
-
-## Setup
+## 快速开始
 
 ```bash
-uv sync
-cp .env.example .env
+# 1. 启动基础设施
+docker compose -f infra/docker-compose.local.yml up -d
+
+# 2. 配置并启动服务（每个服务重复此步骤）
+cd services/admin-service
+cp .env.example .env        # 修改为实际值
+uv lock && uv sync
 uv run check-env
-uv run bootstrap-databases
+alembic -c migrations/alembic.ini upgrade head
+uvicorn admin_service.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-Create the admin and user MySQL databases manually before running migrations. The
-project does not create or drop databases automatically.
+## 部署
 
-## Required Environment
+每个服务有独立的 `docker-compose.yml`，可单独部署：
 
-| Variable | Required For | Purpose |
+```bash
+# 基础设施（后端节点）
+docker compose -f infra/docker-compose.yml up -d
+
+# 后端服务
+cd services/admin-service && docker compose up -d
+cd services/user-service && docker compose up -d
+
+# 路由网关（独立主机）
+cd services/router-service && docker compose up -d
+
+# GPU 推理（独立主机）
+cd services/inference-service && docker compose up -d
+```
+
+## 服务间通信
+
+- router → user-service：API Key 验证、调用日志批量写入（HMAC/INTERNAL_SECRET）
+- router → admin-service：路由配置拉取（HMAC/INTERNAL_SECRET）
+- router → inference-service：prompt 分类（X-Inference-Secret）
+- admin → user-service：用户管理、兑换码（HMAC/INTERNAL_SECRET）
+- inference → admin-service：配置刷新（HMAC/INTERNAL_SECRET）
+
+## 共享密钥
+
+| 变量 | 涉及服务 | 用途 |
 | --- | --- | --- |
-| `JWT_SECRET_KEY` | all API services | JWT signing key, at least 32 characters |
-| `INTERNAL_SECRET` | admin, user, router | HMAC signing secret for internal calls |
-| `ADMIN_DATABASE_URL` | admin-service | admin schema database URL |
-| `USER_DATABASE_URL` | user-service | user schema database URL |
-| `INFERENCE_SERVICE_SECRET` | router-service, inference-service | router to inference shared secret |
-
-There is no generic `DATABASE_URL` fallback. Use service-specific database URLs.
-
-## Migrations
-
-Alembic revisions are the schema source of truth.
-
-```bash
-uv run migrate --service admin-service upgrade head
-uv run migrate --service user-service upgrade head
-uv run bootstrap-databases
-```
-
-`scripts/sql/*.sql` files are schema snapshots for operational reference only;
-runtime code does not read them.
-
-## Running Locally
-
-```bash
-uv run start
-```
-
-The default startup set is:
-
-- `user-service`
-- `admin-service`
-- `inference-service`
-- `router-service`
-- `user-worker`
-
-You can start a subset explicitly:
-
-```bash
-uv run start user-service admin-service router-service
-```
-
-## Deployment
-
-Production deployment uses split multi-host compose files under `deploy/`:
-
-- `deploy/docker-compose.backend.yml`
-- `deploy/docker-compose.router.yml`
-- `deploy/docker-compose.inference.yml`
-
-See [deploy/README.md](/home/luofei/backend/deploy/README.md) for the final node layout,
-env files, startup order, and `api.eucal.ai` gateway entrypoint.
-
-## Runtime Contracts
-
-- Admin internal endpoints accept signed calls from user-service.
-- User internal endpoints accept signed calls from router-service and admin-service.
-- Router calls inference through `X-Inference-Secret`.
-- `X-Request-ID` is propagated by shared observability middleware where applicable.
-
-## Super Admin Bootstrap
-
-For first deploys, set:
-
-```dotenv
-BOOTSTRAP_SUPERADMIN_ENABLED=true
-BOOTSTRAP_SUPERADMIN_EMAIL=founder@example.com
-BOOTSTRAP_SUPERADMIN_PASSWORD=StrongPassword123!
-BOOTSTRAP_SUPERADMIN_NAME=System Founder
-```
-
-After the first successful bootstrap, set `BOOTSTRAP_SUPERADMIN_ENABLED=false` and
-keep `BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP=true`.
+| `JWT_SECRET_KEY` | admin, user | JWT 签名（至少 32 字符） |
+| `INTERNAL_SECRET` | admin, user, router, inference | HMAC 服务间签名 |
+| `INFERENCE_SERVICE_SECRET` | router, inference | 路由到推理服务的认证 |

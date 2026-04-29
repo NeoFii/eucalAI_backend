@@ -1,0 +1,57 @@
+{
+  "router_alias": "auto",
+  "route_order": [
+    "纠错",
+    "工具调用",
+    "通用任务",
+    "任务拆解",
+    "编程"
+  ],
+  "weights": {
+    "纠错": 1.0,
+    "工具调用": 1.0,
+    "通用任务": 1.0,
+    "任务拆解": 1.0,
+    "编程": 1.0
+  },
+  "score_bands": "0-3:5,3-5:4,5-7:3,7-9:2,9-10:1",
+  "tier_model_map": {
+    "1": "gpt-5-4",
+    "2": "minimax-m2-7",
+    "3": "glm-4-5-air",
+    "4": "step-3-5-flash",
+    "5": "gpt-oss-120b"
+  },
+  "model_providers": {
+    "gpt-5-4": {
+      "provider_slug": "autodl",
+      "api_key": "${AUTODL_API_KEY}",
+      "api_base": "https://www.autodl.art/api/v1",
+      "upstream_model": "gpt-5.4"
+    },
+    "minimax-m2-7": {
+      "provider_slug": "aiping",
+      "api_key": "${AIPING_API_KEY}",
+      "api_base": "https://aiping.cn/api/v1",
+      "upstream_model": "MiniMax-M2.7"
+    },
+    "glm-4-5-air": {
+      "provider_slug": "aiping",
+      "api_key": "${AIPING_API_KEY}",
+      "api_base": "https://aiping.cn/api/v1",
+      "upstream_model": "GLM-4.5-Air"
+    },
+    "step-3-5-flash": {
+      "provider_slug": "aiping",
+      "api_key": "${AIPING_API_KEY}",
+      "api_base": "https://aiping.cn/api/v1",
+      "upstream_model": "Step-3.5-Flash"
+    },
+    "gpt-oss-120b": {
+      "provider_slug": "openrouter",
+      "api_key": "${OPENROUTER_API_KEY}",
+      "api_base": "https://openrouter.ai/api/v1",
+      "upstream_model": "openai/gpt-oss-120b"
+    }
+  }
+}

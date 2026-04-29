@@ -1,0 +1,56 @@
+services:
+  admin-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LOG_DIR: /app/logs
+      LOG_FILE_PREFIX: admin
+    command: ["/app/.venv/bin/uvicorn", "admin_service.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - admin_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "http-ready", "--port", "8001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - backend
+
+  admin-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LOG_DIR: /app/logs
+      LOG_FILE_PREFIX: admin-worker
+    command: ["/app/.venv/bin/arq", "admin_service.worker.WorkerSettings"]
+    volumes:
+      - admin_logs:/app/logs
+    depends_on:
+      admin-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "scripts/runtime_probe.py", "worker-ready", "--database-url-env", "ADMIN_DATABASE_URL", "--redis-url-env", "ADMIN_QUEUE_REDIS_URL"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - backend
+
+networks:
+  backend:
+    external: true
+    name: eucal_backend_network
+
+volumes:
+  admin_logs:
+    name: eucal_admin_logs
