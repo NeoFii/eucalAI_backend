@@ -58,6 +58,9 @@ class RouterSettings:
 
     @classmethod
     def from_env(cls) -> "RouterSettings":
+        from dotenv import load_dotenv
+
+        load_dotenv()
         return cls(
             user_service_url=os.getenv("USER_SERVICE_URL", "http://127.0.0.1:8000"),
             internal_secret=os.getenv("INTERNAL_SECRET", ""),

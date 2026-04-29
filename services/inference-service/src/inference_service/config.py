@@ -150,6 +150,9 @@ class InferenceSettings:
 
     @classmethod
     def from_env(cls) -> "InferenceSettings":
+        from dotenv import load_dotenv
+
+        load_dotenv()
         return cls(
             host=os.getenv("INFERENCE_HOST", DEFAULT_INFERENCE_HOST),
             port=int(os.getenv("INFERENCE_PORT", str(DEFAULT_INFERENCE_PORT))),

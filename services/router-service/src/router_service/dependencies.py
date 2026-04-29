@@ -7,7 +7,7 @@ import json
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import cachetools
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 
 from common.core.exceptions import ServiceUnavailableException
 from common.internal import InternalServiceError, InternalServiceResponseError
