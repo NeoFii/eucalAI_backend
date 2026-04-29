@@ -26,20 +26,50 @@ infra/
 └── docker-compose.local.yml # 本地开发 MySQL + Redis
 ```
 
-## 快速开始
+## 本地开发
+
+确保 MySQL 和 Redis 已在本地运行，按以下顺序启动各服务（每个服务开一个终端）：
 
 ```bash
-# 1. 启动基础设施
-docker compose -f infra/docker-compose.local.yml up -d
-
-# 2. 配置并启动服务（每个服务重复此步骤）
+# 1. admin-service（其他服务依赖它获取路由配置）
 cd services/admin-service
-cp .env.example .env        # 修改为实际值
-uv lock && uv sync
+cp .env.example .env  # 编辑填入实际值
+uv sync
 uv run check-env
-alembic -c migrations/alembic.ini upgrade head
-uvicorn admin_service.main:app --host 0.0.0.0 --port 8001 --reload
+uv run alembic -c migrations/alembic.ini upgrade head
+uv run uvicorn admin_service.main:app --host 0.0.0.0 --port 8001 --reload
+
+# 2. user-service（router 依赖它做 API Key 验证）
+cd services/user-service
+cp .env.example .env
+uv sync
+uv run check-env
+uv run alembic -c migrations/alembic.ini upgrade head
+uv run uvicorn user_service.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 3. inference-service（需要 GPU，router 依赖它做 prompt 分类）
+cd services/inference-service
+cp .env.example .env
+uv sync
+uv run check-env
+uv run uvicorn inference_service.main:app --host 0.0.0.0 --port 8004 --reload
+
+# 4. router-service（最后启动，依赖上面三个）
+cd services/router-service
+cp .env.example .env
+uv sync
+uv run check-env
+uv run uvicorn router_service.main:app --host 0.0.0.0 --port 8003 --reload
 ```
+
+Worker 进程（可选，各开一个终端）：
+
+```bash
+cd services/admin-service && uv run arq admin_service.worker.WorkerSettings
+cd services/user-service && uv run arq user_service.worker.WorkerSettings
+```
+
+各服务详细说明见 `services/<name>/README.md`。
 
 ## 部署
 
