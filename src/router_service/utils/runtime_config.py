@@ -184,6 +184,9 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
                     "input_price_per_million": int(ch.get("input_price_per_million", 0)),
                     "output_price_per_million": int(ch.get("output_price_per_million", 0)),
                     "cached_input_price_per_million": int(ch.get("cached_input_price_per_million", 0)),
+                    "pool_account_id": ch.get("pool_account_id"),
+                    "rpm_limit": ch.get("rpm_limit"),
+                    "tpm_limit": ch.get("tpm_limit"),
                 })
             if validated:
                 model_channels[str(model_name).strip()] = validated

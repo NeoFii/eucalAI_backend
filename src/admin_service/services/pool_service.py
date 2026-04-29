@@ -426,6 +426,9 @@ class PoolService:
                 "input_price_per_million": pool_model.input_price_per_million,
                 "output_price_per_million": pool_model.output_price_per_million,
                 "cached_input_price_per_million": pool_model.cached_input_price_per_million or 0,
+                "pool_account_id": int(account.id),
+                "rpm_limit": account.rpm_limit,
+                "tpm_limit": account.tpm_limit,
             }
             result.setdefault(pool_model.model_slug, []).append(entry)
         return result

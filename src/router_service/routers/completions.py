@@ -11,11 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from common.observability import get_request_id
-from router_service.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_settings, require_api_key
+from router_service.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_rate_limiter, get_settings, require_api_key, require_rate_limit
 from router_service.gateway import ValidatedApiKey
 from router_service.gateway_calllog import CallLogGateway
 from router_service.logging import log_upstream_call
 from router_service.schemas.requests import CompletionRequest
+from router_service.services.channel_selector import ChannelRateLimited
 from router_service.services.routing import RoutingError, route_and_resolve, sanitize_error
 
 router = APIRouter()
@@ -55,6 +56,7 @@ async def completions(
     request: CompletionRequest,
     raw_request: Request,
     principal: ValidatedApiKey = Depends(require_api_key),
+    _rate_limit: None = Depends(require_rate_limit),
 ):
     if request.stream:
         raise HTTPException(status_code=400, detail="stream not supported for /v1/completions")
@@ -79,6 +81,8 @@ async def completions(
     )
     call_log_created = create_result is not None
 
+    affinity_key = raw_request.headers.get("x-conversation-id") or getattr(request, "user", None)
+
     try:
         selected_model, target_info, route_result, route_meta = await route_and_resolve(
             requested_model=requested_model,
@@ -86,31 +90,38 @@ async def completions(
             request_id=request_id,
             input_preview=input_preview,
             messages_count=len(messages),
+            affinity_key=affinity_key or None,
         )
     except RoutingError as exc:
         if call_log_created:
             await CallLogGateway.update_call_log(
-                settings=settings,
-                request_id=request_id,
-                status=2,
-                error_code=exc.error_code,
-                error_msg=str(exc.detail)[:512],
+                settings=settings, request_id=request_id, status=2,
+                error_code=exc.error_code, error_msg=str(exc.detail)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
         raise
+    except ChannelRateLimited:
+        if call_log_created:
+            await CallLogGateway.update_call_log(
+                settings=settings, request_id=request_id, status=2,
+                error_code="channel_rate_limited",
+                error_msg="all channels for this model are rate-limited",
+                duration_ms=int((time.monotonic() - t_start) * 1000),
+            )
+        raise HTTPException(status_code=429, detail={"error": {
+            "message": "All upstream channels for this model are currently rate-limited.",
+            "type": "rate_limit_error", "code": "channel_rate_limited",
+        }}, headers={"Retry-After": "5"})
 
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
 
     if call_log_created:
         await CallLogGateway.update_call_log(
-            settings=settings,
-            request_id=request_id,
-            selected_model=selected_model,
-            provider_slug=target_info["provider_slug"],
+            settings=settings, request_id=request_id,
+            selected_model=selected_model, provider_slug=target_info["provider_slug"],
             upstream_model=target_info["upstream_model"],
-            config_version=config_version,
-            config_source=config_source,
+            config_version=config_version, config_source=config_source,
             inference_config_version=route_meta.get("inference_config_version"),
             inference_config_source=route_meta.get("inference_config_source"),
             routing_tier=(route_result or {}).get("routing_tier"),
@@ -135,22 +146,21 @@ async def completions(
             tried_slugs.add(channel_slug)
         try:
             litellm_response = await litellm.acompletion(
-                model=target_info["upstream_model"],
-                messages=messages,
-                api_key=target_info["api_key"],
-                api_base=target_info["api_base"],
-                base_url=target_info["api_base"],
-                custom_llm_provider="openai",
-                stream=False,
-                timeout=45.0,
-                **forward_payload,
+                model=target_info["upstream_model"], messages=messages,
+                api_key=target_info["api_key"], api_base=target_info["api_base"],
+                base_url=target_info["api_base"], custom_llm_provider="openai",
+                stream=False, timeout=45.0, **forward_payload,
             )
             if channel_slug:
                 get_channel_selector().report_success(channel_slug)
+            account_id = target_info.get("pool_account_id")
+            if account_id is not None:
+                limiter = get_rate_limiter()
+                if limiter is not None:
+                    await limiter.check_account(account_id, target_info.get("rpm_limit"))
             break
         except Exception as exc:
             from router_service.services.retry_policy import extract_status_code, should_retry
-
             status_code = extract_status_code(exc)
             if channel_slug:
                 get_channel_selector().report_failure(channel_slug)
@@ -158,10 +168,9 @@ async def completions(
                 from router_service.services.routing import _resolve_target
                 config = get_config_manager().load()
                 try:
-                    target_info = _resolve_target(
+                    target_info = await _resolve_target(
                         selected_model, config,
-                        excluded_slugs=frozenset(tried_slugs),
-                        retry_tier=_attempt + 1,
+                        excluded_slugs=frozenset(tried_slugs), retry_tier=_attempt + 1,
                     )
                     channel_slug = target_info.get("channel_slug")
                     t_upstream = time.monotonic()
@@ -170,25 +179,18 @@ async def completions(
                     pass
             upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
             log_upstream_call(
-                request_id=request_id,
-                selected_model=selected_model,
+                request_id=request_id, selected_model=selected_model,
                 provider_slug=target_info["provider_slug"],
                 upstream_model=target_info["upstream_model"],
                 api_base=target_info["api_base"],
-                status_code=502, ok=False,
-                latency_ms=upstream_latency_ms,
-                error=sanitize_error(exc),
-                config_version=config_version,
-                config_source=config_source,
-                router_trace_id=router_trace_id,
+                status_code=502, ok=False, latency_ms=upstream_latency_ms,
+                error=sanitize_error(exc), config_version=config_version,
+                config_source=config_source, router_trace_id=router_trace_id,
             )
             if call_log_created:
                 await CallLogGateway.update_call_log(
-                    settings=settings,
-                    request_id=request_id,
-                    status=2,
-                    error_code="upstream_error",
-                    error_msg=sanitize_error(exc)[:512],
+                    settings=settings, request_id=request_id, status=2,
+                    error_code="upstream_error", error_msg=sanitize_error(exc)[:512],
                     duration_ms=int((time.monotonic() - t_start) * 1000),
                 )
             raise HTTPException(status_code=502, detail="upstream service error") from exc
@@ -199,24 +201,19 @@ async def completions(
     completion_payload["model"] = selected_model
 
     log_upstream_call(
-        request_id=request_id,
-        selected_model=selected_model,
+        request_id=request_id, selected_model=selected_model,
         provider_slug=target_info["provider_slug"],
         upstream_model=target_info["upstream_model"],
         api_base=target_info["api_base"],
-        status_code=200, ok=True,
-        latency_ms=upstream_latency_ms,
-        config_version=config_version,
-        config_source=config_source,
+        status_code=200, ok=True, latency_ms=upstream_latency_ms,
+        config_version=config_version, config_source=config_source,
         router_trace_id=router_trace_id,
     )
 
     if call_log_created:
         usage = response_json.get("usage") or {}
         await CallLogGateway.update_call_log(
-            settings=settings,
-            request_id=request_id,
-            status=1,
+            settings=settings, request_id=request_id, status=1,
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
             cached_tokens=usage.get("cached_tokens", 0),

@@ -22,6 +22,7 @@ class ValidatedApiKey:
     user_id: int
     name: str
     balance: int
+    rpm_limit: int | None = None
 
 
 class UserIdentityGateway(BaseGateway):
@@ -63,6 +64,7 @@ class UserIdentityGateway(BaseGateway):
                 user_id=int(payload["user_id"]),
                 name=payload["name"],
                 balance=int(payload.get("balance", 0)),
+                rpm_limit=payload.get("rpm_limit"),
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.error("malformed user-service response: %s", exc)

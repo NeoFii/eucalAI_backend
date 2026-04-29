@@ -1,63 +1,38 @@
-"""Best-effort gateway for writing API call logs to user-service."""
+"""Best-effort gateway for writing API call logs — delegates to in-memory buffer."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from common.internal import patch_internal_json, post_internal_json, InternalServiceError
-
 logger = logging.getLogger("router_service.calllog")
-
-_CALL_LOG_TIMEOUT = 2.0
-_CALL_LOG_MAX_RETRIES = 0
 
 
 class CallLogGateway:
 
     @staticmethod
     async def create_call_log(*, settings: Any, **fields: Any) -> dict | None:
-        try:
-            return await post_internal_json(
-                base_url=settings.user_service_url,
-                target_service="user-service",
-                path="/api/v1/internal/call-logs",
-                secret=settings.internal_secret,
-                caller_service="router-service",
-                timeout=_CALL_LOG_TIMEOUT,
-                json_body=fields,
-                max_retries=_CALL_LOG_MAX_RETRIES,
-                circuit_breaker_threshold=0,
-            )
-        except Exception:
-            logger.warning(
-                "best-effort call log create failed for request_id=%s",
-                fields.get("request_id"),
-                exc_info=True,
-            )
+        from router_service.dependencies import get_calllog_buffer
+
+        buf = get_calllog_buffer()
+        if buf is None:
+            logger.warning("call-log buffer not initialized, dropping create for %s", fields.get("request_id"))
             return None
+        request_id = fields.pop("request_id", None)
+        if not request_id:
+            return None
+        await buf.record(request_id, **fields)
+        return {"request_id": request_id}
 
     @staticmethod
     async def update_call_log(
         *, settings: Any, request_id: str, **fields: Any
     ) -> dict | None:
-        try:
-            return await patch_internal_json(
-                base_url=settings.user_service_url,
-                target_service="user-service",
-                path=f"/api/v1/internal/call-logs/{request_id}",
-                secret=settings.internal_secret,
-                caller_service="router-service",
-                timeout=_CALL_LOG_TIMEOUT,
-                json_body=fields,
-                max_retries=_CALL_LOG_MAX_RETRIES,
-                circuit_breaker_threshold=0,
-                allow_404=True,
-            )
-        except Exception:
-            logger.warning(
-                "best-effort call log update failed for request_id=%s",
-                request_id,
-                exc_info=True,
-            )
+        from router_service.dependencies import get_calllog_buffer
+
+        buf = get_calllog_buffer()
+        if buf is None:
+            logger.warning("call-log buffer not initialized, dropping update for %s", request_id)
             return None
+        await buf.update(request_id, **fields)
+        return {"request_id": request_id}

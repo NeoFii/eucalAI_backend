@@ -8,9 +8,9 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from router_service.dependencies import get_config_manager, get_inference_client, get_channel_selector
+from router_service.dependencies import get_config_manager, get_inference_client, get_channel_selector, get_rate_limiter, get_affinity_store
 from router_service.logging import log_routing_decision
-from router_service.services.upstream import resolve_model_provider_target, resolve_model_channel_target
+from router_service.services.upstream import resolve_model_provider_target, resolve_model_channel_target, normalize_api_base
 
 
 class RoutingError(HTTPException):
@@ -44,6 +44,7 @@ async def route_and_resolve(
     input_preview: str = "",
     messages_count: int = 0,
     is_stream: bool = False,
+    affinity_key: str | None = None,
 ) -> tuple[str, dict[str, str], dict[str, Any] | None, dict[str, Any]]:
     config_manager = get_config_manager()
     config = config_manager.load()
@@ -133,7 +134,7 @@ async def route_and_resolve(
             detail=f"unsupported model: {requested_model}",
         )
 
-    target_info = _resolve_target(selected_model, config)
+    target_info = await _resolve_target_with_affinity(selected_model, config, affinity_key)
     return selected_model, target_info, route_result, route_meta
 
 
@@ -143,7 +144,7 @@ def _available_models(config: dict) -> set:
     return set(config.get("model_providers", {}).keys())
 
 
-def _resolve_target(
+async def _resolve_target(
     model: str,
     config: dict,
     *,
@@ -152,8 +153,77 @@ def _resolve_target(
 ) -> dict:
     if "model_channels" in config and config["model_channels"]:
         selector = get_channel_selector()
+        rate_limited_accounts = await _get_rate_limited_accounts(model, config)
         return resolve_model_channel_target(
             model, config["model_channels"], selector,
             excluded_slugs=excluded_slugs, retry_tier=retry_tier,
+            rate_limited_accounts=rate_limited_accounts,
         )
     return resolve_model_provider_target(model, config.get("model_providers", {}))
+
+
+async def _resolve_target_with_affinity(
+    model: str,
+    config: dict,
+    affinity_key: str | None,
+) -> dict:
+    affinity_store = get_affinity_store()
+
+    if affinity_key and affinity_store is not None and "model_channels" in config:
+        cached_slug = await affinity_store.get(affinity_key)
+        if cached_slug:
+            channels = config.get("model_channels", {}).get(model, [])
+            for ch in channels:
+                if ch["channel_slug"] == cached_slug:
+                    selector = get_channel_selector()
+                    import time
+                    now = time.monotonic()
+                    slug = ch["channel_slug"]
+                    with selector._lock:
+                        is_available = (
+                            selector._disabled_until.get(slug, 0) < now
+                            and selector._failures.get(slug, 0) < now
+                        )
+                    if is_available:
+                        from router_service.services.upstream import _validate_upstream_url
+                        api_base = normalize_api_base(str(ch["api_base"]))
+                        _validate_upstream_url(api_base)
+                        logger.debug("affinity hit: %s -> %s", affinity_key, cached_slug)
+                        return {
+                            "logical_model": model,
+                            "channel_slug": slug,
+                            "provider_slug": ch["provider_slug"],
+                            "api_key": str(ch["api_key"]).strip(),
+                            "api_base": api_base,
+                            "upstream_model": str(ch["upstream_model"]).strip(),
+                            "input_price_per_million": ch.get("input_price_per_million", 0),
+                            "output_price_per_million": ch.get("output_price_per_million", 0),
+                            "cached_input_price_per_million": ch.get("cached_input_price_per_million", 0),
+                            "pool_account_id": ch.get("pool_account_id"),
+                            "rpm_limit": ch.get("rpm_limit"),
+                        }
+                    break
+
+    target_info = await _resolve_target(model, config)
+
+    if affinity_key and affinity_store is not None:
+        channel_slug = target_info.get("channel_slug")
+        if channel_slug:
+            await affinity_store.set(affinity_key, channel_slug)
+
+    return target_info
+
+
+async def _get_rate_limited_accounts(model: str, config: dict) -> frozenset[int]:
+    limiter = get_rate_limiter()
+    if limiter is None:
+        return frozenset()
+    channels = config.get("model_channels", {}).get(model, [])
+    limited: set[int] = set()
+    for ch in channels:
+        account_id = ch.get("pool_account_id")
+        rpm_limit = ch.get("rpm_limit")
+        if account_id is not None and rpm_limit is not None:
+            if not await limiter.is_account_available(account_id, rpm_limit):
+                limited.add(account_id)
+    return frozenset(limited)

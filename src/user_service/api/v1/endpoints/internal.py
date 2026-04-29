@@ -67,6 +67,7 @@ class InternalApiKeyValidateResponse(BaseModel):
     user_id: int
     name: str
     balance: int
+    rpm_limit: int | None = None
 
 
 # --- Admin user-management schemas ---
@@ -328,6 +329,7 @@ async def validate_api_key(
         user_id=int(api_key.user_id),
         name=api_key.name,
         balance=int(user.balance) if user else 0,
+        rpm_limit=api_key.rpm_limit,
     )
 
 
@@ -821,3 +823,112 @@ async def update_call_log(
                 await db.commit()
 
     return {"ok": True}
+
+
+class InternalBatchCallLogRequest(BaseModel):
+    entries: list[dict] = Field(max_length=500)
+
+
+_CREATE_FIELDS = {
+    "request_id", "user_id", "api_key_id", "model_name", "selected_model",
+    "provider_slug", "upstream_model", "is_stream", "ip", "config_version",
+    "config_source", "inference_config_version", "inference_config_source",
+    "routing_tier", "score_source", "router_trace_id", "inference_error_code",
+    "status",
+}
+
+
+@router.post("/call-logs/batch", summary="Batch create/update call logs")
+async def batch_call_logs(
+    body: InternalBatchCallLogRequest,
+    _: None = Depends(verify_router_only),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    created = 0
+    updated = 0
+    billed = 0
+
+    for entry in body.entries:
+        request_id = entry.get("request_id")
+        if not request_id:
+            continue
+        action = entry.get("action", "create")
+
+        existing = (
+            await db.execute(
+                select(ApiCallLog).where(ApiCallLog.request_id == request_id)
+            )
+        ).scalar_one_or_none()
+
+        if existing is None:
+            create_fields = {k: v for k, v in entry.items() if k in _CREATE_FIELDS and v is not None}
+            if "request_id" not in create_fields:
+                create_fields["request_id"] = request_id
+            log = ApiCallLog(**create_fields, created_at=now(), updated_at=now())
+            db.add(log)
+            try:
+                await db.flush()
+            except IntegrityError:
+                await db.rollback()
+                existing = (
+                    await db.execute(
+                        select(ApiCallLog).where(ApiCallLog.request_id == request_id)
+                    )
+                ).scalar_one_or_none()
+                if existing is None:
+                    continue
+            else:
+                created += 1
+                if action != "complete":
+                    continue
+                existing = log
+
+        update_fields = {k: v for k, v in entry.items() if k in _CALL_LOG_UPDATE_FIELDS and v is not None}
+        if "error_msg" in update_fields and update_fields["error_msg"] is not None:
+            update_fields["error_msg"] = str(update_fields["error_msg"])[:512]
+        for field_name, value in update_fields.items():
+            setattr(existing, field_name, value)
+        existing.updated_at = now()
+        updated += 1
+
+        if action == "complete":
+            cost = entry.get("cost", 0) or 0
+            final_status = entry.get("status")
+            if cost > 0 and final_status == 1:
+                tx_repo = BalanceTxRepository(db)
+                already_billed = await tx_repo.exists_by_ref(
+                    tx_type=BalanceTransaction.TYPE_CONSUME,
+                    ref_type="api_call",
+                    ref_id=request_id,
+                )
+                if not already_billed:
+                    user = await UserRepository(db).get_by_id(existing.user_id, for_update=True)
+                    if user is not None:
+                        balance_before = int(user.balance)
+                        user.balance = max(int(user.balance) - cost, 0)
+                        user.used_amount += cost
+                        user.total_requests += 1
+                        total_tokens = entry.get("total_tokens", 0) or 0
+                        user.total_tokens += total_tokens
+                        tx_repo.add(
+                            BalanceTransaction(
+                                user_id=user.id,
+                                type=BalanceTransaction.TYPE_CONSUME,
+                                amount=-cost,
+                                balance_before=balance_before,
+                                balance_after=int(user.balance),
+                                ref_type="api_call",
+                                ref_id=request_id,
+                            )
+                        )
+                        if existing.api_key_id:
+                            api_key = await ApiKeyRepository(db).get_owned_key(
+                                existing.api_key_id, user.id, for_update=True,
+                            )
+                            if api_key is not None:
+                                api_key.quota_used += cost
+                        await db.flush()
+                        billed += 1
+
+    await db.commit()
+    return {"ok": True, "created": created, "updated": updated, "billed": billed}

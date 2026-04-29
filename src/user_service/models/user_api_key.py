@@ -47,6 +47,7 @@ class UserApiKey(Base, SnowflakeIdMixin, TimestampMixin, SoftDeleteMixin):
     quota_used = Column(Integer, default=0, nullable=False, comment="Cumulative spend via this key (分)")
     allowed_models = Column(Text, nullable=True, comment="comma-separated model names, NULL=all")
     allow_ips = Column(Text, nullable=True, comment="newline-separated CIDRs, NULL=all")
+    rpm_limit = Column(Integer, nullable=True, comment="每分钟请求上限，NULL=用全局默认")
     expires_at = Column(DateTime, nullable=True, comment="NULL = never expires")
     last_used_at = Column(DateTime, nullable=True, comment="Last successful validation")
 

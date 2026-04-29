@@ -78,6 +78,7 @@ def resolve_model_channel_target(
     *,
     excluded_slugs: frozenset[str] | None = None,
     retry_tier: int = 0,
+    rate_limited_accounts: frozenset[int] | None = None,
 ) -> Dict[str, str]:
     """Resolve a model to a specific channel from the pool."""
     channels = model_channels.get(logical_model)
@@ -87,6 +88,7 @@ def resolve_model_channel_target(
     selected = channel_selector.select(
         logical_model, channels,
         excluded_slugs=excluded_slugs, retry_tier=retry_tier,
+        rate_limited_accounts=rate_limited_accounts,
     )
     api_base = normalize_api_base(str(selected["api_base"]))
     api_key = str(selected["api_key"]).strip()
@@ -108,6 +110,8 @@ def resolve_model_channel_target(
         "input_price_per_million": selected.get("input_price_per_million", 0),
         "output_price_per_million": selected.get("output_price_per_million", 0),
         "cached_input_price_per_million": selected.get("cached_input_price_per_million", 0),
+        "pool_account_id": selected.get("pool_account_id"),
+        "rpm_limit": selected.get("rpm_limit"),
     }
 
 

@@ -38,6 +38,24 @@ class RouterSettings:
     channel_auto_disable_cooldown_seconds: float = 300.0
     channel_health_redis_url: str = ""
 
+    # Redis (shared by rate limiter, affinity, call-log buffer)
+    redis_url: str = ""
+
+    # Call-log buffer
+    calllog_flush_interval: float = 5.0
+    calllog_max_buffer: int = 10000
+    calllog_max_retries: int = 3
+
+    # Rate limiting
+    rate_limit_enabled: bool = True
+    rate_limit_default_user_rpm: int = 20
+    rate_limit_global_rpm: int = 0
+
+    # Channel affinity
+    channel_affinity_enabled: bool = False
+    channel_affinity_ttl: int = 3600
+    channel_affinity_lru_maxsize: int = 10000
+
     @classmethod
     def from_env(cls) -> "RouterSettings":
         return cls(
@@ -76,4 +94,14 @@ class RouterSettings:
                 os.getenv("CHANNEL_AUTO_DISABLE_COOLDOWN_SECONDS", "300.0")
             ),
             channel_health_redis_url=os.getenv("CHANNEL_HEALTH_REDIS_URL", ""),
+            redis_url=os.getenv("ROUTER_REDIS_URL", ""),
+            calllog_flush_interval=float(os.getenv("CALLLOG_FLUSH_INTERVAL", "5.0")),
+            calllog_max_buffer=int(os.getenv("CALLLOG_MAX_BUFFER", "10000")),
+            calllog_max_retries=int(os.getenv("CALLLOG_MAX_RETRIES", "3")),
+            rate_limit_enabled=parse_bool_env(os.getenv("RATE_LIMIT_ENABLED"), default=True),
+            rate_limit_default_user_rpm=int(os.getenv("RATE_LIMIT_DEFAULT_USER_RPM", "20")),
+            rate_limit_global_rpm=int(os.getenv("RATE_LIMIT_GLOBAL_RPM", "0")),
+            channel_affinity_enabled=parse_bool_env(os.getenv("CHANNEL_AFFINITY_ENABLED"), default=False),
+            channel_affinity_ttl=int(os.getenv("CHANNEL_AFFINITY_TTL", "3600")),
+            channel_affinity_lru_maxsize=int(os.getenv("CHANNEL_AFFINITY_LRU_MAXSIZE", "10000")),
         )

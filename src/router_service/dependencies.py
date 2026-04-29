@@ -14,9 +14,14 @@ from common.internal import InternalServiceError, InternalServiceResponseError
 from router_service.gateway import UserIdentityGateway, ValidatedApiKey
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
+    from router_service.services.calllog_buffer import CallLogBuffer
+    from router_service.services.channel_affinity import ChannelAffinityStore
     from router_service.services.channel_selector import ChannelSelector
     from router_service.services.config_manager import ConfigManager
     from router_service.services.inference_client import InferenceClient
+    from router_service.services.rate_limiter import RateLimiter
     from router_service.settings import RouterSettings
 
 # Global singletons — initialized in lifespan
@@ -24,6 +29,10 @@ _inference_client: Optional["InferenceClient"] = None
 _config_manager: Optional["ConfigManager"] = None
 _settings: Optional["RouterSettings"] = None
 _channel_selector: Optional["ChannelSelector"] = None
+_redis: Optional["aioredis.Redis"] = None
+_calllog_buffer: Optional["CallLogBuffer"] = None
+_rate_limiter: Optional["RateLimiter"] = None
+_affinity_store: Optional["ChannelAffinityStore"] = None
 
 # API key cache: sha256(raw_key) -> ValidatedApiKey
 _API_KEY_CACHE_TTL = 60.0
@@ -38,13 +47,22 @@ def init_globals(
     settings: "RouterSettings",
     inference_client: "InferenceClient",
     channel_selector: "ChannelSelector",
+    redis_conn: "aioredis.Redis | None" = None,
+    calllog_buffer: "CallLogBuffer | None" = None,
+    rate_limiter: "RateLimiter | None" = None,
+    affinity_store: "ChannelAffinityStore | None" = None,
 ) -> None:
     global _inference_client, _config_manager, _settings, _channel_selector
+    global _redis, _calllog_buffer, _rate_limiter, _affinity_store
 
     _settings = settings
     _inference_client = inference_client
     _config_manager = config_manager
     _channel_selector = channel_selector
+    _redis = redis_conn
+    _calllog_buffer = calllog_buffer
+    _rate_limiter = rate_limiter
+    _affinity_store = affinity_store
 
 
 def get_config_manager() -> "ConfigManager":
@@ -73,6 +91,22 @@ def get_channel_selector() -> "ChannelSelector":
     if _channel_selector is None:
         raise RuntimeError("channel selector not initialized")
     return _channel_selector
+
+
+def get_redis() -> "aioredis.Redis | None":
+    return _redis
+
+
+def get_calllog_buffer() -> "CallLogBuffer | None":
+    return _calllog_buffer
+
+
+def get_rate_limiter() -> "RateLimiter | None":
+    return _rate_limiter
+
+
+def get_affinity_store() -> "ChannelAffinityStore | None":
+    return _affinity_store
 
 
 def extract_client_ip(request: Request) -> str | None:
@@ -146,3 +180,36 @@ async def require_api_key(
 
     request.state.api_key_principal = principal
     return principal
+
+
+async def require_rate_limit(
+    request: Request,
+    principal: ValidatedApiKey = Depends(require_api_key),
+) -> None:
+    """Check global and user-level rate limits. Raises 429 if exceeded."""
+    limiter = get_rate_limiter()
+    if limiter is None:
+        return
+
+    from router_service.services.rate_limiter import RateLimitExceeded
+
+    try:
+        await limiter.check_global()
+        await limiter.check_user(principal.user_id, rpm_override=principal.rpm_limit)
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "message": exc.message,
+                    "type": "rate_limit_error",
+                    "code": "rate_limit_exceeded",
+                }
+            },
+            headers={
+                "Retry-After": str(exc.retry_after),
+                "X-RateLimit-Limit-Requests": str(
+                    principal.rpm_limit or get_settings().rate_limit_default_user_rpm
+                ),
+            },
+        ) from exc

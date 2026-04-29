@@ -5,11 +5,19 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from router_service.services.rate_limiter import RateLimiter
 
 _logger = logging.getLogger("router_service")
 
 _DEFAULT_COOLDOWN_SECONDS = 30.0
+
+
+class ChannelRateLimited(Exception):
+    """All channels for a model are rate-limited."""
+    pass
 
 
 class ChannelSelector:
@@ -41,12 +49,14 @@ class ChannelSelector:
         *,
         excluded_slugs: frozenset[str] | None = None,
         retry_tier: int = 0,
+        rate_limited_accounts: frozenset[int] | None = None,
     ) -> dict[str, Any]:
         if not channels:
             raise KeyError(f"no channels available for model: {model_slug}")
 
         now = time.monotonic()
         excluded = excluded_slugs or frozenset()
+        rl_accounts = rate_limited_accounts or frozenset()
 
         with self._lock:
             available = [
@@ -57,12 +67,24 @@ class ChannelSelector:
                 and self._health_cache.get(
                     f"{ch['channel_slug']}:{model_slug}"
                 ) != "unhealthy"
+                and ch.get("pool_account_id") not in rl_accounts
             ]
 
         if not available:
-            available = [ch for ch in channels if ch["channel_slug"] not in excluded]
-        if not available:
-            available = channels
+            non_rl = [
+                ch for ch in channels
+                if ch["channel_slug"] not in excluded
+                and ch.get("pool_account_id") not in rl_accounts
+            ]
+            if non_rl:
+                available = non_rl
+            else:
+                non_excluded = [ch for ch in channels if ch["channel_slug"] not in excluded]
+                if non_excluded and rl_accounts:
+                    raise ChannelRateLimited(
+                        f"all channels for model {model_slug} are rate-limited"
+                    )
+                available = non_excluded if non_excluded else channels
 
         available.sort(key=lambda c: (-c.get("priority", 0), c.get("channel_slug", "")))
 

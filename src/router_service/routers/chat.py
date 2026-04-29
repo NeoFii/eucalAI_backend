@@ -11,12 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from common.observability import get_request_id
-from router_service.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_settings, require_api_key
+from router_service.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_rate_limiter, get_settings, require_api_key, require_rate_limit
 from router_service.gateway import ValidatedApiKey
 from router_service.gateway_calllog import CallLogGateway
 from router_service.logging import get_app_logger, log_upstream_call
 from router_service.schemas.requests import ChatCompletionRequest
 from router_service.services.routing import RoutingError, route_and_resolve, sanitize_error
+from router_service.services.channel_selector import ChannelRateLimited
 from router_service.services.upstream import strip_think_tags
 from router_service.utils.billing import compute_cost
 from router_service.utils.text import stringify_message_content
@@ -30,6 +31,7 @@ async def chat_completions(
     request: ChatCompletionRequest,
     raw_request: Request,
     principal: ValidatedApiKey = Depends(require_api_key),
+    _rate_limit: None = Depends(require_rate_limit),
 ):
     is_stream = request.stream
     requested_model = str(request.model).strip()
@@ -71,6 +73,8 @@ async def chat_completions(
             )
         raise HTTPException(status_code=402, detail="insufficient balance")
 
+    affinity_key = raw_request.headers.get("x-conversation-id") or getattr(request, "user", None)
+
     try:
         selected_model, target_info, route_result, route_meta = await route_and_resolve(
             requested_model=requested_model,
@@ -79,6 +83,7 @@ async def chat_completions(
             input_preview=input_preview,
             messages_count=len(request.messages),
             is_stream=is_stream,
+            affinity_key=affinity_key or None,
         )
     except RoutingError as exc:
         if call_log_created:
@@ -91,6 +96,27 @@ async def chat_completions(
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
         raise
+    except ChannelRateLimited:
+        if call_log_created:
+            await CallLogGateway.update_call_log(
+                settings=settings,
+                request_id=request_id,
+                status=2,
+                error_code="channel_rate_limited",
+                error_msg="all channels for this model are rate-limited",
+                duration_ms=int((time.monotonic() - t_start) * 1000),
+            )
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "message": "All upstream channels for this model are currently rate-limited. Please retry later.",
+                    "type": "rate_limit_error",
+                    "code": "channel_rate_limited",
+                }
+            },
+            headers={"Retry-After": "5"},
+        )
 
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
@@ -142,6 +168,11 @@ async def chat_completions(
             )
             if channel_slug:
                 get_channel_selector().report_success(channel_slug)
+            account_id = target_info.get("pool_account_id")
+            if account_id is not None:
+                limiter = get_rate_limiter()
+                if limiter is not None:
+                    await limiter.check_account(account_id, target_info.get("rpm_limit"))
             break
         except Exception as exc:
             from router_service.services.retry_policy import extract_status_code, should_retry
@@ -153,7 +184,7 @@ async def chat_completions(
                 from router_service.services.routing import _resolve_target
                 config = get_config_manager().load()
                 try:
-                    target_info = _resolve_target(
+                    target_info = await _resolve_target(
                         selected_model, config,
                         excluded_slugs=frozenset(tried_slugs),
                         retry_tier=_attempt + 1,

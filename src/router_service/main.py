@@ -75,31 +75,89 @@ def create_app(
     )
 
     _health_refresh_task = None
+    _redis_conn = None
+    _calllog_buffer = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        nonlocal _health_refresh_task
+        import asyncio
+
+        nonlocal _health_refresh_task, _redis_conn, _calllog_buffer
         log_event(logger, logging.INFO, "serviceStarting", service="router-service")
         await config_manager.start()
+
+        if settings.redis_url:
+            import redis.asyncio as aioredis
+            try:
+                _redis_conn = aioredis.from_url(settings.redis_url, decode_responses=True)
+                await _redis_conn.ping()
+                log_event(logger, logging.INFO, "redisConnected", url=settings.redis_url)
+            except Exception:
+                logger.warning("Redis unavailable at %s, features will degrade to in-memory", settings.redis_url)
+                _redis_conn = None
+
+        from router_service.services.calllog_buffer import CallLogBuffer
+        _calllog_buffer = CallLogBuffer(
+            settings=settings,
+            flush_interval=settings.calllog_flush_interval,
+            max_buffer=settings.calllog_max_buffer,
+            max_retries=settings.calllog_max_retries,
+        )
+        await _calllog_buffer.start()
+
+        rate_limiter = None
+        if settings.rate_limit_enabled:
+            from router_service.services.rate_limiter import RateLimiter
+            rate_limiter = RateLimiter(
+                redis=_redis_conn,
+                default_user_rpm=settings.rate_limit_default_user_rpm,
+                global_rpm=settings.rate_limit_global_rpm,
+            )
+
+        affinity_store = None
+        if settings.channel_affinity_enabled:
+            from router_service.services.channel_affinity import ChannelAffinityStore
+            affinity_store = ChannelAffinityStore(
+                redis=_redis_conn,
+                ttl=settings.channel_affinity_ttl,
+                lru_maxsize=settings.channel_affinity_lru_maxsize,
+            )
+
         init_globals(
             config_manager=config_manager,
             settings=settings,
             inference_client=inference_client,
             channel_selector=channel_selector,
+            redis_conn=_redis_conn,
+            calllog_buffer=_calllog_buffer,
+            rate_limiter=rate_limiter,
+            affinity_store=affinity_store,
         )
-        if settings.channel_health_redis_url:
-            import asyncio
+
+        health_redis_url = settings.channel_health_redis_url
+        if not health_redis_url and _redis_conn is not None:
+            health_redis_url = ""
+        if health_redis_url:
             _health_refresh_task = asyncio.create_task(
-                _health_cache_loop(settings.channel_health_redis_url, channel_selector, logger)
+                _health_cache_loop(health_redis_url, channel_selector, logger)
             )
+        elif _redis_conn is not None:
+            _health_refresh_task = asyncio.create_task(
+                _health_cache_loop_shared(_redis_conn, channel_selector, logger)
+            )
+
         log_event(logger, logging.INFO, "serviceReady", service="router-service")
         yield
+
         if _health_refresh_task is not None:
             _health_refresh_task.cancel()
-            import asyncio
             await asyncio.gather(_health_refresh_task, return_exceptions=True)
+        if _calllog_buffer is not None:
+            await _calllog_buffer.stop()
         await config_manager.stop()
         await inference_client.close()
+        if _redis_conn is not None:
+            await _redis_conn.aclose()
         log_event(logger, logging.INFO, "serviceStopping", service="router-service")
 
     app = FastAPI(
@@ -140,35 +198,49 @@ async def _health_cache_loop(redis_url: str, selector: "ChannelSelector", logger
         return
 
     try:
-        while True:
-            await asyncio.sleep(30)
-            try:
-                keys = []
-                async for key in conn.scan_iter(match="channel_health:*", count=500):
-                    keys.append(key)
-                if not keys:
-                    selector.update_health_cache({})
-                    continue
-                values = await conn.mget(keys)
-                import json
-                cache: dict[str, str] = {}
-                for key, val in zip(keys, values):
-                    if val is None:
-                        continue
-                    suffix = key[len("channel_health:"):]
-                    try:
-                        data = json.loads(val)
-                        cache[suffix] = data.get("status", "unknown")
-                    except (json.JSONDecodeError, AttributeError):
-                        pass
-                selector.update_health_cache(cache)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.debug("health cache refresh failed", exc_info=True)
+        await _health_cache_poll(conn, selector, logger)
     finally:
         if conn:
             await conn.aclose()
+
+
+async def _health_cache_loop_shared(
+    conn: "aioredis.Redis", selector: "ChannelSelector", logger: "logging.Logger",
+) -> None:
+    """Health cache loop using the shared Redis connection (no close on exit)."""
+    import asyncio
+    await _health_cache_poll(conn, selector, logger)
+
+
+async def _health_cache_poll(conn, selector, logger) -> None:
+    import asyncio
+    import json
+
+    while True:
+        await asyncio.sleep(30)
+        try:
+            keys = []
+            async for key in conn.scan_iter(match="channel_health:*", count=500):
+                keys.append(key)
+            if not keys:
+                selector.update_health_cache({})
+                continue
+            values = await conn.mget(keys)
+            cache: dict[str, str] = {}
+            for key, val in zip(keys, values):
+                if val is None:
+                    continue
+                suffix = key[len("channel_health:"):]
+                try:
+                    data = json.loads(val)
+                    cache[suffix] = data.get("status", "unknown")
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            selector.update_health_cache(cache)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.debug("health cache refresh failed", exc_info=True)
 
 
 app = create_app()
