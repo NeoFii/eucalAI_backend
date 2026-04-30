@@ -25,8 +25,8 @@ class Settings(BaseServiceSettings):
     CACHE_REDIS_URL: str = "redis://127.0.0.1:6379/2"
 
     EMAIL_CODE_EXPIRE_MINUTES: int = 5
-    MIN_TOPUP_AMOUNT: int = 100
-    MAX_TOPUP_AMOUNT: int = 1_000_000
+    MIN_TOPUP_AMOUNT: int = 1_000_000
+    MAX_TOPUP_AMOUNT: int = 10_000_000_000
     MAX_API_KEYS_PER_USER: int = 20
     LOGIN_MAX_FAILURES: int = 5
     LOGIN_LOCK_DURATION_HOURS: int = 1

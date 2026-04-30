@@ -47,6 +47,7 @@ class ModelCategoryBrief(BaseModel):
 class SupportedModelItem(DateTimeModel):
     id: int
     slug: str
+    routing_slug: str | None = None
     name: str
     summary: str | None = None
     description: str | None = None
@@ -96,6 +97,7 @@ class ModelCategoryUpdate(BaseModel):
 
 class SupportedModelCreate(BaseModel):
     slug: str = Field(..., min_length=1, max_length=120, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
+    routing_slug: str | None = Field(default=None, max_length=200)
     name: str = Field(..., min_length=1, max_length=160)
     vendor_slug: str = Field(..., min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     summary: str | None = Field(default=None, max_length=255)
@@ -139,6 +141,7 @@ class SupportedModelCreate(BaseModel):
 
 class SupportedModelUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
+    routing_slug: str | None = Field(default=None, max_length=200)
     vendor_slug: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     summary: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=5000)

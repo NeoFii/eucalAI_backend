@@ -40,7 +40,7 @@ class UsageStat(Base, SnowflakeIdMixin, TimestampMixin):
     completion_tokens = Column(BigInteger, default=0, nullable=False, comment="Completion tokens sum")
     cached_tokens = Column(BigInteger, default=0, nullable=False, comment="Cache-hit tokens sum")
     total_tokens = Column(BigInteger, default=0, nullable=False, comment="Total tokens sum")
-    total_cost = Column(Integer, default=0, nullable=False, comment="Total cost (分)")
+    total_cost = Column(BigInteger, default=0, nullable=False, comment="Total cost (微元)")
 
     __table_args__ = (
         UniqueConstraint(

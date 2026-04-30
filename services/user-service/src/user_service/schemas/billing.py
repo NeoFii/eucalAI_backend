@@ -72,7 +72,6 @@ class TopupOrderItem(DateTimeModel):
     payment_no: Optional[str] = None
     paid_at: Optional[datetime] = None
     remark: Optional[str] = None
-    created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -138,9 +137,9 @@ class ApiCallLogItem(DateTimeModel):
     id: int
     request_id: str
     api_key_id: Optional[int] = None
-    model_name: str
-    selected_model: Optional[str] = None
-    provider_slug: Optional[str] = None
+    model_name: str = Field(exclude=True)
+    selected_model: Optional[str] = Field(default=None, exclude=True)
+    provider_slug: Optional[str] = Field(default=None, exclude=True)
     prompt_tokens: int
     completion_tokens: int
     cached_tokens: int
@@ -156,6 +155,11 @@ class ApiCallLogItem(DateTimeModel):
     error_code: Optional[str] = None
     error_msg: Optional[str] = None
     created_at: datetime
+
+    @computed_field
+    @property
+    def effective_model(self) -> str:
+        return self.selected_model or self.model_name
 
     model_config = ConfigDict(from_attributes=True)
 

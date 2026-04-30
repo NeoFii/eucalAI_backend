@@ -822,6 +822,11 @@ async def update_call_log(
                         api_key.quota_used += cost
                 await db.commit()
 
+    final_status = updates.get("status")
+    if final_status in (1, 2):
+        await UsageStatService.upsert_from_log(db, log)
+        await db.commit()
+
     return {"ok": True}
 
 
@@ -847,6 +852,7 @@ async def batch_call_logs(
     created = 0
     updated = 0
     billed = 0
+    finalized_logs: list[ApiCallLog] = []
 
     for entry in body.entries:
         request_id = entry.get("request_id")
@@ -891,6 +897,10 @@ async def batch_call_logs(
         existing.updated_at = now()
         updated += 1
 
+        entry_status = entry.get("status")
+        if entry_status in (1, 2):
+            finalized_logs.append(existing)
+
         if action == "complete":
             cost = entry.get("cost", 0) or 0
             final_status = entry.get("status")
@@ -931,4 +941,10 @@ async def batch_call_logs(
                         billed += 1
 
     await db.commit()
+
+    for log in finalized_logs:
+        await UsageStatService.upsert_from_log(db, log)
+    if finalized_logs:
+        await db.commit()
+
     return {"ok": True, "created": created, "updated": updated, "billed": billed}

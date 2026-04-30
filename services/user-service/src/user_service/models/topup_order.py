@@ -25,7 +25,7 @@ class TopupOrder(Base, SnowflakeIdMixin, TimestampMixin):
         nullable=False,
         comment="FK users.id",
     )
-    amount = Column(Integer, nullable=False, comment="Top-up amount (分)")
+    amount = Column(BigInteger, nullable=False, comment="Top-up amount (微元)")
     status = Column(
         SmallInteger,
         default=1,

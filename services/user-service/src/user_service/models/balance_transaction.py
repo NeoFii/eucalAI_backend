@@ -33,9 +33,9 @@ class BalanceTransaction(Base, SnowflakeIdMixin):
         nullable=False,
         comment="1=TOPUP 2=CONSUME 3=REFUND 4=FREEZE 5=UNFREEZE 6=ADMIN_ADJUST 7=VOUCHER_REDEEM",
     )
-    amount = Column(Integer, nullable=False, comment="Positive=increase, negative=decrease (分)")
-    balance_before = Column(Integer, nullable=False, comment="balance snapshot before change (分)")
-    balance_after = Column(Integer, nullable=False, comment="balance snapshot after change (分)")
+    amount = Column(BigInteger, nullable=False, comment="Positive=increase, negative=decrease (微元)")
+    balance_before = Column(BigInteger, nullable=False, comment="balance snapshot before change (微元)")
+    balance_after = Column(BigInteger, nullable=False, comment="balance snapshot after change (微元)")
     ref_type = Column(String(32), nullable=True, comment="topup_order / api_call / voucher_code")
     ref_id = Column(String(64), nullable=True, comment="related document id")
     remark = Column(String(255), nullable=True, comment="admin/system note")

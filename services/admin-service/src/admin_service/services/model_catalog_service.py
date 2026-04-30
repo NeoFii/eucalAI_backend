@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,8 @@ from admin_service.schemas.model_catalog import (
     SupportedModelUpdate,
 )
 from common.core.exceptions import NotFoundException, ValidationException
+
+logger = logging.getLogger(__name__)
 
 
 class ModelCatalogService:
@@ -360,6 +363,7 @@ class ModelCatalogService:
         categories = await ModelCatalogService._resolve_categories(db, payload.category_keys)
         model = SupportedModel(
             slug=payload.slug,
+            routing_slug=payload.routing_slug,
             name=payload.name,
             vendor=vendor,
             summary=payload.summary,
@@ -468,23 +472,29 @@ class ModelCatalogService:
     async def get_prices_by_slugs(
         db: AsyncSession, slugs: list[str],
     ) -> dict[str, dict[str, Any]]:
-        """Return user-facing prices keyed by model slug."""
+        """Return user-facing prices keyed by routing_slug (pool_models.model_slug)."""
         if not slugs:
             return {}
         from sqlalchemy import select
         rows = await db.execute(
             select(
-                SupportedModel.slug,
+                SupportedModel.routing_slug,
                 SupportedModel.price_input_per_m_fen,
                 SupportedModel.price_output_per_m_fen,
                 SupportedModel.price_cached_input_per_m_fen,
-            ).where(SupportedModel.slug.in_(slugs))
+            ).where(
+                SupportedModel.routing_slug.in_(slugs),
+                SupportedModel.routing_slug.isnot(None),
+            )
         )
         result: dict[str, dict[str, Any]] = {}
-        for slug, inp, out, cached in rows.all():
-            result[slug] = {
+        for routing_slug, inp, out, cached in rows.all():
+            result[routing_slug] = {
                 "input": inp or 0,
                 "output": out or 0,
                 "cached_input": cached or 0,
             }
+        missing = set(slugs) - set(result.keys())
+        if missing:
+            logger.warning("No user-facing prices found for model slugs: %s", missing)
         return result

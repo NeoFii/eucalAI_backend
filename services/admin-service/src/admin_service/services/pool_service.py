@@ -85,21 +85,21 @@ def _safe_pool_audit(p: Pool) -> dict[str, Any]:
 
 
 def _extract_balance(body: dict) -> int:
-    """Parse upstream balance response into fen (cents)."""
+    """Parse upstream balance response into micro-yuan (1 yuan = 1,000,000)."""
     data = body.get("data", body)
     if isinstance(data, dict):
         for key in ("total_remain", "points", "balance", "remain"):
             if key in data:
-                return int(float(data[key]) * 100)
+                return int(float(data[key]) * 1_000_000)
     if isinstance(data, (int, float)):
-        return int(float(data) * 100)
+        return int(float(data) * 1_000_000)
     if isinstance(body, dict) and "balance" in body:
-        return int(float(body["balance"]) * 100)
+        return int(float(body["balance"]) * 1_000_000)
     return 0
 
 
 def _extract_model_pricing(item: dict) -> tuple[int, int]:
-    """Extract input/output price in fen per million from upstream model item.
+    """Extract input/output price in micro-yuan per million from upstream model item.
 
     Supports aiping format: price.input_price_range / output_price_range (元/M).
     """
@@ -108,9 +108,9 @@ def _extract_model_pricing(item: dict) -> tuple[int, int]:
         return 0, 0
     input_range = price.get("input_price_range")
     output_range = price.get("output_price_range")
-    input_fen = int(float(input_range[0]) * 100) if isinstance(input_range, list) and input_range else 0
-    output_fen = int(float(output_range[0]) * 100) if isinstance(output_range, list) and output_range else 0
-    return input_fen, output_fen
+    input_price = int(float(input_range[0]) * 1_000_000) if isinstance(input_range, list) and input_range else 0
+    output_price = int(float(output_range[0]) * 1_000_000) if isinstance(output_range, list) and output_range else 0
+    return input_price, output_price
 
 
 class PoolService:
@@ -477,7 +477,7 @@ class PoolService:
             if model_id in existing_map:
                 existing.append(model_id)
                 pm = existing_map[model_id]
-                input_fen, output_fen = _extract_model_pricing(item)
+                input_price, output_price = _extract_model_pricing(item)
                 if pm.input_price_per_million == 0 and input_fen > 0:
                     pm.input_price_per_million = input_fen
                     updated.append(model_id)
@@ -486,7 +486,7 @@ class PoolService:
                     if model_id not in updated:
                         updated.append(model_id)
             else:
-                input_fen, output_fen = _extract_model_pricing(item)
+                input_price, output_price = _extract_model_pricing(item)
                 pm = PoolModel(
                     pool_id=pool.id, model_slug=model_id,
                     upstream_model_id=model_id,

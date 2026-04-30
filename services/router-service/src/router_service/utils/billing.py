@@ -1,4 +1,4 @@
-"""Cost computation for API call billing."""
+"""Cost computation for API call billing (micro-yuan, 1 yuan = 1,000,000)."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ def _calc(
     output_cost = completion_tokens * output_price / 1_000_000
     cached_cost = cached_tokens * cached_price / 1_000_000
     total = input_cost + output_cost + cached_cost
-    fen = math.ceil(total) if total > 0 else 0
-    return fen, input_cost, output_cost, cached_cost
+    micro_yuan = math.ceil(total) if total > 0 else 0
+    return micro_yuan, input_cost, output_cost, cached_cost
 
 
 def compute_cost(
@@ -33,7 +33,7 @@ def compute_cost(
     provider_output_price: int,
     provider_cached_price: int,
 ) -> tuple[int, int, dict]:
-    """Return (user_cost_fen, provider_cost_fen, cost_detail)."""
+    """Return (user_cost_micro_yuan, provider_cost_micro_yuan, cost_detail)."""
     non_cached_input = max(prompt_tokens - cached_tokens, 0)
 
     user_cost, u_in, u_out, u_cached = _calc(
@@ -59,7 +59,7 @@ def compute_cost(
             "output": provider_output_price,
             "cached_input": provider_cached_price,
         },
-        "user_cost_fen": user_cost,
-        "provider_cost_fen": provider_cost,
+        "user_cost": user_cost,
+        "provider_cost": provider_cost,
     }
     return user_cost, provider_cost, cost_detail

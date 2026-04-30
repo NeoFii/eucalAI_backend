@@ -33,6 +33,50 @@ class UsageStatService:
     """Aggregate api_call_logs into hourly usage buckets."""
 
     @staticmethod
+    async def upsert_from_log(db: AsyncSession, log: ApiCallLog) -> None:
+        """Incrementally update usage_stats from a single completed call log."""
+        stat_hour = log.created_at.replace(minute=0, second=0, microsecond=0)
+        model_name = log.model_name or "unknown"
+        is_success = log.status == ApiCallLog.STATUS_SUCCESS
+        is_error = log.status == ApiCallLog.STATUS_ERROR
+
+        repo = UsageStatRepository(db)
+        for api_key_id in (log.api_key_id, None):
+            bucket = await repo.get_bucket(
+                user_id=int(log.user_id),
+                api_key_id=api_key_id,
+                model_name=model_name,
+                stat_hour=stat_hour,
+            )
+            if bucket is None:
+                bucket = UsageStat(
+                    user_id=int(log.user_id),
+                    api_key_id=api_key_id,
+                    account_api_key_id=api_key_id or 0,
+                    model_name=model_name,
+                    stat_hour=stat_hour,
+                    request_count=0,
+                    success_count=0,
+                    error_count=0,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    cached_tokens=0,
+                    total_tokens=0,
+                    total_cost=0,
+                )
+                repo.add(bucket)
+                await db.flush()
+
+            bucket.request_count += 1
+            bucket.success_count += 1 if is_success else 0
+            bucket.error_count += 1 if is_error else 0
+            bucket.prompt_tokens += int(log.prompt_tokens)
+            bucket.completion_tokens += int(log.completion_tokens)
+            bucket.cached_tokens += int(log.cached_tokens)
+            bucket.total_tokens += int(log.total_tokens)
+            bucket.total_cost += int(log.cost)
+
+    @staticmethod
     async def aggregate_hour(db: AsyncSession, stat_hour: datetime) -> None:
         next_hour = stat_hour + timedelta(hours=1)
         repo = UsageStatRepository(db)

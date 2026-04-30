@@ -61,6 +61,7 @@ class SupportedModel(Base, SnowflakeIdMixin, TimestampMixin):
     __tablename__ = "supported_models"
 
     slug = Column(String(120), unique=True, nullable=False, index=True, comment="Model slug")
+    routing_slug = Column(String(200), unique=True, nullable=True, index=True, comment="路由用 slug，对应 pool_models.model_slug")
     name = Column(String(160), nullable=False, comment="Model display name")
     vendor_id = Column(
         BigInteger,
@@ -71,9 +72,9 @@ class SupportedModel(Base, SnowflakeIdMixin, TimestampMixin):
     )
     summary = Column(String(255), nullable=True, comment="Model card summary")
     description = Column(Text, nullable=True, comment="Model detail description")
-    price_input_per_m_fen = Column(Integer, nullable=True, comment="Input price per million tokens in fen")
-    price_output_per_m_fen = Column(Integer, nullable=True, comment="Output price per million tokens in fen")
-    price_cached_input_per_m_fen = Column(Integer, nullable=True, comment="Cached input price per million tokens in fen")
+    price_input_per_m_fen = Column(BigInteger, nullable=True, comment="Input price per million tokens in micro-yuan")
+    price_output_per_m_fen = Column(BigInteger, nullable=True, comment="Output price per million tokens in micro-yuan")
+    price_cached_input_per_m_fen = Column(BigInteger, nullable=True, comment="Cached input price per million tokens in micro-yuan")
     capability_tags = Column(JSON, nullable=False, default=list, comment="Capability tag list")
     context_window = Column(Integer, nullable=True, comment="Context window tokens")
     max_output_tokens = Column(Integer, nullable=True, comment="Max output tokens")

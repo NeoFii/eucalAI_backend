@@ -35,9 +35,9 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
     login_fail_count = Column(Integer, default=0, nullable=False, comment="Failed login count")
     login_locked_until = Column(DateTime, nullable=True, comment="Login lock expiry")
 
-    balance = Column(Integer, default=0, nullable=False, comment="可用余额（分，¥1=100）")
-    frozen_amount = Column(Integer, default=0, nullable=False, comment="预冻结中的余额（分）")
-    used_amount = Column(Integer, default=0, nullable=False, comment="历史累计消费（分）")
+    balance = Column(BigInteger, default=0, nullable=False, comment="可用余额（微元，¥1=1000000）")
+    frozen_amount = Column(BigInteger, default=0, nullable=False, comment="预冻结中的余额（微元）")
+    used_amount = Column(BigInteger, default=0, nullable=False, comment="历史累计消费（微元）")
     total_requests = Column(Integer, default=0, nullable=False, comment="历史累计调用次数")
     total_tokens = Column(BigInteger, default=0, nullable=False, comment="历史累计 token 数")
 

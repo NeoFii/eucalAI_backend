@@ -21,7 +21,7 @@ class VoucherRedemptionCode(Base, SnowflakeIdMixin, TimestampMixin):
     code_hash = Column(String(64), unique=True, nullable=False, comment="SHA-256 hash of normalized code")
     code_prefix = Column(String(8), nullable=False, comment="Non-secret display prefix")
     code_suffix = Column(String(8), nullable=False, comment="Non-secret display suffix")
-    amount = Column(Integer, nullable=False, comment="Redeem amount (fen)")
+    amount = Column(BigInteger, nullable=False, comment="Redeem amount (微元)")
     status = Column(
         SmallInteger,
         default=STATUS_ACTIVE,

@@ -43,8 +43,8 @@ class UserApiKey(Base, SnowflakeIdMixin, TimestampMixin, SoftDeleteMixin):
         nullable=False,
         comment="1=unlimited 2=limited",
     )
-    quota_limit = Column(Integer, default=0, nullable=False, comment="limited-mode cap (分)")
-    quota_used = Column(Integer, default=0, nullable=False, comment="Cumulative spend via this key (分)")
+    quota_limit = Column(BigInteger, default=0, nullable=False, comment="limited-mode cap (微元)")
+    quota_used = Column(BigInteger, default=0, nullable=False, comment="Cumulative spend via this key (微元)")
     allowed_models = Column(Text, nullable=True, comment="comma-separated model names, NULL=all")
     allow_ips = Column(Text, nullable=True, comment="newline-separated CIDRs, NULL=all")
     rpm_limit = Column(Integer, nullable=True, comment="每分钟请求上限，NULL=用全局默认")

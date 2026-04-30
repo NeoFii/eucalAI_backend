@@ -18,6 +18,7 @@ from router_service.logging import log_upstream_call
 from router_service.schemas.requests import CompletionRequest
 from router_service.services.channel_selector import ChannelRateLimited
 from router_service.services.routing import RoutingError, route_and_resolve, sanitize_error
+from router_service.utils.billing import compute_cost
 
 router = APIRouter()
 
@@ -212,12 +213,29 @@ async def completions(
 
     if call_log_created:
         usage = response_json.get("usage") or {}
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        cached_tokens = usage.get("cached_tokens", 0)
+        total_tokens = usage.get("total_tokens", 0)
+        user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
+        cost, provider_cost, cost_detail = compute_cost(
+            prompt_tokens, completion_tokens, cached_tokens,
+            user_input_price=user_prices.get("input", 0),
+            user_output_price=user_prices.get("output", 0),
+            user_cached_price=user_prices.get("cached_input", 0),
+            provider_input_price=target_info.get("input_price_per_million", 0),
+            provider_output_price=target_info.get("output_price_per_million", 0),
+            provider_cached_price=target_info.get("cached_input_price_per_million", 0),
+        )
         await CallLogGateway.update_call_log(
             settings=settings, request_id=request_id, status=1,
-            prompt_tokens=usage.get("prompt_tokens", 0),
-            completion_tokens=usage.get("completion_tokens", 0),
-            cached_tokens=usage.get("cached_tokens", 0),
-            total_tokens=usage.get("total_tokens", 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+            total_tokens=total_tokens,
+            cost=cost,
+            provider_cost=provider_cost,
+            cost_detail=cost_detail,
             duration_ms=int((time.monotonic() - t_start) * 1000),
         )
 
