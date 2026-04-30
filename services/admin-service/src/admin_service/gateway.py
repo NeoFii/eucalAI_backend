@@ -47,21 +47,26 @@ class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
     def __init__(self) -> None:
         super().__init__(service_name="user-service")
 
+    def _common_kwargs(self) -> dict:
+        return {
+            "base_url": settings.USER_SERVICE_URL,
+            "target_service": self.service_name,
+            "secret": settings.INTERNAL_SECRET,
+            "caller_service": settings.SERVICE_NAME,
+            "timeout": IDENTITY_TIMEOUT_SECONDS,
+            "max_retries": settings.INTERNAL_HTTP_MAX_RETRIES,
+            "retry_backoff_seconds": settings.INTERNAL_HTTP_RETRY_BACKOFF_SECONDS,
+            "circuit_breaker_threshold": settings.INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD,
+            "circuit_breaker_cooldown_seconds": (
+                settings.INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS
+            ),
+        }
+
     async def fetch_total_users(self) -> int:
         try:
             payload = await get_internal_json(
-                base_url=settings.USER_SERVICE_URL,
-                target_service=self.service_name,
                 path="/api/v1/internal/stats/users",
-                secret=settings.INTERNAL_SECRET,
-                caller_service=settings.SERVICE_NAME,
-                timeout=IDENTITY_TIMEOUT_SECONDS,
-                max_retries=settings.INTERNAL_HTTP_MAX_RETRIES,
-                retry_backoff_seconds=settings.INTERNAL_HTTP_RETRY_BACKOFF_SECONDS,
-                circuit_breaker_threshold=settings.INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD,
-                circuit_breaker_cooldown_seconds=(
-                    settings.INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS
-                ),
+                **self._common_kwargs(),
             )
         except InternalServiceError as exc:
             raise ServiceUnavailableException("User identity service unavailable") from exc
@@ -71,6 +76,35 @@ class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
             raise ServiceUnavailableException(
                 "Unexpected response format from user-service",
             ) from exc
+
+    async def fetch_dashboard_summary(self) -> dict:
+        try:
+            return await get_internal_json(
+                path="/api/v1/internal/dashboard/summary",
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            raise ServiceUnavailableException("User service unavailable") from exc
+
+    async def fetch_user_growth(self, start: str, end: str) -> list[dict]:
+        try:
+            return await get_internal_json(
+                path="/api/v1/internal/dashboard/user-growth",
+                query_params={"start": start, "end": end},
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            raise ServiceUnavailableException("User service unavailable") from exc
+
+    async def fetch_usage_trends(self, start: str, end: str) -> dict:
+        try:
+            return await get_internal_json(
+                path="/api/v1/internal/dashboard/usage-trends",
+                query_params={"start": start, "end": end},
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            raise ServiceUnavailableException("User service unavailable") from exc
 
 
 USER_MGMT_TIMEOUT_SECONDS = 5.0

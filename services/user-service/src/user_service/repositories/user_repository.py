@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from datetime import datetime
+
+from sqlalchemy import cast, func, or_, select, Date
 
 from common.db import BaseRepository
 from user_service.models import User
@@ -64,3 +66,22 @@ class UserRepository(BaseRepository[User]):
 
     def add(self, user: User) -> None:
         self.session.add(user)
+
+    async def get_daily_registrations(
+        self, *, start: datetime, end: datetime,
+    ) -> list[dict]:
+        reg_date = cast(User.created_at, Date).label("reg_date")
+        query = (
+            select(reg_date, func.count().label("count"))
+            .where(User.created_at >= start, User.created_at < end)
+            .group_by(reg_date)
+            .order_by(reg_date.asc())
+        )
+        rows = (await self.session.execute(query)).all()
+        return [{"date": str(r.reg_date), "count": int(r.count)} for r in rows]
+
+    async def count_since(self, since: datetime) -> int:
+        result = await self.session.execute(
+            select(func.count(User.id)).where(User.created_at >= since)
+        )
+        return int(result.scalar() or 0)

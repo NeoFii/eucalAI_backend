@@ -6,6 +6,7 @@ from admin_service.api.v1.endpoints import (
     admin_audit_logs,
     admin_users,
     auth,
+    dashboard,
     internal,
     model_catalog,
     model_catalog_admin,
@@ -30,3 +31,4 @@ api_router.include_router(pools.router, prefix="/admin")
 api_router.include_router(service_logs.router, prefix="/admin")
 api_router.include_router(internal.router)
 api_router.include_router(user_management.router)
+api_router.include_router(dashboard.router)
