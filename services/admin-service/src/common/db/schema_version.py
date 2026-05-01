@@ -38,7 +38,7 @@ def _locate_service_migrations(package: str) -> Path:
 def _build_service_configs() -> dict[str, ServiceMigrationConfig]:
     configs: dict[str, ServiceMigrationConfig] = {}
     for service_name, package, db_env in [
-        ("admin-service", "admin_service", "ADMIN_DATABASE_URL"),
+        ("admin-service", "models", "ADMIN_DATABASE_URL"),
         ("user-service", "user_service", "USER_DATABASE_URL"),
     ]:
         try:

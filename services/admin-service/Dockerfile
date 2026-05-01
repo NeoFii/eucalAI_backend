@@ -39,4 +39,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
 USER appuser
 EXPOSE 8001
 
-CMD ["uvicorn", "admin_service.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]

@@ -85,8 +85,8 @@ async def _seed(config_path: Path, *, dry_run: bool = False) -> None:
         _logger.info("Dry run — no database changes")
         return
 
-    from admin_service.config import settings
-    from admin_service.db import db_runtime
+    from core.config import settings
+    from core.db import db_runtime
     from common.utils.crypto import encrypt_api_key, mask_api_key
 
     await db_runtime.init(settings.DATABASE_URL)
@@ -94,8 +94,8 @@ async def _seed(config_path: Path, *, dry_run: bool = False) -> None:
 
     async with async_session() as db:
 
-        from admin_service.models.routing_config import ProviderCredential, RoutingConfig
-        from admin_service.repositories.routing_config_repository import (
+        from models.routing_config import ProviderCredential, RoutingConfig
+        from repositories.routing_config_repository import (
             ProviderCredentialRepository,
             RoutingConfigRepository,
         )
