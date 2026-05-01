@@ -148,6 +148,7 @@ class AdminBootstrapService:
             password_hash=hash_password(settings.BOOTSTRAP_SUPERADMIN_PASSWORD),
             name=settings.BOOTSTRAP_SUPERADMIN_NAME,
             role="super_admin",
+            is_root=True,
             status=1,
             password_changed_at=now(),
         )

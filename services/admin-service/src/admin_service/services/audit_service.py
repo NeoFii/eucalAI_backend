@@ -20,6 +20,7 @@ class AdminAuditService:
         "enable_admin",
         "disable_admin",
         "reset_admin_password",
+        "update_admin_role",
     )
     AUTH_ACTIONS = (
         "admin_login_success",

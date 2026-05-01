@@ -15,6 +15,7 @@ from admin_service.schemas import (
     CreateAdminResponse,
     CreateAdminResponseData,
     ResetAdminPasswordRequest,
+    UpdateAdminRoleRequest,
     UpdateAdminStatusRequest,
 )
 from admin_service.services.management_service import AdminManagementService
@@ -40,6 +41,7 @@ async def list_admin_users(
                     email=admin.email,
                     name=admin.name,
                     role=admin.role,
+                    is_root=getattr(admin, "is_root", False),
                     status=admin.status,
                     last_login_at=admin.last_login_at,
                     created_at=admin.created_at,
@@ -68,6 +70,7 @@ async def create_admin_user(
         email=payload.email,
         name=payload.name,
         password=payload.password,
+        role=payload.role,
         ip_address=ip_address,
         user_agent=user_agent,
     )
@@ -122,6 +125,26 @@ async def reset_admin_user_password(
         actor_admin=current_admin,
         target_uid=uid,
         new_password=payload.new_password,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return AdminBaseResponse(code=200, message="success")
+
+
+@router.patch("/{uid}/role", response_model=AdminBaseResponse, summary="Update admin role")
+async def update_admin_user_role(
+    uid: str,
+    payload: UpdateAdminRoleRequest,
+    request: Request,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> AdminBaseResponse:
+    ip_address, user_agent = get_request_meta(request)
+    await AdminManagementService.update_admin_role(
+        db,
+        actor_admin=current_admin,
+        target_uid=uid,
+        role=payload.role,
         ip_address=ip_address,
         user_agent=user_agent,
     )

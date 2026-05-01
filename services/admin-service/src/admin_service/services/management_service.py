@@ -41,6 +41,7 @@ class AdminManagementService:
         email: str,
         name: str,
         password: str,
+        role: str = "admin",
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> AdminUser:
@@ -57,7 +58,7 @@ class AdminManagementService:
             email=email,
             password_hash=hash_password(password),
             name=name,
-            role="admin",
+            role=role,
             status=1,
             created_by_admin_id=actor_admin.id,
             updated_by_admin_id=actor_admin.id,
@@ -159,6 +160,49 @@ class AdminManagementService:
         return target_admin
 
     @staticmethod
+    async def update_admin_role(
+        db: AsyncSession,
+        *,
+        actor_admin: AdminUser,
+        target_uid: str,
+        role: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> AdminUser:
+        if not getattr(actor_admin, "is_root", False):
+            raise AdminPermissionDeniedException("Only root admin can change roles")
+
+        target_admin = await AdminManagementService.get_by_uid(db, target_uid)
+        if target_admin is None:
+            raise NotFoundException("Admin user not found")
+        if target_admin.id == actor_admin.id:
+            raise AdminPermissionDeniedException("Cannot change your own role")
+        if getattr(target_admin, "is_root", False):
+            raise AdminPermissionDeniedException("Cannot change root admin role")
+
+        before_data = AdminManagementService.build_admin_snapshot(target_admin)
+        target_admin.role = role
+        target_admin.updated_by_admin_id = actor_admin.id
+        await db.flush()
+
+        await AdminAuditService.record(
+            db,
+            actor_admin_id=actor_admin.id,
+            target_admin_id=target_admin.id,
+            action="update_admin_role",
+            resource_type="admin_user",
+            resource_id=str(target_admin.uid),
+            status="success",
+            before_data=before_data,
+            after_data=AdminManagementService.build_admin_snapshot(target_admin),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        await db.commit()
+        await db.refresh(target_admin)
+        return target_admin
+
+    @staticmethod
     async def _get_mutable_target(
         db: AsyncSession,
         actor_admin: AdminUser,
@@ -180,6 +224,7 @@ class AdminManagementService:
             "email": admin.email,
             "name": admin.name,
             "role": admin.role,
+            "is_root": getattr(admin, "is_root", False),
             "status": admin.status,
             "created_at": admin.created_at.isoformat() if admin.created_at else None,
             "updated_at": admin.updated_at.isoformat() if admin.updated_at else None,

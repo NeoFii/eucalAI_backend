@@ -25,6 +25,7 @@ class AdminUserData(BaseModel):
     email: str = Field(..., description="邮箱")
     name: str = Field(..., description="姓名")
     role: str = Field(..., description="角色")
+    is_root: bool = Field(default=False, description="根管理员标记")
 
 
 class AdminLoginResponseData(BaseModel):
@@ -48,6 +49,7 @@ class AdminInfoResponseData(DateTimeModel):
     email: str = Field(..., description="邮箱")
     name: str = Field(..., description="姓名")
     role: str = Field(..., description="角色")
+    is_root: bool = Field(default=False, description="根管理员标记")
     status: int = Field(..., description="状态：0=禁用 1=正常")
     last_login_at: Optional[datetime] = Field(default=None, description="最近登录时间")
     created_at: datetime = Field(..., description="创建时间")

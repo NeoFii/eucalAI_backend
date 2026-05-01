@@ -7,6 +7,7 @@ from admin_service.schemas.admin_user import (
     CreateAdminResponse,
     CreateAdminResponseData,
     ResetAdminPasswordRequest,
+    UpdateAdminRoleRequest,
     UpdateAdminStatusRequest,
 )
 from admin_service.schemas.audit_log import (
@@ -154,6 +155,7 @@ __all__ = [
     "ResetAdminPasswordRequest",
     "ResetUserPasswordRequest",
     "TopupUserRequest",
+    "UpdateAdminRoleRequest",
     "UpdateAdminStatusRequest",
     "UpdateUserStatusRequest",
     "GenerateVoucherCodesRequest",

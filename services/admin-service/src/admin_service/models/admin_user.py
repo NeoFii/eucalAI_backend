@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, SmallInteger, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, SmallInteger, String
 from sqlalchemy.orm import relationship
 
 from admin_service.db import Base
@@ -20,6 +20,7 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
     name = Column(String(100), nullable=False, comment="Admin display name")
     status = Column(SmallInteger, default=1, nullable=False, comment="0=disabled 1=active")
     role = Column(String(20), default="admin", nullable=False, comment="admin/super_admin")
+    is_root = Column(Boolean, default=False, nullable=False, server_default="0", comment="Root admin flag, only bootstrap super admin is root")
     created_by_admin_id = Column(
         BigInteger,
         ForeignKey("admin_users.id", ondelete="SET NULL"),

@@ -19,6 +19,7 @@ class AdminListItem(DateTimeModel):
     email: str = Field(..., description="Admin email")
     name: str = Field(..., description="Admin name")
     role: str = Field(..., description="Admin role")
+    is_root: bool = Field(default=False, description="Root admin flag")
     status: int = Field(..., description="Admin status")
     last_login_at: Optional[datetime] = Field(default=None, description="Last login time")
     created_at: datetime = Field(..., description="Created at")
@@ -41,6 +42,7 @@ class CreateAdminRequest(BaseModel):
     email: EmailStr = Field(..., description="Admin email")
     name: str = Field(..., min_length=1, max_length=100, description="Admin name")
     password: str = Field(..., min_length=8, max_length=128, description="Admin password")
+    role: str = Field(default="admin", description="Admin role")
 
     @field_validator("password")
     @classmethod
@@ -48,6 +50,13 @@ class CreateAdminRequest(BaseModel):
         ok, message = check_password_strength(value)
         if not ok:
             raise ValueError(message)
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if value not in {"admin", "super_admin"}:
+            raise ValueError("role must be 'admin' or 'super_admin'")
         return value
 
 
@@ -97,4 +106,17 @@ class ResetAdminPasswordRequest(BaseModel):
         ok, message = check_password_strength(value)
         if not ok:
             raise ValueError(message)
+        return value
+
+
+class UpdateAdminRoleRequest(BaseModel):
+    """Update admin role request."""
+
+    role: str = Field(..., description="Target role")
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if value not in {"admin", "super_admin"}:
+            raise ValueError("role must be 'admin' or 'super_admin'")
         return value
