@@ -37,4 +37,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 USER appuser
 
-CMD ["arq", "user_service.worker.WorkerSettings"]
+CMD ["arq", "core.worker.WorkerSettings"]

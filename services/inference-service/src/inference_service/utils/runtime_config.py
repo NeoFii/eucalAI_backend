@@ -1,43 +1,21 @@
-"""RuntimeConfigStore: hot-reloadable runtime configuration."""
+"""Runtime configuration normalization and cloning."""
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
-import threading
 from typing import Any, Dict, List, Tuple
 
-from inference_service.config import (
+from inference_service.core.config import (
     FIVEWAY_DEFAULT_WEIGHTS,
     FIVEWAY_ROUTE_ORDER,
 )
+from inference_service.utils.scoring import parse_score_bands
 
 DEFAULT_ROUTER_ALIAS = "auto"
 
 _ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-
-
-def parse_score_bands(raw: str) -> List[Tuple[float, float, int]]:
-    bands: List[Tuple[float, float, int]] = []
-    for item in raw.split(","):
-        left, _, right = item.partition(":")
-        if not left or not right:
-            continue
-        tier = int(right.strip())
-        if "-" in left:
-            start_raw, _, end_raw = left.partition("-")
-            start = float(start_raw.strip())
-            end = float(end_raw.strip())
-        else:
-            start = end = float(left.strip())
-        if start > end:
-            raise ValueError("score band start must be <= end")
-        bands.append((start, end, tier))
-    if not bands:
-        raise ValueError("score bands must not be empty")
-    return bands
 _logger = logging.getLogger("inference_service")
 
 
@@ -70,16 +48,7 @@ def build_default_runtime_config() -> Dict[str, Any]:
     }
 
 
-def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    base = build_default_runtime_config()
-    raw = raw or {}
-
-    route_order = raw.get("route_order") or base["route_order"]
-    if route_order != FIVEWAY_ROUTE_ORDER:
-        raise ValueError(f"route_order must exactly match {FIVEWAY_ROUTE_ORDER}")
-
-    # Weights
-    weights_raw = raw.get("weights", base["weights"])
+def _validate_weights(weights_raw: Any, defaults: Dict[str, float]) -> Dict[str, float]:
     if isinstance(weights_raw, list):
         if len(weights_raw) != 5:
             raise ValueError("weights list must contain exactly 5 numbers")
@@ -96,10 +65,13 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
         raise ValueError("weights must be non-negative")
     if sum(weights.values()) <= 0:
         raise ValueError("weights sum must be greater than 0")
+    return weights
 
-    # Score bands
-    score_bands_value = raw.get("score_bands", base["score_bands"])
-    score_bands_raw_fallback = str(raw.get("score_bands_raw", "")).strip()
+
+def _validate_score_bands(
+    score_bands_value: Any,
+    score_bands_raw_hint: str = "",
+) -> Tuple[List[Tuple[float, float, int]], str]:
     if isinstance(score_bands_value, list):
         score_bands: List[Tuple[float, float, int]] = []
         for item in score_bands_value:
@@ -108,8 +80,8 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
             score_bands.append((float(item[0]), float(item[1]), int(item[2])))
         if not score_bands:
             raise ValueError("score bands must not be empty")
-        if score_bands_raw_fallback:
-            score_bands_raw = score_bands_raw_fallback
+        if score_bands_raw_hint:
+            score_bands_raw = score_bands_raw_hint
         else:
             pieces = []
             for start, end, tier in score_bands:
@@ -118,9 +90,10 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
     else:
         score_bands_raw = str(score_bands_value).strip()
         score_bands = parse_score_bands(score_bands_raw)
+    return score_bands, score_bands_raw
 
-    # Tier model map
-    tier_map_raw = raw.get("tier_model_map", base["tier_model_map"])
+
+def _validate_tier_model_map(tier_map_raw: Any) -> Dict[int, str]:
     if not isinstance(tier_map_raw, dict):
         raise ValueError("tier_model_map must be a dict")
     tier_model_map: Dict[int, str] = {}
@@ -132,31 +105,70 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
         tier_model_map[tier] = model_name
     if set(tier_model_map) != {1, 2, 3, 4, 5}:
         raise ValueError("tier_model_map must define tiers 1..5")
+    return tier_model_map
 
-    router_alias = str(raw.get("router_alias", base["router_alias"])).strip() or DEFAULT_ROUTER_ALIAS
+
+def normalize_config(
+    raw: Dict[str, Any] | None = None,
+    *,
+    strip_providers: bool = False,
+    use_defaults: bool = True,
+) -> Dict[str, Any]:
+    """Unified config normalization.
+
+    Args:
+        raw: Raw config dict. None uses defaults.
+        strip_providers: If True, set model_providers to {} (for inference-service).
+        use_defaults: If True, fall back to build_default_runtime_config() for missing fields.
+    """
+    base = build_default_runtime_config() if use_defaults else {}
+    raw = raw or {}
+
+    route_order = raw.get("route_order") or base.get("route_order", list(FIVEWAY_ROUTE_ORDER))
+    if route_order != list(FIVEWAY_ROUTE_ORDER):
+        raise ValueError(f"route_order must exactly match {FIVEWAY_ROUTE_ORDER}")
+
+    weights_raw = raw.get("weights", base.get("weights", dict(FIVEWAY_DEFAULT_WEIGHTS)))
+    weights = _validate_weights(weights_raw, FIVEWAY_DEFAULT_WEIGHTS)
+
+    score_bands_value = raw.get("score_bands", base.get("score_bands"))
+    if not score_bands_value:
+        raise ValueError("score_bands must not be empty")
+    score_bands_raw_hint = str(raw.get("score_bands_raw", "")).strip()
+    score_bands, score_bands_raw = _validate_score_bands(score_bands_value, score_bands_raw_hint)
+
+    tier_map_raw = raw.get("tier_model_map", base.get("tier_model_map"))
+    if not tier_map_raw:
+        raise ValueError("tier_model_map must be a non-empty dict")
+    tier_model_map = _validate_tier_model_map(tier_map_raw)
+
+    router_alias = str(raw.get("router_alias", base.get("router_alias", DEFAULT_ROUTER_ALIAS))).strip() or DEFAULT_ROUTER_ALIAS
 
     # Model providers
-    providers_raw = raw.get("model_providers", base["model_providers"])
-    if not isinstance(providers_raw, dict):
-        raise ValueError("model_providers must be a dict")
-    model_providers: Dict[str, Dict[str, str]] = {}
-    for model_name, prov in providers_raw.items():
-        if not isinstance(prov, dict):
-            raise ValueError(f"model_providers[{model_name}] must be a dict")
-        for key in ("provider_slug", "api_key", "api_base", "upstream_model"):
-            if key not in prov or not str(prov[key]).strip():
-                raise ValueError(f"model_providers[{model_name}] missing {key}")
-        model_providers[str(model_name).strip()] = {
-            "provider_slug": str(prov["provider_slug"]).strip(),
-            "api_key": _resolve_env_vars(str(prov["api_key"]).strip()),
-            "api_base": _resolve_env_vars(str(prov["api_base"]).strip()),
-            "upstream_model": str(prov["upstream_model"]).strip(),
-        }
-        resolved_key = model_providers[str(model_name).strip()]["api_key"]
-        if not resolved_key or "${" in resolved_key:
-            raise ValueError(
-                f"model_providers[{model_name}].api_key resolved to empty or unresolved value"
-            )
+    if strip_providers:
+        model_providers: Dict[str, Dict[str, str]] = {}
+    else:
+        providers_raw = raw.get("model_providers", base.get("model_providers", {}))
+        if not isinstance(providers_raw, dict):
+            raise ValueError("model_providers must be a dict")
+        model_providers = {}
+        for model_name, prov in providers_raw.items():
+            if not isinstance(prov, dict):
+                raise ValueError(f"model_providers[{model_name}] must be a dict")
+            for key in ("provider_slug", "api_key", "api_base", "upstream_model"):
+                if key not in prov or not str(prov[key]).strip():
+                    raise ValueError(f"model_providers[{model_name}] missing {key}")
+            model_providers[str(model_name).strip()] = {
+                "provider_slug": str(prov["provider_slug"]).strip(),
+                "api_key": _resolve_env_vars(str(prov["api_key"]).strip()),
+                "api_base": _resolve_env_vars(str(prov["api_base"]).strip()),
+                "upstream_model": str(prov["upstream_model"]).strip(),
+            }
+            resolved_key = model_providers[str(model_name).strip()]["api_key"]
+            if not resolved_key or "${" in resolved_key:
+                raise ValueError(
+                    f"model_providers[{model_name}].api_key resolved to empty or unresolved value"
+                )
 
     return {
         "router_alias": router_alias,
@@ -169,6 +181,15 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
     }
 
 
+# Convenience aliases for backward compatibility
+def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    return normalize_config(raw, strip_providers=False, use_defaults=True)
+
+
+def normalize_inference_config(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return normalize_config(raw, strip_providers=True, use_defaults=False)
+
+
 def clone_runtime_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "router_alias": config["router_alias"],
@@ -177,110 +198,5 @@ def clone_runtime_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "score_bands_raw": config["score_bands_raw"],
         "score_bands": list(config["score_bands"]),
         "tier_model_map": dict(config["tier_model_map"]),
-        "model_providers": {k: dict(v) for k, v in config["model_providers"].items()},
-    }
-
-
-class RuntimeConfigStore:
-    def __init__(self, path: str):
-        self.path = path
-        self._lock = threading.Lock()
-        self._mtime: float | None = None
-        self._cached: Dict[str, Any] | None = None
-
-    def ensure_exists(self) -> None:
-        if os.path.exists(self.path):
-            return
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(build_default_runtime_config(), f, ensure_ascii=False, indent=2)
-
-    def load(self) -> Dict[str, Any]:
-        self.ensure_exists()
-        mtime = os.path.getmtime(self.path)
-        with self._lock:
-            if self._cached is not None and self._mtime == mtime:
-                return self._cached
-            try:
-                with open(self.path, "r", encoding="utf-8") as f:
-                    raw = json.load(f)
-                config = normalize_runtime_config(raw)
-            except Exception:
-                if self._cached is not None:
-                    _logger.warning(
-                        "failed to reload %s, using last valid config", self.path,
-                        exc_info=True,
-                    )
-                    return self._cached
-                raise
-            self._cached = config
-            self._mtime = mtime
-            return config
-
-
-def normalize_inference_config(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize config for inference-service: strips model_providers, no ${VAR} resolution."""
-    route_order = raw.get("route_order") or list(FIVEWAY_ROUTE_ORDER)
-    if route_order != list(FIVEWAY_ROUTE_ORDER):
-        raise ValueError(f"route_order must exactly match {FIVEWAY_ROUTE_ORDER}")
-
-    weights_raw = raw.get("weights", dict(FIVEWAY_DEFAULT_WEIGHTS))
-    if isinstance(weights_raw, list):
-        if len(weights_raw) != 5:
-            raise ValueError("weights list must contain exactly 5 numbers")
-        weights = dict(zip(FIVEWAY_ROUTE_ORDER, [float(x) for x in weights_raw]))
-    elif isinstance(weights_raw, dict):
-        weights = {}
-        for name in FIVEWAY_ROUTE_ORDER:
-            if name not in weights_raw:
-                raise ValueError(f"weights is missing route: {name}")
-            weights[name] = float(weights_raw[name])
-    else:
-        raise ValueError("weights must be a dict or a list")
-    if any(value < 0 for value in weights.values()):
-        raise ValueError("weights must be non-negative")
-    if sum(weights.values()) <= 0:
-        raise ValueError("weights sum must be greater than 0")
-
-    score_bands_value = raw.get("score_bands")
-    if not score_bands_value:
-        raise ValueError("score_bands must not be empty")
-    if isinstance(score_bands_value, list):
-        score_bands: List[Tuple[float, float, int]] = []
-        for item in score_bands_value:
-            if not isinstance(item, (list, tuple)) or len(item) != 3:
-                raise ValueError("score_bands list items must be [start, end, tier]")
-            score_bands.append((float(item[0]), float(item[1]), int(item[2])))
-        if not score_bands:
-            raise ValueError("score bands must not be empty")
-        pieces = []
-        for start, end, tier in score_bands:
-            pieces.append(f"{start}-{end}:{tier}" if start != end else f"{start}:{tier}")
-        score_bands_raw = ",".join(pieces)
-    else:
-        score_bands_raw = str(score_bands_value).strip()
-        score_bands = parse_score_bands(score_bands_raw)
-
-    tier_map_raw = raw.get("tier_model_map")
-    if not tier_map_raw or not isinstance(tier_map_raw, dict):
-        raise ValueError("tier_model_map must be a non-empty dict")
-    tier_model_map: Dict[int, str] = {}
-    for key, value in tier_map_raw.items():
-        tier = int(key)
-        model_name = str(value).strip()
-        if not model_name:
-            raise ValueError("tier_model_map values must not be empty")
-        tier_model_map[tier] = model_name
-    if set(tier_model_map) != {1, 2, 3, 4, 5}:
-        raise ValueError("tier_model_map must define tiers 1..5")
-
-    router_alias = str(raw.get("router_alias", DEFAULT_ROUTER_ALIAS)).strip() or DEFAULT_ROUTER_ALIAS
-
-    return {
-        "router_alias": router_alias,
-        "route_order": list(FIVEWAY_ROUTE_ORDER),
-        "weights": weights,
-        "score_bands_raw": score_bands_raw,
-        "score_bands": score_bands,
-        "tier_model_map": tier_model_map,
-        "model_providers": {},
+        "model_providers": {k: dict(v) for k, v in config.get("model_providers", {}).items()},
     }

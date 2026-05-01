@@ -16,7 +16,6 @@ except ModuleNotFoundError:
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 
 PLACEHOLDER_VALUES = {
-    "JWT_SECRET_KEY": {"", "your-secret-key", "your-secret-key-change-in-production", "change-me"},
     "INTERNAL_SECRET": {"", "replace-with-a-shared-random-secret"},
 }
 
@@ -47,24 +46,11 @@ def validate_environment(environ: Mapping[str, str] | None = None) -> Validation
     env = environ or os.environ
     result = ValidationResult()
 
-    jwt_key = _get_env(env, "JWT_SECRET_KEY")
-    if jwt_key in PLACEHOLDER_VALUES["JWT_SECRET_KEY"]:
-        result.errors.append("Missing or placeholder value for JWT_SECRET_KEY")
-    elif len(jwt_key) < 32:
-        result.errors.append("JWT_SECRET_KEY must be at least 32 characters")
-
     internal = _get_env(env, "INTERNAL_SECRET")
     if internal in PLACEHOLDER_VALUES["INTERNAL_SECRET"]:
         result.errors.append("Missing or placeholder value for INTERNAL_SECRET")
-
-    if not _get_env(env, "ROUTER_SECRET_MASTER_KEY"):
-        result.warnings.append(
-            "ROUTER_SECRET_MASTER_KEY is empty; will derive from JWT_SECRET_KEY"
-        )
-    if not _get_env(env, "PROVIDER_SECRET_MASTER_KEY"):
-        result.warnings.append(
-            "PROVIDER_SECRET_MASTER_KEY is empty; will derive from JWT_SECRET_KEY"
-        )
+    elif len(internal) < 32:
+        result.errors.append("INTERNAL_SECRET must be at least 32 characters")
 
     return result
 

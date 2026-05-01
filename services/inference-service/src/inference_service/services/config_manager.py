@@ -10,8 +10,8 @@ from typing import Any, Dict
 
 from common.internal import InternalServiceResponseError
 from common.observability import log_event
-from inference_service.gateway import AdminConfigGateway
-from inference_service.schemas.errors import InferenceConfigError
+from inference_service.core.exceptions import InferenceConfigError
+from inference_service.gateways.admin_config import AdminConfigGateway
 from inference_service.utils.runtime_config import normalize_inference_config
 
 _logger = logging.getLogger("inference_service")
@@ -107,7 +107,7 @@ class ConfigManager:
         return self._cached_config
 
     async def _poll_loop(self) -> None:
-        interval = self._settings.config_refresh_interval_seconds
+        interval = self._settings.CONFIG_REFRESH_INTERVAL_SECONDS
         while True:
             await asyncio.sleep(interval)
             try:

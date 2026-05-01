@@ -48,8 +48,12 @@ def _resolve_url(database_env: str) -> str:
 
 
 def _load_metadata(service_package: str):
-    db_module = importlib.import_module(f"{service_package}.db")
-    importlib.import_module(f"{service_package}.models")  # ensures model registration
+    if service_package:
+        db_module = importlib.import_module(f"{service_package}.db")
+        importlib.import_module(f"{service_package}.models")
+    else:
+        db_module = importlib.import_module("core.db")
+        importlib.import_module("models")
     return db_module.Base.metadata
 
 
@@ -76,7 +80,7 @@ def run_env() -> None:
     if config.config_file_name is not None:
         fileConfig(config.config_file_name)
 
-    service_package = _require_option("service_package")
+    service_package = config.get_main_option("service_package") or ""
     database_env = _require_option("database_env")
     target_metadata = _load_metadata(service_package)
     url = _resolve_url(database_env)

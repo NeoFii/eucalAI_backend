@@ -23,13 +23,13 @@ load_dotenv()
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from user_service.config import settings
-from user_service.db import close_db, create_engine, get_db_context, init_session_factory
-from user_service.models.api_call_log import ApiCallLog
-from user_service.models.balance_transaction import BalanceTransaction
-from user_service.repositories.balance_tx_repository import BalanceTxRepository
-from user_service.repositories.user_repository import UserRepository
-from user_service.services.usage_stat_service import UsageStatService
+from core.config import settings
+from core.db import close_db, create_engine, get_db_context, init_session_factory
+from models.api_call_log import ApiCallLog
+from models.balance_transaction import BalanceTransaction
+from repositories.balance_tx_repository import BalanceTxRepository
+from repositories.user_repository import UserRepository
+from services.usage_stat_service import UsageStatService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

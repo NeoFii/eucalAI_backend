@@ -8,7 +8,7 @@ services:
     environment:
       LOG_DIR: /app/logs
       LOG_FILE_PREFIX: user
-    command: ["/app/.venv/bin/uvicorn", "user_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    command: ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
     ports:
       - "8000:8000"
     volumes:
@@ -31,7 +31,7 @@ services:
     environment:
       LOG_DIR: /app/logs
       LOG_FILE_PREFIX: user-worker
-    command: ["/app/.venv/bin/arq", "user_service.worker.WorkerSettings"]
+    command: ["/app/.venv/bin/arq", "core.worker.WorkerSettings"]
     volumes:
       - user_logs:/app/logs
     depends_on:

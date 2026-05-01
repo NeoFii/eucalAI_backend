@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Router-service: CPU-only gateway (no torch/transformers)
 
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev pkg-config && rm -rf /var/lib/apt/lists/*
@@ -17,7 +17,7 @@ RUN uv venv /app/.venv && \
     . /app/.venv/bin/activate && \
     uv lock && uv sync --frozen --no-dev
 
-FROM python:3.11-slim AS runner
+FROM python:3.12-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 && rm -rf /var/lib/apt/lists/*
@@ -36,4 +36,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
 USER appuser
 EXPOSE 8003
 
-CMD ["uvicorn", "router_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "4"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "4"]

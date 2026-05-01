@@ -6,7 +6,6 @@ Accepts chat messages, returns routing decision (no upstream invocation).
 
 from __future__ import annotations
 
-import gc
 import math
 import os
 import pickle as _pickle
@@ -17,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from inference_service.config import (
+from inference_service.core.config import (
     FIVEWAY_ROUTE_ORDER,
     FINAL_SCORE_LOWER,
     FINAL_SCORE_UPPER,
@@ -89,11 +88,24 @@ def _safe_load_scaler(path: str) -> Any:
         return _RestrictedScalerUnpickler(f).load()
 
 
-def _ensure_special_tokens_map(model_dir: str):
+def _ensure_special_tokens_map(model_dir: str) -> str:
+    """Return a model_dir path guaranteed to have special_tokens_map.json.
+
+    If the file already exists, returns model_dir unchanged.
+    Otherwise creates a writable overlay with symlinks to avoid writing to a read-only mount.
+    """
     import json
+    import tempfile
     path = os.path.join(model_dir, "special_tokens_map.json")
     if os.path.exists(path):
-        return
+        return model_dir
+
+    overlay = tempfile.mkdtemp(prefix="inference_model_")
+    for item in os.listdir(model_dir):
+        src = os.path.join(model_dir, item)
+        dst = os.path.join(overlay, item)
+        os.symlink(src, dst)
+
     tok_cfg_path = os.path.join(model_dir, "tokenizer_config.json")
     data = {}
     if os.path.exists(tok_cfg_path):
@@ -111,8 +123,11 @@ def _ensure_special_tokens_map(model_dir: str):
             "eos_token": "<|im_end|>",
             "pad_token": "<|endoftext|>",
         }
-    with open(path, "w", encoding="utf-8") as f:
+    with open(os.path.join(overlay, "special_tokens_map.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+    logger.info("created special_tokens_map overlay at %s", overlay)
+    return overlay
 
 
 def _build_input_text(tokenizer, raw_text_or_chat):
@@ -124,15 +139,6 @@ def _build_input_text(tokenizer, raw_text_or_chat):
         parts.append(f"{turn['role']}: {turn['content']}")
     parts.append("assistant:")
     return "\n".join(parts)
-
-
-def release_memory(*objs):
-    gc.collect()
-    if torch.cuda.is_available():
-        try:
-            torch.cuda.empty_cache()
-        except Exception:
-            pass
 
 
 class HybridIntegratedDifficultyRouter:
@@ -154,9 +160,9 @@ class HybridIntegratedDifficultyRouter:
         self.default_runtime_config = normalize_runtime_config(runtime_config)
 
         logger.info("loading Qwen backbone: %s", model_paths.qwen_backbone)
-        _ensure_special_tokens_map(model_paths.qwen_backbone)
+        tokenizer_dir = _ensure_special_tokens_map(model_paths.qwen_backbone)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_paths.qwen_backbone,
+            tokenizer_dir,
             use_fast=False,
             trust_remote_code=True,
             local_files_only=True,
@@ -208,12 +214,11 @@ class HybridIntegratedDifficultyRouter:
         if model_paths.proto_artifact and os.path.exists(model_paths.proto_artifact):
             try:
                 bundle = np.load(model_paths.proto_artifact, allow_pickle=False)
-            except ValueError:
-                logger.warning(
-                    "proto artifact requires pickle — loading with allow_pickle=True: %s",
-                    model_paths.proto_artifact,
-                )
-                bundle = np.load(model_paths.proto_artifact, allow_pickle=True)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Proto artifact {model_paths.proto_artifact} requires pickle. "
+                    f"Re-export using np.savez (without pickle) to fix this."
+                ) from exc
             self.proto_prototypes = bundle["prototypes"].astype(np.float32)
             self.proto_label_order = [str(x) for x in bundle["label_order"].tolist()]
             self.proto_temperature = float(bundle["temperature"][0])
