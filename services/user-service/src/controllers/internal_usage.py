@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db import ListParams
 from common.utils.timezone import now
 from controllers.internal import verify_internal_secret
+from controllers.internal_user_mgmt import _get_user_or_404
 from core.dependencies import get_db_session
+from schemas.billing import UsageAnalyticsData, UsageAnalyticsRange
 from schemas.internal_usage import (
     InternalUsageLogItem,
     InternalUsageLogListResponse,
@@ -74,3 +77,37 @@ async def list_usage_stats(
         db, start=params.start, end=params.end, user_id=user_id, model_name=model_name,
     )
     return [InternalUsageStatItem.model_validate(s) for s in items]
+
+
+@router.get("/users/{uid}/usage/stats", summary="Get user usage stats by uid")
+async def get_user_usage_stats(
+    uid: str,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> list[InternalUsageStatItem]:
+    user = await _get_user_or_404(db, uid)
+    params = ListParams(page=1, page_size=1000, order_by="stat_hour")
+    if start or end:
+        params.time_field = "stat_hour"
+        params.start = start
+        params.end = end
+    params.validate_time_range(default_end=now(), default_days=30)
+    items = await UsageStatService.get_user_stats(
+        db, user_id=user.id, start=params.start, end=params.end,
+    )
+    return [InternalUsageStatItem.model_validate(s) for s in items]
+
+
+@router.get("/users/{uid}/usage/analytics", summary="Get user usage analytics by uid")
+async def get_user_usage_analytics(
+    uid: str,
+    range: Literal["8h", "24h", "7d", "30d"] = Query("24h", alias="range"),
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> UsageAnalyticsData:
+    user = await _get_user_or_404(db, uid)
+    return await UsageStatService.get_usage_analytics(
+        db, user_id=user.id, range_name=range,
+    )

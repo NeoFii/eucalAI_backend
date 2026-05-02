@@ -118,6 +118,13 @@ class ApiKeyService:
         await db.commit()
 
     @staticmethod
+    async def enable(db: AsyncSession, key_id: int, user_id: int) -> None:
+        api_key = await ApiKeyService.verify_key_ownership(db, key_id, user_id)
+        api_key.status = UserApiKey.STATUS_ACTIVE
+        ApiKeyService._refresh_status(api_key)
+        await db.commit()
+
+    @staticmethod
     async def delete(db: AsyncSession, key_id: int, user_id: int) -> None:
         api_key = await ApiKeyService.verify_key_ownership(db, key_id, user_id)
         api_key.deleted_at = now()

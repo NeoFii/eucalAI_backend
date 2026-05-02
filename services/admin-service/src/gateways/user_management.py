@@ -261,6 +261,16 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
+    async def enable_user_api_key(self, uid: str, key_id: int) -> dict:
+        try:
+            return await post_internal_json(
+                path=f"/api/v1/internal/users/{uid}/api-keys/{key_id}/enable",
+                json_body={},
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
     async def list_usage_logs(
         self,
         *,
@@ -313,6 +323,42 @@ class UserManagementGateway(BaseGateway):
             return await get_internal_json(
                 path="/api/v1/internal/usage/stats",
                 query_params=qp,
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def get_user_usage_stats(
+        self,
+        uid: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> list[dict]:
+        try:
+            qp: dict = {}
+            if start:
+                qp["start"] = start
+            if end:
+                qp["end"] = end
+            return await get_internal_json(
+                path=f"/api/v1/internal/users/{uid}/usage/stats",
+                query_params=qp,
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
+    async def get_user_usage_analytics(
+        self,
+        uid: str,
+        *,
+        range_name: str = "24h",
+    ) -> dict:
+        try:
+            return await get_internal_json(
+                path=f"/api/v1/internal/users/{uid}/usage/analytics",
+                query_params={"range": range_name},
                 **self._common_kwargs(),
             )
         except InternalServiceError as exc:

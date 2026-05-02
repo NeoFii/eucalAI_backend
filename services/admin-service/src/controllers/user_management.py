@@ -30,6 +30,12 @@ from schemas.user_management import (
     UserOperationResponse,
     UserTransactionItem,
     UserTransactionListResponse,
+    UserUsageAnalyticsBucket,
+    UserUsageAnalyticsBucketCost,
+    UserUsageAnalyticsData,
+    UserUsageAnalyticsModel,
+    UserUsageAnalyticsOverview,
+    UserUsageAnalyticsResponse,
     UserUsageLogItem,
     UserUsageLogListResponse,
     UserUsageStatItem,
@@ -263,6 +269,35 @@ async def disable_user_api_key(
     return UserOperationResponse(message="API Key 已禁用")
 
 
+@router.post(
+    "/{uid}/api-keys/{key_id}/enable",
+    response_model=UserOperationResponse,
+    summary="Enable user API key",
+)
+async def enable_user_api_key(
+    uid: str,
+    key_id: int,
+    request: Request,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> UserOperationResponse:
+    await _gateway.enable_user_api_key(uid, key_id)
+    ip_address, user_agent = get_request_meta(request)
+    await safe_audit_commit(
+        db,
+        actor_admin_id=current_admin.id,
+        target_admin_id=None,
+        action="enable_user_api_key",
+        resource_type="user",
+        resource_id=str(uid),
+        status="success",
+        after_data={"key_id": key_id},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return UserOperationResponse(message="API Key 已启用")
+
+
 @router.get("/usage/logs", response_model=UserUsageLogListResponse, summary="List usage logs")
 async def list_usage_logs(
     page: int = Query(1, ge=1),
@@ -308,3 +343,52 @@ async def list_usage_stats(
         end=format_iso(end),
     )
     return UserUsageStatListResponse(data=[UserUsageStatItem(**item) for item in items])
+
+
+@router.get(
+    "/{uid}/usage/stats",
+    response_model=UserUsageStatListResponse,
+    summary="Get user usage stats by uid",
+)
+async def get_user_usage_stats(
+    uid: str,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    _current_admin: AdminUser = Depends(require_active_admin),
+) -> UserUsageStatListResponse:
+    items = await _gateway.get_user_usage_stats(
+        uid, start=format_iso(start), end=format_iso(end),
+    )
+    return UserUsageStatListResponse(data=[UserUsageStatItem(**item) for item in items])
+
+
+@router.get(
+    "/{uid}/usage/analytics",
+    response_model=UserUsageAnalyticsResponse,
+    summary="Get user usage analytics by uid",
+)
+async def get_user_usage_analytics(
+    uid: str,
+    range: str = Query("24h", alias="range"),
+    _current_admin: AdminUser = Depends(require_active_admin),
+) -> UserUsageAnalyticsResponse:
+    data = await _gateway.get_user_usage_analytics(uid, range_name=range)
+    return UserUsageAnalyticsResponse(
+        data=UserUsageAnalyticsData(
+            range=data["range"],
+            granularity=data["granularity"],
+            start=data["start"],
+            end=data["end"],
+            currency=data["currency"],
+            overview=UserUsageAnalyticsOverview(**data["overview"]),
+            models=[UserUsageAnalyticsModel(**m) for m in data["models"]],
+            buckets=[
+                UserUsageAnalyticsBucket(
+                    bucket_start=b["bucket_start"],
+                    label=b["label"],
+                    costs=[UserUsageAnalyticsBucketCost(**c) for c in b["costs"]],
+                )
+                for b in data["buckets"]
+            ],
+        ),
+    )

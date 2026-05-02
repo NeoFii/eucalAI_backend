@@ -204,3 +204,15 @@ async def disable_user_api_key(
     user = await _get_user_or_404(db, uid)
     await ApiKeyService.disable(db, key_id=key_id, user_id=int(user.id))
     return {"uid": user.uid, "key_id": key_id, "success": True}
+
+
+@router.post("/users/{uid}/api-keys/{key_id}/enable", summary="Enable user API key")
+async def enable_user_api_key(
+    uid: str = Path(min_length=1),
+    key_id: int = Path(gt=0),
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    user = await _get_user_or_404(db, uid)
+    await ApiKeyService.enable(db, key_id=key_id, user_id=int(user.id))
+    return {"uid": user.uid, "key_id": key_id, "success": True}

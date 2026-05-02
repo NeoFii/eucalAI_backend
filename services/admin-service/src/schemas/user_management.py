@@ -201,3 +201,46 @@ class UserUsageStatListResponse(AdminBaseResponse):
 
 class UserOperationResponse(AdminBaseResponse):
     pass
+
+
+# --- Usage analytics schemas ---
+
+
+class UserUsageAnalyticsOverview(BaseModel):
+    total_requests: int
+    success_requests: int
+    success_rate: float
+    total_cost: int
+
+
+class UserUsageAnalyticsModel(BaseModel):
+    effective_model: str
+    request_count: int
+    request_share: float
+    total_cost: int
+
+
+class UserUsageAnalyticsBucketCost(BaseModel):
+    effective_model: str
+    total_cost: int
+
+
+class UserUsageAnalyticsBucket(DateTimeModel):
+    bucket_start: datetime
+    label: str
+    costs: list[UserUsageAnalyticsBucketCost]
+
+
+class UserUsageAnalyticsData(DateTimeModel):
+    range: str
+    granularity: str
+    start: datetime
+    end: datetime
+    currency: str
+    overview: UserUsageAnalyticsOverview
+    models: list[UserUsageAnalyticsModel]
+    buckets: list[UserUsageAnalyticsBucket]
+
+
+class UserUsageAnalyticsResponse(AdminBaseResponse):
+    data: Optional[UserUsageAnalyticsData] = None
