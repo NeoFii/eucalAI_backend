@@ -73,22 +73,24 @@ cd services/user-service && uv run arq user_service.worker.WorkerSettings
 
 ## 部署
 
-每个服务有独立的 `docker-compose.yml`，可单独部署：
+推荐三节点架构：
 
-```bash
-# 基础设施（后端节点）
-docker compose -f infra/docker-compose.yml up -d
+| 节点 | 配置 | 服务 |
+|------|------|------|
+| 前端节点 | 2H2G | eucal-admin + Frontend-zh + Nginx |
+| 后端节点 | 2H4G | MySQL + Redis + admin-service + user-service |
+| GPU 节点 | 视模型而定 | router-service + inference-service |
 
-# 后端服务
-cd services/admin-service && docker compose up -d
-cd services/user-service && docker compose up -d
+服务间通过内网 IP 通信，所有外部访问通过前端节点的 Nginx 终止 HTTPS。
 
-# 路由网关（独立主机）
-cd services/router-service && docker compose up -d
-
-# GPU 推理（独立主机）
-cd services/inference-service && docker compose up -d
-```
+详细部署文档见 **[DEPLOY.md](./DEPLOY.md)**，包含：
+- 三节点架构图与端口/防火墙规划
+- 各节点详细配置步骤（含 `.env`、`docker-compose.yml` 修改）
+- Nginx + HTTPS 反向代理
+- 共享密钥管理
+- 防火墙配置（限制仅授信内网 IP 访问）
+- 数据库备份与运维命令
+- 内网通信速查表与资源占用估算
 
 ## 服务间通信
 
