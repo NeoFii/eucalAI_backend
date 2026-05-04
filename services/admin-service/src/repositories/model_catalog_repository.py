@@ -108,12 +108,22 @@ class SupportedModelRepository(BaseRepository[SupportedModel]):
         page: int,
         page_size: int,
         active_only: bool,
+        status: str | None = None,
         category: str | None = None,
         vendors: list[str] | None = None,
         q: str | None = None,
     ) -> tuple[list[SupportedModel], int]:
         statement = self._with_relationships().join(SupportedModel.vendor)
-        if active_only:
+        if status == "active":
+            statement = statement.where(
+                SupportedModel.is_active.is_(True),
+                ModelVendor.is_active.is_(True),
+            )
+        elif status == "archived":
+            statement = statement.where(SupportedModel.is_active.is_(False))
+        elif status == "all":
+            pass  # 不过滤
+        elif active_only:
             statement = statement.where(
                 SupportedModel.is_active.is_(True),
                 ModelVendor.is_active.is_(True),
@@ -126,7 +136,7 @@ class SupportedModelRepository(BaseRepository[SupportedModel]):
                 .join(SupportedModelCategoryMap.category)
                 .where(ModelCategory.key == category)
             )
-            if active_only:
+            if status == "active" or (status is None and active_only):
                 statement = statement.where(ModelCategory.is_active.is_(True))
         if q:
             pattern = f"%{q}%"

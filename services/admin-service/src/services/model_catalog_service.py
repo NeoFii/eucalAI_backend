@@ -90,6 +90,7 @@ class ModelCatalogService:
             "context_window": model.context_window,
             "max_output_tokens": model.max_output_tokens,
             "is_reasoning_model": model.is_reasoning_model,
+            "is_active": model.is_active,
             "sort_order": model.sort_order,
             "vendor": ModelVendorBrief(
                 id=model.vendor.id,
@@ -100,7 +101,7 @@ class ModelCatalogService:
             "categories": categories,
         }
         if detail:
-            return SupportedModelDetail(**payload, is_active=model.is_active)
+            return SupportedModelDetail(**payload)
         return SupportedModelItem(**payload)
 
     @staticmethod
@@ -143,11 +144,22 @@ class ModelCatalogService:
         page: int = 1,
         page_size: int = 20,
         active_only: bool = True,
+        status: str | None = None,
     ) -> tuple[list[SupportedModelItem], int]:
+        """List supported models.
+
+        参数语义：
+        - active_only: 兼容旧调用，True 时仅返回 is_active=True 的模型（用户端走这一支）
+        - status: 管理端三态过滤，覆盖 active_only：
+            * "active"   仅在线模型
+            * "archived" 仅归档模型 (is_active=False)
+            * "all"      不过滤
+        """
         models, total = await SupportedModelRepository(db).list_models(
             page=page,
             page_size=page_size,
             active_only=active_only,
+            status=status,
             category=category,
             vendors=vendors,
             q=q,
@@ -449,6 +461,7 @@ class ModelCatalogService:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> None:
+        """归档模型：将 is_active 置为 False，保留记录便于后续恢复或审计。"""
         model = await SupportedModelRepository(db).get_by_slug(slug, active_only=False)
         if model is None:
             raise NotFoundException("model not found")
@@ -458,7 +471,7 @@ class ModelCatalogService:
                 db,
                 actor_admin_id=actor_admin_id,
                 target_admin_id=None,
-                action="disable_supported_model",
+                action="archive_supported_model",
                 resource_type="supported_model",
                 resource_id=slug,
                 status="success",

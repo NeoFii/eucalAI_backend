@@ -58,13 +58,14 @@ class SupportedModelItem(DateTimeModel):
     context_window: int | None = None
     max_output_tokens: int | None = None
     is_reasoning_model: bool
+    is_active: bool
     sort_order: int
     vendor: ModelVendorBrief
     categories: list[ModelCategoryBrief] = Field(default_factory=list)
 
 
 class SupportedModelDetail(SupportedModelItem):
-    is_active: bool
+    pass
 
 
 class ModelVendorCreate(BaseModel):

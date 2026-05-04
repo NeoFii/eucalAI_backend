@@ -168,6 +168,11 @@ async def admin_list_supported_models(
     category: str | None = None,
     vendors: str | None = Query(default=None, max_length=500),
     q: str | None = Query(default=None, max_length=200),
+    status: str = Query(
+        default="active",
+        pattern=r"^(active|archived|all)$",
+        description="active=仅在线模型(默认) / archived=仅归档模型 / all=全部",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     _current_admin: AdminUser = Depends(require_active_admin),
@@ -182,6 +187,7 @@ async def admin_list_supported_models(
         page=page,
         page_size=page_size,
         active_only=False,
+        status=status,
     )
     return SupportedModelListResponse(
         data=PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
@@ -235,14 +241,15 @@ async def update_supported_model(
 @router.delete(
     "/models/{slug}",
     response_model=ModelCatalogOperationResponse,
-    summary="Disable catalog model",
+    summary="Archive catalog model (soft delete)",
 )
-async def disable_supported_model(
+async def archive_supported_model(
     http_request: Request,
     slug: str = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=120),
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ModelCatalogOperationResponse:
+    """归档模型（软删除）：把 is_active 置为 False，记录可以在归档列表中恢复。"""
     ip_address, user_agent = get_request_meta(http_request)
     await ModelCatalogService.disable_model(
         db,
@@ -251,4 +258,4 @@ async def disable_supported_model(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    return ModelCatalogOperationResponse(message="disabled")
+    return ModelCatalogOperationResponse(message="archived")
