@@ -314,6 +314,64 @@ def log_event(logger: logging.Logger, level: int, event: str, **fields: Any) -> 
     )
 
 
+def _safe_int(value: Any) -> int | None:
+    """Cast a Content-Length-like header to int, returning None if absent/invalid."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_access_extra(request: Request, response: Response | None) -> dict[str, Any]:
+    """Collect contextual fields the access middleware tags onto every request log.
+
+    Reads:
+    - request.scope["route"] for the FastAPI-matched route pattern (no path
+      param noise — `/users/{uid}` instead of `/users/u123`)
+    - request.state.api_key_prefix (set by router-service api-key dependency)
+    - _uid_var (already populated for authenticated requests)
+    - request/response Content-Length, User-Agent, query string (redacted)
+    """
+    fields: dict[str, Any] = {}
+
+    matched = request.scope.get("route") if isinstance(request.scope, dict) else None
+    route_path = getattr(matched, "path", None)
+    if route_path:
+        fields["routeName"] = route_path
+
+    user_agent = request.headers.get("user-agent")
+    if user_agent:
+        # User agents can be long; cap at 256 chars to keep the ring buffer tidy.
+        fields["userAgent"] = user_agent[:256]
+
+    request_bytes = _safe_int(request.headers.get("content-length"))
+    if request_bytes is not None:
+        fields["requestBytes"] = request_bytes
+
+    if response is not None:
+        response_bytes = _safe_int(response.headers.get("content-length"))
+        if response_bytes is not None:
+            fields["responseBytes"] = response_bytes
+
+    if request.url.query:
+        fields["query"] = _redact(request.url.query)[:512]
+
+    api_key_prefix = getattr(request.state, "api_key_prefix", None)
+    if api_key_prefix:
+        fields["apiKeyPrefix"] = str(api_key_prefix)[:16]
+
+    user_id = get_uid()
+    if user_id:
+        # set_uid was already called by an upstream auth dep; mirror to userId for
+        # readability in the admin "服务日志" panel (uid is also shown via the
+        # ContextVar route).
+        fields["userId"] = str(user_id)
+
+    return fields
+
+
 def install_observability(app: FastAPI, *, service_name: str) -> None:
     """Install request-id, trace-id, span-id propagation and structured access logging."""
     app.state.service_name = service_name
@@ -375,6 +433,7 @@ def install_observability(app: FastAPI, *, service_name: str) -> None:
                 clientIp=client_ip,
                 errorCode=type(exc).__name__,
                 errorDetail=str(exc),
+                **_build_access_extra(request, response),
             )
             reset_span_id(sid_token)
             reset_trace_id(tid_token)
@@ -393,6 +452,7 @@ def install_observability(app: FastAPI, *, service_name: str) -> None:
             statusCode=response.status_code,
             durationMs=durationMs,
             clientIp=client_ip,
+            **_build_access_extra(request, response),
         )
         reset_span_id(sid_token)
         reset_trace_id(tid_token)

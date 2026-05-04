@@ -11,6 +11,7 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from common.core.exceptions import ServiceUnavailableException
 from common.internal import InternalServiceError, InternalServiceResponseError
+from common.observability import set_uid
 from gateways.user_identity import UserIdentityGateway, ValidatedApiKey
 
 if TYPE_CHECKING:
@@ -152,6 +153,8 @@ async def require_api_key(
     cached = _api_key_cache.get(cache_key)
     if cached is not None:
         request.state.api_key_principal = cached
+        request.state.api_key_prefix = raw_key[:8]
+        set_uid(str(cached.user_id))
         return cached
 
     try:
@@ -172,6 +175,8 @@ async def require_api_key(
 
     _api_key_cache[cache_key] = principal
     request.state.api_key_principal = principal
+    request.state.api_key_prefix = raw_key[:8]
+    set_uid(str(principal.user_id))
     return principal
 
 

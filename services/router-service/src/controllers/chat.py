@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 
@@ -10,7 +11,7 @@ import litellm
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from common.observability import get_request_id
+from common.observability import get_request_id, log_event
 from core.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_rate_limiter, get_settings, require_api_key, require_rate_limit
 from gateways.user_identity import ValidatedApiKey
 from gateways.calllog import CallLogGateway
@@ -98,6 +99,19 @@ async def chat_completions(
                 error_msg=str(exc.detail)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
+        log_event(
+            logger, logging.WARNING, "chatFailed",
+            requestId=request_id,
+            userId=str(principal.user_id),
+            requestedModel=requested_model,
+            isStream=is_stream,
+            messagesCount=messages_count,
+            inputHash=input_hash,
+            failedAtStage="classify",
+            errorCode=exc.error_code,
+            errorDetail=str(exc.detail)[:256],
+            totalLatencyMs=int((time.monotonic() - t_start) * 1000),
+        )
         raise
     except ChannelRateLimited:
         if call_log_created:
@@ -109,6 +123,19 @@ async def chat_completions(
                 error_msg="all channels for this model are rate-limited",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
+        log_event(
+            logger, logging.WARNING, "chatFailed",
+            requestId=request_id,
+            userId=str(principal.user_id),
+            requestedModel=requested_model,
+            isStream=is_stream,
+            messagesCount=messages_count,
+            inputHash=input_hash,
+            failedAtStage="rate_limit",
+            errorCode="channel_rate_limited",
+            errorDetail="all channels for this model are rate-limited",
+            totalLatencyMs=int((time.monotonic() - t_start) * 1000),
+        )
         raise HTTPException(
             status_code=429,
             detail={
@@ -245,6 +272,24 @@ async def chat_completions(
                         None,
                     ),
                 )
+            log_event(
+                logger, logging.ERROR, "chatFailed",
+                requestId=request_id,
+                userId=str(principal.user_id),
+                requestedModel=requested_model,
+                selectedModel=selected_model,
+                provider=target_info["provider_slug"],
+                routingTier=(route_result or {}).get("routing_tier"),
+                totalScore=(route_result or {}).get("total_score_0_10"),
+                isStream=is_stream,
+                messagesCount=messages_count,
+                inputHash=input_hash,
+                failedAtStage="upstream",
+                errorCode="upstream_error",
+                errorDetail=sanitize_error(exc)[:256],
+                upstreamLatencyMs=round(upstream_latency_ms, 2),
+                totalLatencyMs=int((time.monotonic() - t_start) * 1000),
+            )
             raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
 
@@ -335,6 +380,28 @@ async def chat_completions(
                             cost_detail=cost_detail,
                         )
                     await CallLogGateway.update_call_log(**update_kwargs)
+                    if stream_ok and stream_usage:
+                        log_event(
+                            logger, logging.INFO, "chatComplete",
+                            requestId=request_id,
+                            userId=str(principal.user_id),
+                            requestedModel=requested_model,
+                            selectedModel=selected_model,
+                            provider=target_info["provider_slug"],
+                            routingTier=(route_result or {}).get("routing_tier"),
+                            totalScore=(route_result or {}).get("total_score_0_10"),
+                            isStream=True,
+                            messagesCount=messages_count,
+                            inputHash=input_hash,
+                            promptTokens=prompt_tokens,
+                            completionTokens=completion_tokens,
+                            cachedTokens=cached_tokens,
+                            totalTokens=total_tokens,
+                            cost=cost,
+                            providerCost=provider_cost,
+                            upstreamLatencyMs=round(final_latency, 2),
+                            totalLatencyMs=int((time.monotonic() - t_start) * 1000),
+                        )
 
         return StreamingResponse(
             _stream_sse(),
@@ -416,6 +483,27 @@ async def chat_completions(
                 list(request.messages or []),
                 full_response_text,
             ),
+        )
+        log_event(
+            logger, logging.INFO, "chatComplete",
+            requestId=request_id,
+            userId=str(principal.user_id),
+            requestedModel=requested_model,
+            selectedModel=selected_model,
+            provider=target_info["provider_slug"],
+            routingTier=(route_result or {}).get("routing_tier"),
+            totalScore=(route_result or {}).get("total_score_0_10"),
+            isStream=False,
+            messagesCount=messages_count,
+            inputHash=input_hash,
+            promptTokens=prompt_tokens,
+            completionTokens=completion_tokens,
+            cachedTokens=cached_tokens,
+            totalTokens=total_tokens,
+            cost=cost,
+            providerCost=provider_cost,
+            upstreamLatencyMs=round(upstream_latency_ms, 2),
+            totalLatencyMs=int((time.monotonic() - t_start) * 1000),
         )
 
     return JSONResponse(content=response_payload, headers=headers)
