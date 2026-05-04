@@ -29,14 +29,17 @@ class ServiceLogResult(BaseModel):
     service: str
     reachable: bool
     entries: List[ServiceLogEntry] = []
+    total: int = 0
     latest_seq: int = 0
     error: Optional[str] = None
 
 
 class ServiceLogsResponseData(BaseModel):
     results: List[ServiceLogResult]
-    merged: List[ServiceLogEntry] = []
+    items: List[ServiceLogEntry] = []
     total: int = 0
+    page: int = 1
+    page_size: int = 50
 
 
 class ServiceLogsResponse(BaseModel):

@@ -55,7 +55,9 @@ async def get_service_logs(
     return ServiceLogsResponse(
         data=ServiceLogsResponseData(
             results=[ServiceLogResult(**r) for r in results],
-            merged=[ServiceLogEntry(**e) for e in merged],
+            items=[ServiceLogEntry(**e) for e in merged],
             total=total,
+            page=page,
+            page_size=page_size,
         ),
     )
