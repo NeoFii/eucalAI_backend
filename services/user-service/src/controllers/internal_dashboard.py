@@ -30,6 +30,8 @@ router = APIRouter(prefix="/internal", tags=["internal"])
     summary="Platform dashboard summary",
 )
 async def get_dashboard_summary(
+    start: datetime | None = None,
+    end: datetime | None = None,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> DashboardSummaryResponse:
@@ -39,11 +41,22 @@ async def get_dashboard_summary(
 
     total_users = await user_repo.count_all()
     new_users_today = await user_repo.count_since(today_start)
-    call_stats = await stat_repo.get_platform_summary(today_start=today_start)
+
+    if start is not None or end is not None:
+        new_users_in_range = await user_repo.count_in_range(start=start, end=end)
+    else:
+        new_users_in_range = new_users_today
+
+    call_stats = await stat_repo.get_platform_summary(
+        today_start=today_start,
+        range_start=start,
+        range_end=end,
+    )
 
     return DashboardSummaryResponse(
         total_users=total_users,
         new_users_today=new_users_today,
+        new_users_in_range=new_users_in_range,
         **call_stats,
     )
 

@@ -4,14 +4,23 @@ from pydantic import BaseModel
 
 
 class DashboardSummaryResponse(BaseModel):
+    # 历史累计（不受 start/end 影响）
     total_users: int
-    new_users_today: int
     total_requests: int
-    requests_today: int
     total_revenue: int
-    revenue_today: int
     total_provider_cost: int
+
+    # 今日数值（保留兼容旧调用方）
+    new_users_today: int
+    requests_today: int
+    revenue_today: int
     provider_cost_today: int
+
+    # 选定区间内数值
+    new_users_in_range: int = 0
+    requests_in_range: int = 0
+    revenue_in_range: int = 0
+    provider_cost_in_range: int = 0
 
 
 class UserGrowthPointResponse(BaseModel):

@@ -240,7 +240,13 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             for r in rows
         ]
 
-    async def get_platform_summary(self, *, today_start: datetime) -> dict:
+    async def get_platform_summary(
+        self,
+        *,
+        today_start: datetime,
+        range_start: datetime | None = None,
+        range_end: datetime | None = None,
+    ) -> dict:
         total_q = (
             select(func.count())
             .select_from(ApiCallLog)
@@ -271,6 +277,30 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         )
         all_row = (await self.session.execute(all_q)).one()
 
+        # 区间统计（区间未指定时退化为今日的值）
+        if range_start is not None or range_end is not None:
+            range_filters = [_exclude_invalid_model()]
+            if range_start is not None:
+                range_filters.append(ApiCallLog.created_at >= range_start)
+            if range_end is not None:
+                range_filters.append(ApiCallLog.created_at < range_end)
+            range_q = (
+                select(
+                    func.count().label("cnt"),
+                    func.sum(ApiCallLog.cost).label("rev"),
+                    func.sum(ApiCallLog.provider_cost).label("cost"),
+                )
+                .where(*range_filters)
+            )
+            range_row = (await self.session.execute(range_q)).one()
+            requests_in_range = int(range_row.cnt or 0)
+            revenue_in_range = int(range_row.rev or 0)
+            provider_cost_in_range = int(range_row.cost or 0)
+        else:
+            requests_in_range = int(today_row.cnt or 0)
+            revenue_in_range = int(today_row.rev or 0)
+            provider_cost_in_range = int(today_row.cost or 0)
+
         return {
             "total_requests": total_requests,
             "requests_today": int(today_row.cnt or 0),
@@ -278,4 +308,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             "revenue_today": int(today_row.rev or 0),
             "total_provider_cost": int(all_row.cost or 0),
             "provider_cost_today": int(today_row.cost or 0),
+            "requests_in_range": requests_in_range,
+            "revenue_in_range": revenue_in_range,
+            "provider_cost_in_range": provider_cost_in_range,
         }

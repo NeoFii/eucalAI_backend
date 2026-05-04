@@ -85,3 +85,17 @@ class UserRepository(BaseRepository[User]):
             select(func.count(User.id)).where(User.created_at >= since)
         )
         return int(result.scalar() or 0)
+
+    async def count_in_range(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> int:
+        statement = select(func.count(User.id))
+        if start is not None:
+            statement = statement.where(User.created_at >= start)
+        if end is not None:
+            statement = statement.where(User.created_at < end)
+        result = await self.session.execute(statement)
+        return int(result.scalar() or 0)

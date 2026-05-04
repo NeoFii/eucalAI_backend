@@ -77,10 +77,20 @@ class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
                 "Unexpected response format from user-service",
             ) from exc
 
-    async def fetch_dashboard_summary(self) -> dict:
+    async def fetch_dashboard_summary(
+        self,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> dict:
+        params: dict = {}
+        if start is not None:
+            params["start"] = start
+        if end is not None:
+            params["end"] = end
         try:
             return await get_internal_json(
                 path="/api/v1/internal/dashboard/summary",
+                query_params=params or None,
                 **self._common_kwargs(),
             )
         except InternalServiceError as exc:

@@ -19,13 +19,19 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 class DashboardSummaryData(BaseModel):
     total_users: int
-    new_users_today: int
     total_requests: int
-    requests_today: int
     total_revenue: int
-    revenue_today: int
     total_provider_cost: int
+
+    new_users_today: int
+    requests_today: int
+    revenue_today: int
     provider_cost_today: int
+
+    new_users_in_range: int = 0
+    requests_in_range: int = 0
+    revenue_in_range: int = 0
+    provider_cost_in_range: int = 0
 
 
 class DashboardSummaryResponse(AdminBaseResponse):
@@ -73,10 +79,18 @@ class UsageTrendsResponse(AdminBaseResponse):
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
 async def get_dashboard_summary(
+    start: datetime | None = None,
+    end: datetime | None = None,
     _admin: AdminUser = Depends(require_active_admin),
 ) -> DashboardSummaryResponse:
+    current = now()
+    if end is None:
+        end = current
+    if start is None:
+        start = end - timedelta(days=30)
+
     gw = UserStatsGateway()
-    raw = await gw.fetch_dashboard_summary()
+    raw = await gw.fetch_dashboard_summary(format_iso(start), format_iso(end))
     return DashboardSummaryResponse(code=200, message="success", data=DashboardSummaryData(**raw))
 
 
