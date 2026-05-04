@@ -184,8 +184,11 @@ async def batch_call_logs(
                     continue
             else:
                 created += 1
-                if action != "complete":
-                    continue
+                # Fall through to apply update_fields too: when the buffer
+                # batched create + update for the same request_id (common case
+                # for short-lived requests like client-aborted streams), only
+                # _CREATE_FIELDS got written above; update_fields below adds
+                # error_code / duration_ms / cost / etc.
                 existing = log
 
         update_fields = {k: v for k, v in entry.items() if k in _CALL_LOG_UPDATE_FIELDS and v is not None}
