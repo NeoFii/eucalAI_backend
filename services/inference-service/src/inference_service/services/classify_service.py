@@ -7,7 +7,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from common.observability import get_request_id
+from common.observability import get_request_id, log_event
 from inference_service.schemas.classify import ClassifyResponse
 
 if TYPE_CHECKING:
@@ -38,30 +38,60 @@ class ClassifyService:
         config_source = config_manager.config_source
 
         request_id = get_request_id() or request.request_id or ""
+        messages_count = len(request.messages)
 
         sem = ClassifyService._gpu_semaphore
+        queued_ms = 0.0
         if sem is not None:
+            t_queue = time.monotonic()
             await sem.acquire()
+            queued_ms = round((time.monotonic() - t_queue) * 1000, 2)
         try:
             t_start = time.monotonic()
-            result = await asyncio.to_thread(
-                engine.predict_chat_messages,
-                request.messages,
-                request_id=request_id,
-                runtime_config=config,
-            )
+            try:
+                result = await asyncio.to_thread(
+                    engine.predict_chat_messages,
+                    request.messages,
+                    request_id=request_id,
+                    runtime_config=config,
+                )
+            except Exception as exc:
+                engine_latency_ms = round((time.monotonic() - t_start) * 1000, 2)
+                log_event(
+                    logger, logging.ERROR, "classifyFailed",
+                    requestId=request_id,
+                    messagesCount=messages_count,
+                    queuedMs=queued_ms,
+                    engineLatencyMs=engine_latency_ms,
+                    errorCode=type(exc).__name__,
+                    errorDetail=str(exc)[:256],
+                    configVersion=config_version,
+                    configSource=config_source,
+                )
+                raise
             elapsed = time.monotonic() - t_start
         finally:
             if sem is not None:
                 sem.release()
 
         latency_ms = round(elapsed * 1000, 2)
+        soft_timeout = elapsed > CLASSIFY_SOFT_TIMEOUT_SECONDS
 
-        if elapsed > CLASSIFY_SOFT_TIMEOUT_SECONDS:
-            logger.warning(
-                "classify took %.1fs (soft timeout %.1fs), request_id=%s",
-                elapsed, CLASSIFY_SOFT_TIMEOUT_SECONDS, request_id,
-            )
+        log_event(
+            logger, logging.INFO, "classifyComplete",
+            requestId=request_id,
+            messagesCount=messages_count,
+            queuedMs=queued_ms,
+            engineLatencyMs=latency_ms,
+            routingTier=result["routing_tier"],
+            selectedModel=result["selected_model"],
+            totalScore=result["total_score_0_10"],
+            scoreSource=result["score_source"],
+            protoWeighted_0_2=result.get("proto_weighted_0_2"),
+            softTimeout=soft_timeout,
+            configVersion=config_version,
+            configSource=config_source,
+        )
 
         return ClassifyResponse(
             request_id=result["request_id"],
