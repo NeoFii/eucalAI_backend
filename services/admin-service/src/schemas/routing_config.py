@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schemas.common import AdminBaseResponse, DateTimeModel
 from common.api import PaginatedResponse
@@ -130,16 +130,27 @@ class RoutingConfigListResponse(AdminBaseResponse):
 
 
 class InternalRoutingConfigFull(BaseModel):
-    """Response for /internal/routing-config/active/full (router-service)."""
+    """Response for /internal/routing-config/active/full (router-service).
 
-    version: int
-    status: str
+    Schema mirrors what `RoutingSettingService.resolve_for_internal` plus the
+    pool/catalog enrichments emit. Earlier revisions of this schema referenced
+    `version`, `status`, and `model_providers`; those were removed when
+    routing config moved to the key-value `routing_settings` table + pool
+    enrichment, but the schema lagged behind.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
     router_alias: str
+    user_facing_aliases: list[str]
     route_order: list[str]
     weights: dict[str, float]
     score_bands: str
     tier_model_map: dict[str, str]
-    model_providers: dict[str, dict[str, str]]
+    model_channels: dict[str, list[dict]]
+    model_prices: dict[str, dict]
+    default_user_rpm: int = 20
+    system_rpm_cap: int = 1000
 
 
 class InternalRoutingConfigInference(BaseModel):

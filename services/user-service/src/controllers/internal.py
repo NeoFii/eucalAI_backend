@@ -75,7 +75,7 @@ async def validate_api_key(
         user_id=int(api_key.user_id),
         name=api_key.name,
         balance=int(user.balance) if user else 0,
-        rpm_limit=api_key.rpm_limit,
+        user_rpm_limit=user.rpm_limit if user else None,
     )
 
 

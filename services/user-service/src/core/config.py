@@ -45,6 +45,11 @@ class Settings(BaseServiceSettings):
     SMTP_TLS: bool = True
     SMTP_FROM: str = "Eucal AI"
 
+    # Mirror of router-service `RATE_LIMIT_DEFAULT_USER_RPM`. Used when a user
+    # doesn't have a per-user override; surfaced to UIs so users / admins can
+    # see the effective limit even when `users.rpm_limit` is NULL.
+    DEFAULT_USER_RPM: int = 20
+
 
 @lru_cache
 def get_settings() -> Settings:

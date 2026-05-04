@@ -29,6 +29,7 @@ from common.utils.password import hash_password, verify_password
 from common.utils.snowflake import generate_snowflake_id
 from common.utils.timezone import now
 from core.config import settings
+from gateways.system_settings import SystemSettingsGateway
 from models import User, UserSession
 from repositories import (
     SessionRepository,
@@ -79,12 +80,24 @@ class AuthService:
 
         password_hash = hash_password(data.password)
 
+        # Snapshot the current global default RPM into `users.rpm_limit` so
+        # later edits to the global default don't silently shift this user's
+        # ceiling. Admins can still override per-user via /users/{uid}/rpm.
+        # Gateway is cache-friendly + falls back to env if admin-service is
+        # unreachable, so registration never blocks on this lookup.
+        try:
+            snapshot_rpm = await SystemSettingsGateway().get_default_user_rpm()
+        except Exception:  # noqa: BLE001 — never block registration on this
+            log_event(logger, logging.WARNING, "userRegisterRpmSnapshotFailed", email=email)
+            snapshot_rpm = settings.DEFAULT_USER_RPM
+
         user = User(
             uid=uid,
             email=email,
             password_hash=password_hash,
             status=1,
             email_verified_at=now(),
+            rpm_limit=snapshot_rpm,
         )
 
         user_repo.add(user)

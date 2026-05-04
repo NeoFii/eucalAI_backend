@@ -67,6 +67,18 @@ class UserRepository(BaseRepository[User]):
     def add(self, user: User) -> None:
         self.session.add(user)
 
+    async def update_rpm_limit(self, user_id: int, rpm_limit: int | None) -> User | None:
+        """Set or clear the per-user RPM override (NULL = use global default).
+
+        Returns the user or None if the user does not exist. Caller is
+        responsible for committing the session.
+        """
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return None
+        user.rpm_limit = rpm_limit
+        return user
+
     async def get_daily_registrations(
         self, *, start: datetime, end: datetime,
     ) -> list[dict]:

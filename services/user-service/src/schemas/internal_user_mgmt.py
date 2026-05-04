@@ -15,6 +15,7 @@ class InternalUserListItem(BaseModel):
     email_verified_at: datetime | None = None
     last_login_at: datetime | None = None
     balance: int
+    rpm_limit: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -39,6 +40,9 @@ class InternalUserDetailResponse(BaseModel):
     used_amount: int
     total_requests: int
     total_tokens: int
+    rpm_limit: int | None = None
+    default_rpm: int
+    current_tpm: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -69,6 +73,18 @@ class InternalAdjustBalanceRequest(BaseModel):
     amount: int = Field(ge=-settings.MAX_TOPUP_AMOUNT, le=settings.MAX_TOPUP_AMOUNT)
     operator_uid: str
     remark: str = Field(max_length=255)
+
+
+class InternalUpdateRpmRequest(BaseModel):
+    """Set or clear the per-user RPM override.
+
+    `rpm_limit=None` clears the override so the user falls back to
+    `Settings.DEFAULT_USER_RPM`. Concrete values must be >= 1.
+    """
+
+    rpm_limit: int | None = Field(default=None, ge=1, le=100_000)
+    operator_uid: str
+    remark: str = Field(default="", max_length=255)
 
 
 class InternalTransactionItem(BaseModel):

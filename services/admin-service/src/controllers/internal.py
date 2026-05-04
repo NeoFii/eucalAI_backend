@@ -91,6 +91,20 @@ class InternalRoutingConfigFull(BaseModel):
     tier_model_map: dict[str, str]
     model_channels: dict[str, Any]
     model_prices: dict[str, Any]
+    default_user_rpm: int = 20
+    system_rpm_cap: int = 1000
+
+
+class InternalRateLimitsResponse(BaseModel):
+    """Lightweight rate-limit settings exposed to other services.
+
+    Used by user-service to surface the current global default RPM in
+    /auth/me and admin-side user detail responses without pulling the full
+    routing-config payload (which is heavy because of model_channels).
+    """
+
+    default_user_rpm: int
+    system_rpm_cap: int = 1000
 
 
 @router.get(
@@ -131,6 +145,28 @@ async def get_active_routing_config_inference(
         weights=base["weights"],
         score_bands=base["score_bands"],
         tier_model_map=base["tier_model_map"],
+    )
+
+
+@router.get(
+    "/system-settings/rate-limits",
+    response_model=InternalRateLimitsResponse,
+    summary="Lightweight rate-limit settings for user-service",
+)
+async def get_rate_limit_settings(
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> InternalRateLimitsResponse:
+    """Return the current rate-limit settings (global default RPM + system cap).
+
+    Cheap alternative to /routing-config/active/full when the caller only
+    needs the rate-limit values (e.g. user-service exposing them in
+    /auth/me and admin-side user detail responses).
+    """
+    base = await RoutingSettingService.resolve_for_internal(db)
+    return InternalRateLimitsResponse(
+        default_user_rpm=int(base["default_user_rpm"]),
+        system_rpm_cap=int(base["system_rpm_cap"]),
     )
 
 

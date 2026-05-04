@@ -105,6 +105,15 @@ class UserInfoResponseData(DateTimeModel):
     email_verified_at: Optional[datetime] = Field(default=None, description="Email verified at")
     last_login_at: Optional[datetime] = Field(default=None, description="Last login at")
     created_at: datetime = Field(..., description="Created at")
+    rpm_limit: Optional[int] = Field(
+        default=None,
+        description="用户级 RPM 上限，NULL 表示未单独设置（走默认值 default_rpm）",
+    )
+    default_rpm: int = Field(..., description="未单独设置时使用的全局默认 RPM")
+    current_tpm: int = Field(
+        default=0,
+        description="最近 60 秒内消耗的 token 数（实时滑动窗口）",
+    )
 
 
 class UserInfoResponse(AuthBaseResponse):

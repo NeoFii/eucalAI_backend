@@ -65,6 +65,22 @@ class AdjustUserBalanceRequest(BaseModel):
         return v
 
 
+class UpdateUserRpmRequest(BaseModel):
+    """Set or clear the per-user RPM override.
+
+    `rpm_limit=None` clears the override (user falls back to global default).
+    Values must be >= 1 when present.
+    """
+
+    rpm_limit: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=100_000,
+        description="每分钟请求上限；留空清除覆盖、使用全局默认",
+    )
+    remark: str = Field(default="", max_length=255, description="备注（写入审计日志）")
+
+
 # --- Response schemas ---
 
 
@@ -75,6 +91,7 @@ class UserListItem(DateTimeModel):
     email_verified_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     balance: int
+    rpm_limit: Optional[int] = None
     created_at: datetime
 
     @field_validator("uid", mode="before")
@@ -101,6 +118,9 @@ class UserDetailData(DateTimeModel):
     used_amount: int
     total_requests: int
     total_tokens: int
+    rpm_limit: Optional[int] = None
+    default_rpm: int = 0
+    current_tpm: int = 0
     created_at: datetime
     updated_at: datetime
 

@@ -193,6 +193,27 @@ class RoutingSettingService:
         if not user_facing_aliases:
             user_facing_aliases = [router_alias]
 
+        # Global default user RPM (snapshotted to users.rpm_limit at
+        # registration). Lives in `routing_settings` so admins can change it
+        # at runtime; router-service polls and re-applies within ~60s. Falls
+        # back to 20 (legacy env default) if the row is missing.
+        try:
+            default_user_rpm = int(kv.get("default_user_rpm", "20") or "20")
+        except (TypeError, ValueError):
+            default_user_rpm = 20
+        if default_user_rpm < 1:
+            default_user_rpm = 20
+
+        # System-wide RPM hard cap. Router-service applies
+        # `min(user.rpm_limit, system_rpm_cap)`. Falls back to 1000 (matches
+        # initial seed) when the row is missing.
+        try:
+            system_rpm_cap = int(kv.get("system_rpm_cap", "1000") or "1000")
+        except (TypeError, ValueError):
+            system_rpm_cap = 1000
+        if system_rpm_cap < 1:
+            system_rpm_cap = 1000
+
         return {
             "router_alias": router_alias,
             "user_facing_aliases": user_facing_aliases,
@@ -200,4 +221,6 @@ class RoutingSettingService:
             "weights": weights,
             "score_bands": kv.get("score_bands", "0-3:5,3-5:4,5-7:3,7-9:2,9-10:1"),
             "tier_model_map": tier_model_map,
+            "default_user_rpm": default_user_rpm,
+            "system_rpm_cap": system_rpm_cap,
         }

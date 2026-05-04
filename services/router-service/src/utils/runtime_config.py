@@ -69,6 +69,14 @@ def build_default_runtime_config() -> Dict[str, Any]:
         "model_providers": {},
         "model_channels": {},
         "model_prices": {},
+        # NULL means "fall back to RATE_LIMIT_DEFAULT_USER_RPM env on the
+        # rate_limiter side". Admin-managed value comes from the
+        # routing_settings row `default_user_rpm`.
+        "default_user_rpm": None,
+        # System-wide hard cap. NULL means "no cap" (legacy behaviour). When
+        # set, router-service applies `min(user.rpm_limit, system_rpm_cap)`.
+        # Admin-managed value comes from `routing_settings.system_rpm_cap`.
+        "system_rpm_cap": None,
     }
 
 
@@ -238,7 +246,26 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
         "model_providers": model_providers,
         "model_channels": model_channels,
         "model_prices": model_prices,
+        "default_user_rpm": _coerce_default_user_rpm(raw.get("default_user_rpm")),
+        "system_rpm_cap": _coerce_default_user_rpm(raw.get("system_rpm_cap")),
     }
+
+
+def _coerce_default_user_rpm(value: Any) -> int | None:
+    """Coerce admin-supplied RPM ints (default_user_rpm, system_rpm_cap) to a
+    positive int, else None.
+
+    Shared coercer for both fields since they have identical semantics:
+    None means "no override / fall back to env or no cap". Bad values silently
+    degrade to None rather than crashing config refresh.
+    """
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 1 else None
 
 
 class RuntimeConfigStore:

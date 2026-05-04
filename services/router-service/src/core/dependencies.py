@@ -191,9 +191,42 @@ async def require_rate_limit(
 
     from services.rate_limiter import RateLimitExceeded
 
+    # Effective RPM precedence: user-level override > runtime default > env fallback.
+    # `user_rpm_limit` lives on `users.rpm_limit` (admin-controlled per user, snapshot
+    # of the global default at registration time, modifiable only by super admins).
+    # When NULL the limiter falls back to the runtime `default_user_rpm` (sourced from
+    # admin-service `routing_settings`, refreshed every ~60s by ConfigManager) or,
+    # ultimately, the env value baked into rate_limiter.
+    #
+    # On top of that: `system_rpm_cap` is a system-wide hard upper bound. We apply
+    # `min(effective_rpm, system_rpm_cap)` so admins can clamp blast-radius without
+    # editing every user row. NULL cap = no clamping.
+    effective_rpm = principal.user_rpm_limit
+    runtime_cfg = None
+    if effective_rpm is None:
+        try:
+            runtime_cfg = get_config_manager().load()
+            runtime_default = runtime_cfg.get("default_user_rpm")
+            if isinstance(runtime_default, int) and runtime_default >= 1:
+                effective_rpm = runtime_default
+        except RuntimeError:
+            # Config manager not started yet — fall through to env default below.
+            pass
+
+    # Pull the system cap from the same runtime config (load once if possible).
+    try:
+        if runtime_cfg is None:
+            runtime_cfg = get_config_manager().load()
+        system_cap = runtime_cfg.get("system_rpm_cap")
+    except RuntimeError:
+        system_cap = None
+    if isinstance(system_cap, int) and system_cap >= 1:
+        if effective_rpm is None or effective_rpm > system_cap:
+            effective_rpm = system_cap
+
     try:
         await limiter.check_global()
-        await limiter.check_user(principal.user_id, rpm_override=principal.rpm_limit)
+        await limiter.check_user(principal.user_id, rpm_override=effective_rpm)
     except RateLimitExceeded as exc:
         raise HTTPException(
             status_code=429,
@@ -207,7 +240,7 @@ async def require_rate_limit(
             headers={
                 "Retry-After": str(exc.retry_after),
                 "X-RateLimit-Limit-Requests": str(
-                    principal.rpm_limit or get_settings().RATE_LIMIT_DEFAULT_USER_RPM
+                    effective_rpm or get_settings().RATE_LIMIT_DEFAULT_USER_RPM
                 ),
             },
         ) from exc

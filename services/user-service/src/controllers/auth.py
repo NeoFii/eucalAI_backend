@@ -41,6 +41,8 @@ from schemas import (
 )
 from services.auth_service import AuthService
 from services.email_service import email_service
+from repositories.usage_stat_repository import UsageStatRepository
+from gateways.system_settings import SystemSettingsGateway
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +282,10 @@ async def refresh_token(
 )
 async def get_me(
     current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
 ) -> UserInfoResponse:
+    current_tpm = await UsageStatRepository(db).get_user_tpm_last_minute(int(current_user.id))
+    default_rpm = await SystemSettingsGateway().get_default_user_rpm()
     return UserInfoResponse(
         code=200,
         message="获取成功",
@@ -291,6 +296,9 @@ async def get_me(
             email_verified_at=current_user.email_verified_at,
             last_login_at=current_user.last_login_at,
             created_at=current_user.created_at,
+            rpm_limit=current_user.rpm_limit,
+            default_rpm=default_rpm,
+            current_tpm=current_tpm,
         ),
     )
 

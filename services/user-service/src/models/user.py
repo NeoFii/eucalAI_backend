@@ -40,6 +40,11 @@ class User(Base, SnowflakeIdMixin, TimestampMixin):
     used_amount = Column(BigInteger, default=0, nullable=False, comment="历史累计消费（微元）")
     total_requests = Column(Integer, default=0, nullable=False, comment="历史累计调用次数")
     total_tokens = Column(BigInteger, default=0, nullable=False, comment="历史累计 token 数")
+    rpm_limit = Column(
+        Integer,
+        nullable=True,
+        comment="用户级每分钟请求上限，NULL=用全局默认",
+    )
 
     sessions = relationship(
         "UserSession",

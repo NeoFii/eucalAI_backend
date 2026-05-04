@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import case, cast, func, or_, select, Date
 
 from common.db import BaseRepository, ListParams, PaginatedResult
+from common.utils.timezone import now
 from models import ApiCallLog, UsageStat
 
 
@@ -29,6 +30,29 @@ def _exclude_invalid_model():
 class UsageStatRepository(BaseRepository[UsageStat]):
     def __init__(self, session) -> None:
         super().__init__(session, UsageStat)
+
+    async def get_user_tpm_last_minute(self, user_id: int) -> int:
+        """Sum total_tokens for the user over the last 60 seconds.
+
+        Used to surface a real-time TPM gauge (tokens/min currently being
+        consumed) to user / admin UIs. PENDING + SUCCESS rows are both
+        counted: PENDING covers in-flight streamed responses that haven't
+        finalized yet; ERROR / REFUNDED / ABORTED are excluded because they
+        don't represent successful token throughput.
+        """
+        cutoff = now() - timedelta(seconds=60)
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(ApiCallLog.total_tokens), 0))
+            .where(
+                ApiCallLog.user_id == user_id,
+                ApiCallLog.created_at >= cutoff,
+                ApiCallLog.status.in_([
+                    ApiCallLog.STATUS_PENDING,
+                    ApiCallLog.STATUS_SUCCESS,
+                ]),
+            )
+        )
+        return int(result.scalar() or 0)
 
     async def get_user_stats(
         self,

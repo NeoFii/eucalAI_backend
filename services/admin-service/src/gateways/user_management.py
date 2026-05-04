@@ -240,6 +240,27 @@ class UserManagementGateway(BaseGateway):
         except InternalServiceError as exc:
             self._handle_error(exc)
 
+    async def update_user_rpm(
+        self,
+        uid: str,
+        *,
+        rpm_limit: int | None,
+        operator_uid: str,
+        remark: str,
+    ) -> dict:
+        try:
+            return await post_internal_json(
+                path=f"/api/v1/internal/users/{uid}/rpm",
+                json_body={
+                    "rpm_limit": rpm_limit,
+                    "operator_uid": operator_uid,
+                    "remark": remark,
+                },
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            self._handle_error(exc)
+
     async def list_user_transactions(
         self, uid: str, *, page: int = 1, page_size: int = 20,
     ) -> dict:

@@ -25,4 +25,4 @@ class InternalApiKeyValidateResponse(BaseModel):
     user_id: int
     name: str
     balance: int
-    rpm_limit: int | None = None
+    user_rpm_limit: int | None = None

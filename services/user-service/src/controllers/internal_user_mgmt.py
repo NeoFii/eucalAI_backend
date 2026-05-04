@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db import ListParams
 from common.utils.password import hash_password
 from controllers.internal import verify_internal_secret
+from core.config import settings
 from core.dependencies import get_db_session
+from gateways.system_settings import SystemSettingsGateway
+from repositories.usage_stat_repository import UsageStatRepository
 from repositories.user_repository import UserRepository
 from schemas.internal_user_mgmt import (
     InternalAdjustBalanceRequest,
@@ -17,6 +20,7 @@ from schemas.internal_user_mgmt import (
     InternalTopupRequest,
     InternalTransactionItem,
     InternalTransactionListResponse,
+    InternalUpdateRpmRequest,
     InternalUpdateStatusRequest,
     InternalUpdateStatusResponse,
     InternalUserDetailResponse,
@@ -71,7 +75,26 @@ async def get_user_detail(
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUserDetailResponse:
     user = await _get_user_or_404(db, uid)
-    return InternalUserDetailResponse.model_validate(user)
+    current_tpm = await UsageStatRepository(db).get_user_tpm_last_minute(int(user.id))
+    default_rpm = await SystemSettingsGateway().get_default_user_rpm()
+    return InternalUserDetailResponse(
+        uid=user.uid,
+        email=user.email,
+        status=int(user.status),
+        email_verified_at=user.email_verified_at,
+        last_login_at=user.last_login_at,
+        last_login_ip=user.last_login_ip,
+        balance=int(user.balance),
+        frozen_amount=int(user.frozen_amount),
+        used_amount=int(user.used_amount),
+        total_requests=int(user.total_requests),
+        total_tokens=int(user.total_tokens),
+        rpm_limit=user.rpm_limit,
+        default_rpm=default_rpm,
+        current_tpm=current_tpm,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+    )
 
 
 @router.post(
@@ -155,6 +178,32 @@ async def adjust_user_balance(
         remark=payload.remark,
     )
     return {"uid": user.uid, "success": True}
+
+
+@router.post("/users/{uid}/rpm", summary="Update per-user RPM override")
+async def update_user_rpm(
+    uid: str = Path(min_length=1),
+    payload: InternalUpdateRpmRequest = ...,
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Set or clear `users.rpm_limit`.
+
+    Audit logging is performed by admin-service (it owns the audit table);
+    here we only persist the change.
+    """
+    user = await _get_user_or_404(db, uid)
+    before = user.rpm_limit
+    user.rpm_limit = payload.rpm_limit
+    await db.commit()
+    default_rpm = await SystemSettingsGateway().get_default_user_rpm()
+    return {
+        "uid": user.uid,
+        "before_rpm_limit": before,
+        "after_rpm_limit": payload.rpm_limit,
+        "default_rpm": default_rpm,
+        "success": True,
+    }
 
 
 @router.get(

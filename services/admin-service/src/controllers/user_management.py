@@ -20,6 +20,7 @@ from schemas.user_management import (
     AdjustUserBalanceRequest,
     ResetUserPasswordRequest,
     TopupUserRequest,
+    UpdateUserRpmRequest,
     UpdateUserStatusRequest,
     UserApiKeyItem,
     UserApiKeyListResponse,
@@ -207,6 +208,47 @@ async def adjust_user_balance(
         user_agent=user_agent,
     )
     return UserOperationResponse(message="余额调整成功")
+
+
+@router.post(
+    "/{uid}/rpm",
+    response_model=UserOperationResponse,
+    summary="Update per-user RPM override",
+)
+async def update_user_rpm(
+    uid: str,
+    payload: UpdateUserRpmRequest,
+    request: Request,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> UserOperationResponse:
+    """Set or clear `users.rpm_limit`. Audit-logged."""
+    result = await _gateway.update_user_rpm(
+        uid,
+        rpm_limit=payload.rpm_limit,
+        operator_uid=current_admin.uid,
+        remark=payload.remark,
+    )
+    ip_address, user_agent = get_request_meta(request)
+    await safe_audit_commit(
+        db,
+        actor_admin_id=current_admin.id,
+        target_admin_id=None,
+        action="update_user_rpm",
+        resource_type="user",
+        resource_id=str(uid),
+        status="success",
+        before_data={"rpm_limit": result.get("before_rpm_limit")},
+        after_data={
+            "rpm_limit": result.get("after_rpm_limit"),
+            "remark": payload.remark,
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    if payload.rpm_limit is None:
+        return UserOperationResponse(message="已清除 RPM 覆盖，恢复使用全局默认值")
+    return UserOperationResponse(message=f"RPM 已更新为 {payload.rpm_limit}")
 
 
 @router.get(
