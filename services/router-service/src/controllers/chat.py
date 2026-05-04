@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -304,6 +305,8 @@ async def chat_completions(
             collected_content = ""
             stream_usage = {}
             stream_ok = False
+            abort_reason: str | None = None  # None | "client_cancelled" | "stream_error"
+            stream_exc: BaseException | None = None
             try:
                 async for chunk in litellm_response:
                     chunk_dict = chunk.model_dump(exclude_none=True)
@@ -324,6 +327,16 @@ async def chat_completions(
                     yield f"data: {json.dumps(chunk_dict, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
                 stream_ok = True
+            except (asyncio.CancelledError, GeneratorExit):
+                # Client disconnected mid-stream. Must re-raise so Starlette
+                # closes the underlying connection cleanly; finally still runs.
+                abort_reason = "client_cancelled"
+                raise
+            except Exception as exc:
+                # Upstream failure mid-stream (network reset, provider 5xx
+                # half-way through SSE, etc). Swallow after finally writes DB.
+                abort_reason = "stream_error"
+                stream_exc = exc
             finally:
                 final_latency = (time.monotonic() - t_upstream) * 1000
                 log_upstream_call(
@@ -343,6 +356,12 @@ async def chat_completions(
                 )
                 if call_log_created:
                     final_status = 1 if stream_ok else 4
+                    if stream_ok:
+                        error_code = None
+                    elif abort_reason == "stream_error":
+                        error_code = "upstream_stream_error"
+                    else:
+                        error_code = "client_aborted"
                     update_kwargs: dict = {
                         "settings": settings,
                         "request_id": request_id,
@@ -353,8 +372,10 @@ async def chat_completions(
                             list(request.messages or []),
                             collected_content,
                         ),
-                        "error_code": "client_aborted" if not stream_ok else None,
+                        "error_code": error_code,
                     }
+                    if abort_reason == "stream_error" and stream_exc is not None:
+                        update_kwargs["error_msg"] = sanitize_error(stream_exc)[:512]
                     if stream_ok and stream_usage:
                         prompt_tokens = stream_usage.get("prompt_tokens", 0)
                         completion_tokens = stream_usage.get("completion_tokens", 0)
@@ -399,6 +420,43 @@ async def chat_completions(
                             totalTokens=total_tokens,
                             cost=cost,
                             providerCost=provider_cost,
+                            upstreamLatencyMs=round(final_latency, 2),
+                            totalLatencyMs=int((time.monotonic() - t_start) * 1000),
+                        )
+                    elif abort_reason == "client_cancelled":
+                        log_event(
+                            logger, logging.INFO, "chatAborted",
+                            requestId=request_id,
+                            userId=str(principal.user_id),
+                            requestedModel=requested_model,
+                            selectedModel=selected_model,
+                            provider=target_info["provider_slug"],
+                            routingTier=(route_result or {}).get("routing_tier"),
+                            totalScore=(route_result or {}).get("total_score_0_10"),
+                            isStream=True,
+                            messagesCount=messages_count,
+                            inputHash=input_hash,
+                            bytesStreamed=len(collected_content),
+                            upstreamLatencyMs=round(final_latency, 2),
+                            totalLatencyMs=int((time.monotonic() - t_start) * 1000),
+                        )
+                    elif abort_reason == "stream_error":
+                        log_event(
+                            logger, logging.ERROR, "chatFailed",
+                            requestId=request_id,
+                            userId=str(principal.user_id),
+                            requestedModel=requested_model,
+                            selectedModel=selected_model,
+                            provider=target_info["provider_slug"],
+                            routingTier=(route_result or {}).get("routing_tier"),
+                            totalScore=(route_result or {}).get("total_score_0_10"),
+                            isStream=True,
+                            messagesCount=messages_count,
+                            inputHash=input_hash,
+                            failedAtStage="stream",
+                            errorCode="upstream_stream_error",
+                            errorDetail=sanitize_error(stream_exc)[:256] if stream_exc else "",
+                            bytesStreamed=len(collected_content),
                             upstreamLatencyMs=round(final_latency, 2),
                             totalLatencyMs=int((time.monotonic() - t_start) * 1000),
                         )
