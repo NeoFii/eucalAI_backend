@@ -8,6 +8,7 @@ from controllers import (
     internal,
     internal_call_logs,
     internal_dashboard,
+    internal_route_monitor,
     internal_usage,
     internal_user_mgmt,
     internal_vouchers,
@@ -26,3 +27,4 @@ api_router.include_router(internal_vouchers.router)
 api_router.include_router(internal_dashboard.router)
 api_router.include_router(internal_usage.router)
 api_router.include_router(internal_call_logs.router)
+api_router.include_router(internal_route_monitor.router)

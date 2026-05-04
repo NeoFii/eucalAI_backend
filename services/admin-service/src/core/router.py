@@ -11,6 +11,7 @@ from controllers import (
     model_catalog,
     model_catalog_admin,
     pools,
+    route_monitor,
     routing_config,
     routing_settings,
     service_logs,
@@ -29,6 +30,7 @@ api_router.include_router(routing_config.router, prefix="/admin")
 api_router.include_router(routing_settings.router, prefix="/admin")
 api_router.include_router(pools.router, prefix="/admin")
 api_router.include_router(service_logs.router, prefix="/admin")
+api_router.include_router(route_monitor.router, prefix="/admin")
 api_router.include_router(internal.router)
 api_router.include_router(user_management.router)
 api_router.include_router(dashboard.router)
