@@ -39,12 +39,22 @@ class ResetUserPasswordRequest(BaseModel):
 
 
 class TopupUserRequest(BaseModel):
-    amount: int = Field(..., gt=0, le=1_000_000, description="充值金额（分）")
+    amount: int = Field(
+        ...,
+        gt=0,
+        le=10_000_000_000,
+        description="充值金额（微元，1元=1,000,000微元）",
+    )
     remark: str = Field(default="", max_length=255, description="备注")
 
 
 class AdjustUserBalanceRequest(BaseModel):
-    amount: int = Field(..., ge=-1_000_000, le=1_000_000, description="正数增加余额，负数扣减余额")
+    amount: int = Field(
+        ...,
+        ge=-10_000_000_000,
+        le=10_000_000_000,
+        description="正数增加余额，负数扣减余额（微元，1元=1,000,000微元）",
+    )
     remark: str = Field(..., min_length=1, max_length=255, description="备注")
 
     @field_validator("amount")

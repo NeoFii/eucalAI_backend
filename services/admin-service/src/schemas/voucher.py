@@ -11,7 +11,12 @@ from common.api import PaginatedResponse
 
 
 class GenerateVoucherCodesRequest(BaseModel):
-    amount: int = Field(..., gt=0, le=1_000_000, description="Voucher amount (fen)")
+    amount: int = Field(
+        ...,
+        gt=0,
+        le=10_000_000_000,
+        description="Voucher amount (微元，1元=1,000,000微元)",
+    )
     count: int = Field(..., ge=1, le=1000, description="Number of codes to generate")
     starts_at: datetime = Field(..., description="Validity start")
     expires_at: datetime = Field(..., description="Validity end")
