@@ -84,6 +84,7 @@ class InternalRoutingConfigFull(BaseModel):
     """Response for /internal/routing-config/active/full (router-service)."""
 
     router_alias: str
+    user_facing_aliases: list[str]
     route_order: list[str]
     weights: dict[str, float]
     score_bands: str

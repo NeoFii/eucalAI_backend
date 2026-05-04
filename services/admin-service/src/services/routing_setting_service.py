@@ -184,8 +184,18 @@ class RoutingSettingService:
         for tier in range(1, 6):
             tier_model_map[str(tier)] = kv.get(f"tier_{tier}_model", "")
 
+        # `user_facing_aliases` is a comma-separated list. Empty / missing
+        # falls back to ['auto']. The router-service normalizer will further
+        # ensure `router_alias` itself is always present in the list.
+        router_alias = kv.get("router_alias", "auto")
+        raw_aliases = kv.get("user_facing_aliases", router_alias)
+        user_facing_aliases = [a.strip() for a in raw_aliases.split(",") if a.strip()]
+        if not user_facing_aliases:
+            user_facing_aliases = [router_alias]
+
         return {
-            "router_alias": kv.get("router_alias", "auto"),
+            "router_alias": router_alias,
+            "user_facing_aliases": user_facing_aliases,
             "route_order": list(FIVEWAY_ROUTE_ORDER),
             "weights": weights,
             "score_bands": kv.get("score_bands", "0-3:5,3-5:4,5-7:3,7-9:2,9-10:1"),

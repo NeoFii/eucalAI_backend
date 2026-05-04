@@ -35,31 +35,39 @@ from common.utils.jwt import create_refresh_token
 router = APIRouter(tags=["admin-auth"])
 _bearer = HTTPBearer(auto_error=False)
 
+# Cookie names are namespaced to "admin_*" so that the admin and user front-ends
+# can coexist on the same domain without overwriting each other's tokens. The
+# path stays at "/" because Next.js page-level middleware (which gates /login,
+# /dashboard, etc.) needs to read the cookie before any /api request fires.
+ADMIN_ACCESS_COOKIE = "admin_access_token"
+ADMIN_REFRESH_COOKIE = "admin_refresh_token"
+ADMIN_COOKIE_PATH = "/"
+
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     response.set_cookie(
-        key="access_token",
+        key=ADMIN_ACCESS_COOKIE,
         value=access_token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
+        path=ADMIN_COOKIE_PATH,
     )
     response.set_cookie(
-        key="refresh_token",
+        key=ADMIN_REFRESH_COOKIE,
         value=refresh_token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-        path="/",
+        path=ADMIN_COOKIE_PATH,
     )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(key="access_token", path="/")
-    response.delete_cookie(key="refresh_token", path="/")
+    response.delete_cookie(key=ADMIN_ACCESS_COOKIE, path=ADMIN_COOKIE_PATH)
+    response.delete_cookie(key=ADMIN_REFRESH_COOKIE, path=ADMIN_COOKIE_PATH)
 
 
 @router.post("/auth/login", response_model=AdminLoginResponse, summary="Admin login")
@@ -109,8 +117,8 @@ async def login(
 async def logout(
     response: Response,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    access_token: Optional[str] = Cookie(default=None),
-    refresh_token_cookie: Optional[str] = Cookie(default=None, alias="refresh_token"),
+    access_token: Optional[str] = Cookie(default=None, alias=ADMIN_ACCESS_COOKIE),
+    refresh_token_cookie: Optional[str] = Cookie(default=None, alias=ADMIN_REFRESH_COOKIE),
     current_admin: AdminUser = Depends(require_active_admin),
 ) -> AdminLogoutResponse:
     """Revoke active tokens and clear cookies."""
@@ -127,7 +135,7 @@ async def logout(
 @router.post("/auth/refresh", response_model=AdminRefreshResponse, summary="Refresh token")
 async def refresh_token(
     response: Response,
-    refresh_token: Optional[str] = Cookie(None, alias="refresh_token"),
+    refresh_token: Optional[str] = Cookie(None, alias=ADMIN_REFRESH_COOKIE),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminRefreshResponse:
     """Refresh admin auth cookies."""
@@ -183,8 +191,8 @@ async def change_password(
     request: Request,
     response: Response,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-    access_token_cookie: Optional[str] = Cookie(default=None, alias="access_token"),
-    refresh_token_cookie: Optional[str] = Cookie(default=None, alias="refresh_token"),
+    access_token_cookie: Optional[str] = Cookie(default=None, alias=ADMIN_ACCESS_COOKIE),
+    refresh_token_cookie: Optional[str] = Cookie(default=None, alias=ADMIN_REFRESH_COOKIE),
     current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminChangePasswordResponse:

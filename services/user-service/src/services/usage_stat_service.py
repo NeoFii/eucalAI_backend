@@ -34,7 +34,17 @@ class UsageStatService:
 
     @staticmethod
     async def upsert_from_log(db: AsyncSession, log: ApiCallLog) -> None:
-        """Incrementally update usage_stats from a single completed call log."""
+        """Incrementally update usage_stats from a single completed call log.
+
+        Requests rejected for using a model name outside the allowlist
+        (`error_code == 'invalid_model'`) are NOT aggregated — they would
+        otherwise pollute the per-model breakdown shown in cost-distribution
+        / request-share / ranking charts. The raw row stays in
+        `api_call_logs` so it remains visible in the request-detail list.
+        """
+        if log.error_code == "invalid_model":
+            return
+
         stat_hour = log.created_at.replace(minute=0, second=0, microsecond=0)
         model_name = log.model_name or "unknown"
         is_success = log.status == ApiCallLog.STATUS_SUCCESS
@@ -78,6 +88,13 @@ class UsageStatService:
 
     @staticmethod
     async def aggregate_hour(db: AsyncSession, stat_hour: datetime) -> None:
+        """Recompute the bucket for a single hour from raw call logs.
+
+        Mirrors `upsert_from_log` in skipping rows tagged
+        `error_code == 'invalid_model'` so the chart-facing aggregate stays
+        clean. The repo's `list_logs_for_hour` already filters at the SQL
+        level; this guard is defensive.
+        """
         next_hour = stat_hour + timedelta(hours=1)
         repo = UsageStatRepository(db)
         logs = await repo.list_logs_for_hour(stat_hour, next_hour)

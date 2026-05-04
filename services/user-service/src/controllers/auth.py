@@ -46,30 +46,41 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["认证"])
 
+# Cookie names are namespaced to "user_*" so the user and admin front-ends can
+# coexist on the same domain without overwriting each other's tokens. Path stays
+# "/" because Next.js page-level middleware (which gates /console) needs to see
+# the cookie when the browser navigates to a page route, not just /api requests.
+USER_ACCESS_COOKIE = "user_access_token"
+USER_REFRESH_COOKIE = "user_refresh_token"
+USER_COOKIE_PATH = "/"
+
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     response.set_cookie(
-        key="access_token",
+        key=USER_ACCESS_COOKIE,
         value=access_token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path=USER_COOKIE_PATH,
     )
     response.set_cookie(
-        key="refresh_token",
+        key=USER_REFRESH_COOKIE,
         value=refresh_token,
         httponly=True,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path=USER_COOKIE_PATH,
     )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    for key in ("access_token", "refresh_token"):
+    for key in (USER_ACCESS_COOKIE, USER_REFRESH_COOKIE):
         response.delete_cookie(
             key=key,
+            path=USER_COOKIE_PATH,
             httponly=True,
             secure=settings.COOKIE_SECURE,
             samesite=settings.COOKIE_SAMESITE,
@@ -210,7 +221,7 @@ async def login_with_code(
 )
 async def logout(
     response: Response,
-    refresh_token: Optional[str] = Cookie(None, alias="refresh_token"),
+    refresh_token: Optional[str] = Cookie(None, alias=USER_REFRESH_COOKIE),
     db: AsyncSession = Depends(get_db_session),
 ) -> LogoutResponse:
     try:
@@ -234,7 +245,7 @@ async def logout(
 )
 async def refresh_token(
     response: Response,
-    refresh_token: Optional[str] = Cookie(None, alias="refresh_token"),
+    refresh_token: Optional[str] = Cookie(None, alias=USER_REFRESH_COOKIE),
     db: AsyncSession = Depends(get_db_session),
 ) -> RefreshResponse:
     if not refresh_token:

@@ -4,10 +4,26 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import case, cast, func, select, Date
+from sqlalchemy import case, cast, func, or_, select, Date
 
 from common.db import BaseRepository, ListParams, PaginatedResult
 from models import ApiCallLog, UsageStat
+
+
+# Rows tagged with this error_code came from requests that used a model name
+# outside the admin-configured allowlist (`routing_settings.user_facing_aliases`).
+# We deliberately leave them in `api_call_logs` so the request-detail list still
+# shows the offending entry, but exclude them from every aggregation/chart so
+# they don't pollute cost-distribution / request-share / ranking views.
+_INVALID_MODEL_ERROR_CODE = "invalid_model"
+
+
+def _exclude_invalid_model():
+    """Build a boolean clause that filters out invalid_model rows in api_call_logs."""
+    return or_(
+        ApiCallLog.error_code.is_(None),
+        ApiCallLog.error_code != _INVALID_MODEL_ERROR_CODE,
+    )
 
 
 class UsageStatRepository(BaseRepository[UsageStat]):
@@ -111,6 +127,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
                 ApiCallLog.user_id == user_id,
                 ApiCallLog.created_at >= start,
                 ApiCallLog.created_at < end,
+                _exclude_invalid_model(),
             )
             .order_by(ApiCallLog.created_at.asc(), ApiCallLog.id.asc())
         )
@@ -120,6 +137,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         query = select(ApiCallLog).where(
             ApiCallLog.created_at >= stat_hour,
             ApiCallLog.created_at < next_hour,
+            _exclude_invalid_model(),
         )
         return list((await self.session.execute(query)).scalars().all())
 
@@ -161,7 +179,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
                 func.sum(ApiCallLog.cost).label("total_revenue"),
                 func.sum(ApiCallLog.provider_cost).label("total_provider_cost"),
             )
-            .where(ApiCallLog.created_at >= start, ApiCallLog.created_at < end)
+            .where(
+                ApiCallLog.created_at >= start,
+                ApiCallLog.created_at < end,
+                _exclude_invalid_model(),
+            )
             .group_by(stat_date)
             .order_by(stat_date.asc())
         )
@@ -197,7 +219,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
                 func.sum(ApiCallLog.prompt_tokens).label("prompt_tokens"),
                 func.sum(ApiCallLog.completion_tokens).label("completion_tokens"),
             )
-            .where(ApiCallLog.created_at >= start, ApiCallLog.created_at < end)
+            .where(
+                ApiCallLog.created_at >= start,
+                ApiCallLog.created_at < end,
+                _exclude_invalid_model(),
+            )
             .group_by(effective_model)
             .order_by(func.count().desc())
         )
@@ -215,7 +241,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         ]
 
     async def get_platform_summary(self, *, today_start: datetime) -> dict:
-        total_q = select(func.count()).select_from(ApiCallLog)
+        total_q = (
+            select(func.count())
+            .select_from(ApiCallLog)
+            .where(_exclude_invalid_model())
+        )
         total_result = await self.session.execute(total_q)
         total_requests = int(total_result.scalar() or 0)
 
@@ -225,13 +255,19 @@ class UsageStatRepository(BaseRepository[UsageStat]):
                 func.sum(ApiCallLog.cost).label("rev"),
                 func.sum(ApiCallLog.provider_cost).label("cost"),
             )
-            .where(ApiCallLog.created_at >= today_start)
+            .where(
+                ApiCallLog.created_at >= today_start,
+                _exclude_invalid_model(),
+            )
         )
         today_row = (await self.session.execute(today_q)).one()
 
-        all_q = select(
-            func.sum(ApiCallLog.cost).label("rev"),
-            func.sum(ApiCallLog.provider_cost).label("cost"),
+        all_q = (
+            select(
+                func.sum(ApiCallLog.cost).label("rev"),
+                func.sum(ApiCallLog.provider_cost).label("cost"),
+            )
+            .where(_exclude_invalid_model())
         )
         all_row = (await self.session.execute(all_q)).one()
 

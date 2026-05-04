@@ -33,7 +33,7 @@ async def get_db_session() -> AsyncSession:
 async def get_current_admin(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    access_token: Optional[str] = Cookie(default=None),
+    access_token: Optional[str] = Cookie(default=None, alias="admin_access_token"),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminUser:
     """
@@ -41,7 +41,8 @@ async def get_current_admin(
 
     支持从以下位置获取 Token：
     1. Authorization Header (Bearer Token)
-    2. Cookie (access_token)
+    2. Cookie (`admin_access_token` — namespaced so it doesn't collide with the
+       user front-end's `user_access_token` when both apps share a domain)
     """
     token = None
 
@@ -90,7 +91,7 @@ async def get_current_admin(
 async def get_optional_current_admin(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    access_token: Optional[str] = Cookie(default=None),
+    access_token: Optional[str] = Cookie(default=None, alias="admin_access_token"),
     db: AsyncSession = Depends(get_db_session),
 ) -> Optional[AdminUser]:
     """Return the current admin when authentication succeeds, else None."""

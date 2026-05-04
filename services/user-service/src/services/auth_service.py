@@ -140,7 +140,10 @@ class AuthService:
         user.login_fail_count = 0
         user.login_locked_until = None
 
-        await AuthService._revoke_all_user_sessions(db, user.id)
+        # NOTE: We deliberately do NOT revoke other active sessions on a normal
+        # login. Allowing the same account to stay signed in on multiple
+        # devices/browsers matches mainstream SaaS UX. Sensitive operations
+        # (change_password / reset_password) still call _revoke_all_user_sessions.
         access_token, refresh_token = await AuthService._create_session_and_tokens(
             db, user, user_agent, ip_address
         )
@@ -332,7 +335,7 @@ class AuthService:
         user.login_fail_count = 0
         user.login_locked_until = None
 
-        await AuthService._revoke_all_user_sessions(db, user.id)
+        # See note in `login` — code-based login also keeps prior sessions alive.
         access_token, refresh_token = await AuthService._create_session_and_tokens(
             db, user, user_agent, ip_address
         )

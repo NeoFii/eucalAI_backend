@@ -26,6 +26,16 @@ async def route_and_resolve(
     is_stream: bool = False,
     affinity_key: str | None = None,
 ) -> tuple[str, dict[str, str], dict[str, Any] | None, dict[str, Any]]:
+    """Validate `requested_model`, route via inference-service, resolve upstream.
+
+    Only values present in `config["user_facing_aliases"]` are accepted in the
+    `model` field of API requests. Any other value (including the underlying
+    real model names like `qwen3-...`) is rejected with HTTP 400 /
+    error_code=invalid_model. Each rejected request is still recorded in
+    `api_call_logs` (visible in the request-detail list), but the user-service
+    aggregation layer skips rows tagged `error_code='invalid_model'` so they
+    don't pollute the cost/share/ranking charts.
+    """
     config_manager = get_config_manager()
     config = config_manager.load()
 
@@ -37,6 +47,16 @@ async def route_and_resolve(
 
     route_result = None
     selected_model = requested_model
+
+    user_facing_aliases = config.get("user_facing_aliases") or [config["router_alias"]]
+
+    if requested_model not in user_facing_aliases:
+        allowed = ", ".join(user_facing_aliases)
+        raise RoutingError(
+            status_code=400,
+            error_code="invalid_model",
+            detail=f"model '{requested_model}' is not allowed; please use one of: {allowed}",
+        )
 
     if requested_model == config["router_alias"]:
         inference_client = get_inference_client()
@@ -107,12 +127,35 @@ async def route_and_resolve(
                     detail="inference service unavailable and no fallback model available",
                 )
 
-    elif requested_model not in _available_models(config):
-        raise RoutingError(
-            status_code=404,
-            error_code="model_not_found",
-            detail=f"unsupported model: {requested_model}",
-        )
+    else:
+        # Non-alias entry in user_facing_aliases (e.g. admin exposed an extra
+        # public name like "pro" that maps to a fixed underlying model).
+        # We still classify via inference-service so users get smart routing,
+        # but we treat the alias value as a hint we can resolve directly later.
+        # If the alias matches a concrete model in model_channels, route to it
+        # directly; otherwise fall through to auto-routing.
+        if requested_model in _available_models(config):
+            selected_model = requested_model
+        else:
+            # Future-proofing: alias is whitelisted but we have no mapping for
+            # it. Fall back to the router_alias path (auto-routing).
+            inference_client = get_inference_client()
+            classify_result = await inference_client.classify(
+                messages, request_id=request_id,
+            )
+            if classify_result.success:
+                route_result = classify_result.data
+                selected_model = route_result["selected_model"]
+            else:
+                tier3_model = config["tier_model_map"].get(3)
+                if tier3_model and tier3_model in _available_models(config):
+                    selected_model = tier3_model
+                else:
+                    raise RoutingError(
+                        status_code=503,
+                        error_code="no_fallback",
+                        detail="cannot resolve alias and no fallback available",
+                    )
 
     target_info = await _resolve_target_with_affinity(selected_model, config, affinity_key)
     return selected_model, target_info, route_result, route_meta

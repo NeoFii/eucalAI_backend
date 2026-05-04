@@ -38,7 +38,7 @@ async def get_db_session() -> AsyncSession:
 async def get_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    access_token: Optional[str] = Cookie(None, alias="access_token"),
+    access_token: Optional[str] = Cookie(None, alias="user_access_token"),
     db: AsyncSession = Depends(get_db_session),
 ) -> User:
     """
@@ -46,7 +46,8 @@ async def get_current_user(
 
     支持从以下位置获取 Token：
     1. Authorization Header (Bearer Token)
-    2. Cookie (access_token)
+    2. Cookie (`user_access_token` — namespaced so it doesn't collide with the
+       admin front-end's `admin_access_token` when both apps share a domain)
     """
     token = None
 

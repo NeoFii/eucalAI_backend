@@ -18,12 +18,16 @@ def ready() -> Dict[str, Any]:
 
 @router.get("/v1/models")
 def list_models(_: str = Depends(require_api_key)) -> Dict[str, Any]:
+    """Expose only the public-facing aliases (default `auto`).
+
+    Underlying tier model names are intentionally NOT advertised so that
+    clients are guided to the alias entry-point. Add additional public
+    aliases via the `routing_settings.user_facing_aliases` admin setting.
+    """
     config = get_config_manager().load()
-    models = [config["router_alias"]] + [
-        config["tier_model_map"][tier] for tier in sorted(config["tier_model_map"])
-    ]
+    aliases = config.get("user_facing_aliases") or [config["router_alias"]]
     seen: list[str] = []
-    for item in models:
+    for item in aliases:
         if item not in seen:
             seen.append(item)
     return {
@@ -38,6 +42,7 @@ def get_router_config(_: str = Depends(require_api_key)) -> Dict[str, Any]:
     config = cm.load()
     return {
         "router_alias": config["router_alias"],
+        "user_facing_aliases": config.get("user_facing_aliases") or [config["router_alias"]],
         "route_order": config["route_order"],
         "weights": config["weights"],
         "score_bands": config["score_bands_raw"],

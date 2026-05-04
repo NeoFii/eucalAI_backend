@@ -55,6 +55,7 @@ def parse_score_bands(raw: str) -> List[Tuple[float, float, int]]:
 def build_default_runtime_config() -> Dict[str, Any]:
     return {
         "router_alias": DEFAULT_ROUTER_ALIAS,
+        "user_facing_aliases": [DEFAULT_ROUTER_ALIAS],
         "route_order": list(FIVEWAY_ROUTE_ORDER),
         "weights": dict(FIVEWAY_DEFAULT_WEIGHTS),
         "score_bands": "0-3:5,3-5:4,5-7:3,7-9:2,9-10:1",
@@ -136,6 +137,29 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
 
     router_alias = str(raw.get("router_alias", base["router_alias"])).strip() or DEFAULT_ROUTER_ALIAS
 
+    # User-facing aliases — entries the API client may put in the `model` field.
+    # Accept either a list (preferred, sent by admin-service) or a comma-string
+    # (defensive fallback). The router_alias itself is always included so admins
+    # can never accidentally lock out the auto entry.
+    raw_aliases = raw.get("user_facing_aliases", [router_alias])
+    if isinstance(raw_aliases, str):
+        alias_list = [a.strip() for a in raw_aliases.split(",") if a.strip()]
+    elif isinstance(raw_aliases, (list, tuple)):
+        alias_list = [str(a).strip() for a in raw_aliases if str(a).strip()]
+    else:
+        alias_list = []
+    if not alias_list:
+        alias_list = [router_alias]
+    if router_alias not in alias_list:
+        alias_list.insert(0, router_alias)
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    user_facing_aliases: List[str] = []
+    for alias in alias_list:
+        if alias not in seen:
+            seen.add(alias)
+            user_facing_aliases.append(alias)
+
     # Model providers
     providers_raw = raw.get("model_providers", base["model_providers"])
     if not isinstance(providers_raw, dict):
@@ -205,6 +229,7 @@ def normalize_runtime_config(raw: Dict[str, Any] | None = None) -> Dict[str, Any
 
     return {
         "router_alias": router_alias,
+        "user_facing_aliases": user_facing_aliases,
         "route_order": list(FIVEWAY_ROUTE_ORDER),
         "weights": weights,
         "score_bands_raw": score_bands_raw,
