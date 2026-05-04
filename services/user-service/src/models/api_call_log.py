@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
+    DECIMAL,
     JSON,
     BigInteger,
     Boolean,
@@ -59,6 +60,11 @@ class ApiCallLog(Base, SnowflakeIdMixin):
     inference_config_source = Column(String(32), nullable=True, comment="Inference config source")
     routing_tier = Column(SmallInteger, nullable=True, comment="Routing tier 1-5")
     score_source = Column(String(32), nullable=True, comment="Score source")
+    total_score_0_10 = Column(
+        DECIMAL(6, 4),
+        nullable=True,
+        comment="Routing total score 0-10 (DECIMAL(6,4))",
+    )
     router_trace_id = Column(String(64), nullable=True, comment="Router trace ID")
     inference_error_code = Column(String(32), nullable=True, comment="Inference service error code")
     prompt_tokens = Column(Integer, default=0, nullable=False, comment="Prompt tokens")
@@ -75,10 +81,35 @@ class ApiCallLog(Base, SnowflakeIdMixin):
         comment="0=pending 1=success 2=error 3=refunded 4=aborted",
     )
     duration_ms = Column(Integer, nullable=True, comment="Request latency (ms)")
+    upstream_latency_ms = Column(
+        Integer,
+        nullable=True,
+        comment="Upstream LLM call latency (ms), separate from total duration",
+    )
     is_stream = Column(Boolean, default=False, nullable=False, comment="0=non-stream 1=stream")
+    messages_count = Column(
+        SmallInteger,
+        nullable=True,
+        comment="Number of messages in the request",
+    )
     ip = Column(String(45), nullable=True, comment="Caller IP; gated by user record_ip setting")
     error_code = Column(String(32), nullable=True, comment="status=2 payload")
     error_msg = Column(String(512), nullable=True, comment="status=2 message")
+    routing_detail = Column(
+        JSON,
+        nullable=True,
+        comment="Routing scoring detail (admin-visible): scores_0_2, proto_weighted, fallback_routes, tier_model_map, score_bands_raw",
+    )
+    request_preview = Column(
+        JSON,
+        nullable=True,
+        comment="Request/response original text (super_admin only): {messages, response_text, is_truncated}",
+    )
+    input_hash = Column(
+        String(32),
+        nullable=True,
+        comment="sha256(canonical(messages))[:32] for replay/compare view",
+    )
     created_at = Column(DateTime, default=now, nullable=False, comment="Created at")
     updated_at = Column(
         DateTime,

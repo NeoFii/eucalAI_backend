@@ -1,5 +1,7 @@
 """Schemas for internal call log endpoints."""
 
+from decimal import Decimal
+
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +23,7 @@ class InternalCreateCallLogRequest(BaseModel):
     score_source: str | None = Field(None, max_length=32)
     router_trace_id: str | None = Field(None, max_length=64)
     inference_error_code: str | None = Field(None, max_length=32)
+    input_hash: str | None = Field(None, max_length=32)
     status: int = 0
 
 
@@ -35,6 +38,7 @@ class InternalUpdateCallLogRequest(BaseModel):
     inference_config_source: str | None = Field(None, max_length=32)
     routing_tier: int | None = None
     score_source: str | None = Field(None, max_length=32)
+    total_score_0_10: Decimal | float | None = None
     router_trace_id: str | None = Field(None, max_length=64)
     inference_error_code: str | None = Field(None, max_length=32)
     prompt_tokens: int | None = None
@@ -42,11 +46,16 @@ class InternalUpdateCallLogRequest(BaseModel):
     cached_tokens: int | None = None
     total_tokens: int | None = None
     duration_ms: int | None = None
+    upstream_latency_ms: int | None = None
+    messages_count: int | None = None
     error_code: str | None = Field(None, max_length=32)
     error_msg: str | None = Field(None, max_length=1024)
     cost: int | None = None
     provider_cost: int | None = None
     cost_detail: dict | None = None
+    routing_detail: dict | None = None
+    request_preview: dict | None = None
+    input_hash: str | None = Field(None, max_length=32)
 
 
 class InternalBatchCallLogRequest(BaseModel):

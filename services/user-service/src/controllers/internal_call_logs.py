@@ -27,9 +27,11 @@ _CALL_LOG_UPDATE_FIELDS = {
     "status", "selected_model", "provider_slug", "upstream_model",
     "config_version", "config_source", "inference_config_version",
     "inference_config_source", "routing_tier", "score_source",
-    "router_trace_id", "inference_error_code", "prompt_tokens",
-    "completion_tokens", "cached_tokens", "total_tokens", "duration_ms",
+    "total_score_0_10", "router_trace_id", "inference_error_code",
+    "prompt_tokens", "completion_tokens", "cached_tokens", "total_tokens",
+    "duration_ms", "upstream_latency_ms", "messages_count",
     "error_code", "error_msg", "cost", "provider_cost", "cost_detail",
+    "routing_detail", "request_preview", "input_hash",
 }
 
 _CREATE_FIELDS = {
@@ -37,7 +39,7 @@ _CREATE_FIELDS = {
     "provider_slug", "upstream_model", "is_stream", "ip", "config_version",
     "config_source", "inference_config_version", "inference_config_source",
     "routing_tier", "score_source", "router_trace_id", "inference_error_code",
-    "status",
+    "input_hash", "status",
 }
 
 
@@ -73,6 +75,7 @@ async def create_call_log(
         score_source=body.score_source,
         router_trace_id=body.router_trace_id,
         inference_error_code=body.inference_error_code,
+        input_hash=body.input_hash,
         status=body.status,
         created_at=now(),
         updated_at=now(),

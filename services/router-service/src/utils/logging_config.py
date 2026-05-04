@@ -23,6 +23,12 @@ LOGGER_UPSTREAM = "router_service.upstream"
 INPUT_PREVIEW_MAX_CHARS = 300
 RESPONSE_PREVIEW_MAX_CHARS = 300
 
+# DB-side preview for the route-monitor panel — much larger than the file logs
+# because it's the only way to inspect what the user actually sent. Per-message
+# content is bounded so a single chat row stays well under MySQL row limits.
+DB_PREVIEW_PER_FIELD_MAX_CHARS = 32_768
+DB_PREVIEW_MESSAGES_MAX_COUNT = 64
+
 _initialized = False
 
 _SENSITIVE_PATTERNS = [
@@ -66,6 +72,58 @@ def _redact_preview(value: str, *, max_chars: int) -> str:
 
         text = pattern.sub(_replace, text)
     return text[:max_chars]
+
+
+def build_db_request_preview(
+    messages: list[dict],
+    response_text: str | None,
+    *,
+    per_field_max: int = DB_PREVIEW_PER_FIELD_MAX_CHARS,
+    messages_max: int = DB_PREVIEW_MESSAGES_MAX_COUNT,
+) -> dict[str, Any]:
+    """Build the JSON blob persisted to api_call_logs.request_preview.
+
+    - Each message content is redacted (sk-*, password=, token=...) and
+      individually truncated to per_field_max chars.
+    - At most `messages_max` messages are kept (most recent retained).
+    - response_text is redacted and truncated to per_field_max chars.
+    - Sets is_truncated=True if any field or the message list was clipped.
+    """
+    is_truncated = False
+    msgs_in = list(messages or [])
+    if len(msgs_in) > messages_max:
+        msgs_in = msgs_in[-messages_max:]
+        is_truncated = True
+
+    preview_messages: list[dict[str, Any]] = []
+    for msg in msgs_in:
+        if not isinstance(msg, dict):
+            continue
+        role = str(msg.get("role", ""))[:32]
+        raw_content = msg.get("content")
+        if isinstance(raw_content, str):
+            content_str = raw_content
+        else:
+            try:
+                content_str = json.dumps(raw_content, ensure_ascii=False, default=str)
+            except Exception:
+                content_str = str(raw_content)
+        if len(content_str) > per_field_max:
+            is_truncated = True
+        redacted = _redact_preview(content_str, max_chars=per_field_max)
+        preview_messages.append({"role": role, "content": redacted})
+
+    response_redacted: str | None = None
+    if response_text:
+        if len(str(response_text)) > per_field_max:
+            is_truncated = True
+        response_redacted = _redact_preview(str(response_text), max_chars=per_field_max)
+
+    return {
+        "messages": preview_messages,
+        "response_text": response_redacted,
+        "is_truncated": is_truncated,
+    }
 
 
 def setup_logging(

@@ -14,14 +14,14 @@ from common.observability import get_request_id
 from core.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_rate_limiter, get_settings, require_api_key, require_rate_limit
 from gateways.user_identity import ValidatedApiKey
 from gateways.calllog import CallLogGateway
-from utils.logging_config import get_app_logger, log_upstream_call
+from utils.logging_config import build_db_request_preview, get_app_logger, log_upstream_call
 from schemas.requests import ChatCompletionRequest
 from core.exceptions import RoutingError, sanitize_error
 from services.routing import route_and_resolve
 from services.channel_selector import ChannelRateLimited
 from services.upstream import strip_think_tags
 from utils.billing import compute_cost
-from utils.text import stringify_message_content
+from utils.text import compute_input_hash, stringify_message_content
 
 router = APIRouter()
 logger = get_app_logger()
@@ -48,6 +48,8 @@ async def chat_completions(
                 break
         if not input_preview:
             input_preview = stringify_message_content(request.messages[-1].get("content", ""))
+    messages_count = len(request.messages or [])
+    input_hash = compute_input_hash(list(request.messages or []))
     t_start = time.monotonic()
     create_result = await CallLogGateway.create_call_log(
         settings=settings,
@@ -57,6 +59,7 @@ async def chat_completions(
         model_name=requested_model,
         is_stream=is_stream,
         ip=extract_client_ip(raw_request),
+        input_hash=input_hash,
         status=0,
     )
     call_log_created = create_result is not None
@@ -120,6 +123,19 @@ async def chat_completions(
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
 
+    routing_detail: dict | None = None
+    total_score_0_10: float | None = None
+    if route_result:
+        routing_detail = {
+            "scores_0_2": route_result.get("scores_0_2"),
+            "proto_weighted_0_2": route_result.get("proto_weighted_0_2"),
+            "fallback_routes": route_result.get("fallback_routes", []),
+            "tier_model_map": route_result.get("tier_model_map"),
+            "score_bands_raw": route_result.get("score_bands_raw"),
+        }
+        ts = route_result.get("total_score_0_10")
+        total_score_0_10 = float(ts) if ts is not None else None
+
     if call_log_created:
         await CallLogGateway.update_call_log(
             settings=settings,
@@ -133,8 +149,11 @@ async def chat_completions(
             inference_config_source=route_meta.get("inference_config_source"),
             routing_tier=(route_result or {}).get("routing_tier"),
             score_source=(route_result or {}).get("score_source"),
+            total_score_0_10=total_score_0_10,
             router_trace_id=router_trace_id,
             inference_error_code=route_meta.get("error_code"),
+            messages_count=messages_count,
+            routing_detail=routing_detail,
         )
 
     forward_payload = request.model_dump(
@@ -220,6 +239,11 @@ async def chat_completions(
                     error_code="upstream_error",
                     error_msg=sanitize_error(exc)[:512],
                     duration_ms=int((time.monotonic() - t_start) * 1000),
+                    upstream_latency_ms=int(upstream_latency_ms),
+                    request_preview=build_db_request_preview(
+                        list(request.messages or []),
+                        None,
+                    ),
                 )
             raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
@@ -279,6 +303,11 @@ async def chat_completions(
                         "request_id": request_id,
                         "status": final_status,
                         "duration_ms": int((time.monotonic() - t_start) * 1000),
+                        "upstream_latency_ms": int(final_latency),
+                        "request_preview": build_db_request_preview(
+                            list(request.messages or []),
+                            collected_content,
+                        ),
                         "error_code": "client_aborted" if not stream_ok else None,
                     }
                     if stream_ok and stream_usage:
@@ -364,6 +393,12 @@ async def chat_completions(
             provider_output_price=target_info.get("output_price_per_million", 0),
             provider_cached_price=target_info.get("cached_input_price_per_million", 0),
         )
+        full_response_text = ""
+        if choices:
+            try:
+                full_response_text = str((choices[0].get("message") or {}).get("content") or "")
+            except Exception:
+                full_response_text = ""
         await CallLogGateway.update_call_log(
             settings=settings,
             request_id=request_id,
@@ -376,6 +411,11 @@ async def chat_completions(
             provider_cost=provider_cost,
             cost_detail=cost_detail,
             duration_ms=int((time.monotonic() - t_start) * 1000),
+            upstream_latency_ms=int(upstream_latency_ms),
+            request_preview=build_db_request_preview(
+                list(request.messages or []),
+                full_response_text,
+            ),
         )
 
     return JSONResponse(content=response_payload, headers=headers)

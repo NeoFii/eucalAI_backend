@@ -14,12 +14,13 @@ from common.observability import get_request_id
 from core.dependencies import extract_client_ip, get_channel_selector, get_config_manager, get_rate_limiter, get_settings, require_api_key, require_rate_limit
 from gateways.user_identity import ValidatedApiKey
 from gateways.calllog import CallLogGateway
-from utils.logging_config import log_upstream_call
+from utils.logging_config import build_db_request_preview, log_upstream_call
 from schemas.requests import CompletionRequest
 from services.channel_selector import ChannelRateLimited
 from core.exceptions import RoutingError, sanitize_error
 from services.routing import route_and_resolve
 from utils.billing import compute_cost
+from utils.text import compute_input_hash
 
 router = APIRouter()
 
@@ -68,6 +69,8 @@ async def completions(
     request_id = get_request_id() or uuid.uuid4().hex
     router_trace_id = f"completion-{uuid.uuid4().hex[:12]}"
     input_preview = str(request.prompt)[:300]
+    messages_count = len(messages)
+    input_hash = compute_input_hash(messages)
     settings = get_settings()
 
     t_start = time.monotonic()
@@ -79,6 +82,7 @@ async def completions(
         model_name=requested_model,
         is_stream=False,
         ip=extract_client_ip(raw_request),
+        input_hash=input_hash,
         status=0,
     )
     call_log_created = create_result is not None
@@ -117,6 +121,19 @@ async def completions(
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
 
+    routing_detail: dict | None = None
+    total_score_0_10: float | None = None
+    if route_result:
+        routing_detail = {
+            "scores_0_2": route_result.get("scores_0_2"),
+            "proto_weighted_0_2": route_result.get("proto_weighted_0_2"),
+            "fallback_routes": route_result.get("fallback_routes", []),
+            "tier_model_map": route_result.get("tier_model_map"),
+            "score_bands_raw": route_result.get("score_bands_raw"),
+        }
+        ts = route_result.get("total_score_0_10")
+        total_score_0_10 = float(ts) if ts is not None else None
+
     if call_log_created:
         await CallLogGateway.update_call_log(
             settings=settings, request_id=request_id,
@@ -127,8 +144,11 @@ async def completions(
             inference_config_source=route_meta.get("inference_config_source"),
             routing_tier=(route_result or {}).get("routing_tier"),
             score_source=(route_result or {}).get("score_source"),
+            total_score_0_10=total_score_0_10,
             router_trace_id=router_trace_id,
             inference_error_code=route_meta.get("error_code"),
+            messages_count=messages_count,
+            routing_detail=routing_detail,
         )
 
     forward_payload = request.model_dump(
@@ -192,6 +212,8 @@ async def completions(
                     settings=settings, request_id=request_id, status=2,
                     error_code="upstream_error", error_msg=sanitize_error(exc)[:512],
                     duration_ms=int((time.monotonic() - t_start) * 1000),
+                    upstream_latency_ms=int(upstream_latency_ms),
+                    request_preview=build_db_request_preview(messages, None),
                 )
             raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
@@ -226,6 +248,13 @@ async def completions(
             provider_output_price=target_info.get("output_price_per_million", 0),
             provider_cached_price=target_info.get("cached_input_price_per_million", 0),
         )
+        full_response_text = ""
+        try:
+            choices_out = completion_payload.get("choices") or []
+            if choices_out:
+                full_response_text = str(choices_out[0].get("text") or "")
+        except Exception:
+            full_response_text = ""
         await CallLogGateway.update_call_log(
             settings=settings, request_id=request_id, status=1,
             prompt_tokens=prompt_tokens,
@@ -236,6 +265,8 @@ async def completions(
             provider_cost=provider_cost,
             cost_detail=cost_detail,
             duration_ms=int((time.monotonic() - t_start) * 1000),
+            upstream_latency_ms=int(upstream_latency_ms),
+            request_preview=build_db_request_preview(messages, full_response_text),
         )
 
     return JSONResponse(

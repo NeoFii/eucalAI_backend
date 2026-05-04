@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from typing import Any
@@ -42,3 +43,17 @@ def stringify_message_content(msg: Any) -> str:
         except Exception:
             return str(msg)
     return str(msg)
+
+
+def compute_input_hash(messages: list[dict]) -> str:
+    """sha256(canonical JSON of messages)[:32].
+
+    Used by route-monitor's "compare/replay" view to group requests by identical
+    input. Sort keys are enabled so message dicts with same content but different
+    key ordering still hash equally.
+    """
+    try:
+        canon = json.dumps(messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        canon = str(messages)
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()[:32]
