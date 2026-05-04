@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -400,7 +401,21 @@ async def chat_completions(
                             provider_cost=provider_cost,
                             cost_detail=cost_detail,
                         )
-                    await CallLogGateway.update_call_log(**update_kwargs)
+                    # On client cancel, the outer await is in a cancelled state and
+                    # any further await will re-raise immediately. asyncio.shield
+                    # lets the buffer write run to completion in the background even
+                    # though we lose the await; CallLogBuffer is in-process memory so
+                    # this is safe.
+                    update_coro = CallLogGateway.update_call_log(**update_kwargs)
+                    if abort_reason == "client_cancelled":
+                        update_task = asyncio.ensure_future(update_coro)
+                        # Buffer task continues running on the event loop after our
+                        # await is cancelled; the suppress just stops the second
+                        # CancelledError from terminating the finally early.
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await asyncio.shield(update_task)
+                    else:
+                        await update_coro
                     if stream_ok and stream_usage:
                         log_event(
                             logger, logging.INFO, "chatComplete",
@@ -424,6 +439,9 @@ async def chat_completions(
                             totalLatencyMs=int((time.monotonic() - t_start) * 1000),
                         )
                     elif abort_reason == "client_cancelled":
+                        # log_event is sync (writes to ring buffer + stdout); no await,
+                        # so cancellation has already been delivered but does not
+                        # interrupt synchronous code.
                         log_event(
                             logger, logging.INFO, "chatAborted",
                             requestId=request_id,
