@@ -25,7 +25,14 @@ logger = logging.getLogger(settings.SERVICE_NAME)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db.create_engine(settings.DATABASE_URL)
+    db.create_engine(
+        settings.DATABASE_URL,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        echo=settings.DATABASE_ECHO,
+        pool_recycle=settings.DATABASE_POOL_RECYCLE,
+        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
+    )
     db.init_session_factory()
     await init_redis(settings.REDIS_URL)
     await init_cache_redis(settings.CACHE_REDIS_URL)

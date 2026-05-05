@@ -24,6 +24,8 @@ class ServiceDatabaseRuntime:
         echo: bool = False,
         pool_size: int = 10,
         max_overflow: int = 20,
+        pool_recycle: int = 1800,
+        pool_timeout: int = 10,
     ) -> AsyncEngine:
         """Create and cache an async engine for this service."""
         self._engine = create_async_engine(
@@ -32,6 +34,8 @@ class ServiceDatabaseRuntime:
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_pre_ping=True,
+            pool_recycle=pool_recycle,
+            pool_timeout=pool_timeout,
         )
         if self._engine.sync_engine.dialect.name == "mysql":
             event.listen(self._engine.sync_engine, "connect", self._set_mysql_time_zone)

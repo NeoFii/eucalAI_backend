@@ -36,7 +36,13 @@ def build_redis_settings(redis_url: str | None = None) -> RedisSettings:
 
 
 async def on_worker_startup(ctx: dict) -> None:
-    create_engine(settings.DATABASE_URL)
+    create_engine(
+        settings.DATABASE_URL,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        pool_recycle=settings.DATABASE_POOL_RECYCLE,
+        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
+    )
     init_session_factory()
     ctx["settings"] = settings
     logger.info("User worker started")

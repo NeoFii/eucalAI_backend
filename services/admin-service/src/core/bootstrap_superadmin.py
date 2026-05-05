@@ -39,6 +39,8 @@ async def _setup_runtime() -> None:
         pool_size=settings.DATABASE_POOL_SIZE,
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
         echo=settings.DATABASE_ECHO,
+        pool_recycle=settings.DATABASE_POOL_RECYCLE,
+        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
     )
     init_session_factory()
     await ensure_database_at_head(service_name="admin-service", url=settings.DATABASE_URL)

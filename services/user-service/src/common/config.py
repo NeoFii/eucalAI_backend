@@ -44,6 +44,8 @@ class BaseServiceSettings(BaseSettings):
     DATABASE_URL: str = ""
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
+    DATABASE_POOL_RECYCLE: int = 1800
+    DATABASE_POOL_TIMEOUT: int = 10
     DATABASE_ECHO: bool = False
 
     JWT_SECRET_KEY: str = ""
