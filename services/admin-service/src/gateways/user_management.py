@@ -116,6 +116,22 @@ class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
         except InternalServiceError as exc:
             raise ServiceUnavailableException("User service unavailable") from exc
 
+    async def fetch_rpm_trend(
+        self, start: str, end: str, bucket_seconds: int,
+    ) -> dict:
+        try:
+            return await get_internal_json(
+                path="/api/v1/internal/dashboard/rpm-trend",
+                query_params={
+                    "start": start,
+                    "end": end,
+                    "bucket_seconds": bucket_seconds,
+                },
+                **self._common_kwargs(),
+            )
+        except InternalServiceError as exc:
+            raise ServiceUnavailableException("User service unavailable") from exc
+
 
 USER_MGMT_TIMEOUT_SECONDS = 5.0
 

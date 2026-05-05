@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.timezone import now
@@ -15,6 +15,8 @@ from schemas.internal_dashboard import (
     DailyUsageTrendItem,
     DashboardSummaryResponse,
     ModelCallStatItem,
+    RpmTrendPoint,
+    RpmTrendResponse,
     UsageTrendsResponse,
     UserGrowthPointResponse,
 )
@@ -116,4 +118,34 @@ async def get_usage_trends(
     return UsageTrendsResponse(
         daily=[DailyUsageTrendItem(**d) for d in daily],
         by_model=[ModelCallStatItem(**m) for m in by_model],
+    )
+
+
+@router.get(
+    "/dashboard/rpm-trend",
+    response_model=RpmTrendResponse,
+    summary="Platform RPM time-bucketed trend",
+)
+async def get_rpm_trend(
+    start: datetime,
+    end: datetime,
+    bucket_seconds: int = Query(60, ge=10, le=21600),
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> RpmTrendResponse:
+    """Return per-bucket request counts and RPM over [start, end).
+
+    Bucket width is fixed at ``bucket_seconds``. Empty buckets (no requests)
+    are not returned by the SQL aggregation; the admin frontend fills the
+    time axis from start..end on the client side so the chart x-axis stays
+    continuous regardless of activity.
+    """
+    if end <= start:
+        return RpmTrendResponse(bucket_seconds=bucket_seconds, points=[])
+    points = await UsageStatRepository(db).get_rpm_trend(
+        start=start, end=end, bucket_seconds=bucket_seconds,
+    )
+    return RpmTrendResponse(
+        bucket_seconds=bucket_seconds,
+        points=[RpmTrendPoint(**p) for p in points],
     )

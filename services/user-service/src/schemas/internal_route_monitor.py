@@ -15,6 +15,7 @@ class RouteRequestListItem(BaseModel):
     id: int
     request_id: str
     user_id: int
+    user_uid: str | None = None
     api_key_id: int | None = None
     model_name: str
     selected_model: str | None = None

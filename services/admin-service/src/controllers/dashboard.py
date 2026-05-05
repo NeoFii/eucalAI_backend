@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from gateways.user_management import UserStatsGateway
@@ -130,3 +130,33 @@ async def get_usage_trends(
     gw = UserStatsGateway()
     raw = await gw.fetch_usage_trends(format_iso(start), format_iso(end))
     return UsageTrendsResponse(code=200, message="success", data=UsageTrendsData(**raw))
+
+
+class RpmTrendPointData(BaseModel):
+    bucket_start: str
+    request_count: int
+    rpm: float
+
+
+class RpmTrendData(BaseModel):
+    bucket_seconds: int
+    points: list[RpmTrendPointData]
+
+
+class RpmTrendResponse(AdminBaseResponse):
+    data: Optional[RpmTrendData] = None
+
+
+@router.get("/rpm-trend", response_model=RpmTrendResponse)
+async def get_rpm_trend(
+    start: datetime,
+    end: datetime,
+    bucket_seconds: int = Query(60, ge=10, le=21600),
+    _admin: AdminUser = Depends(require_active_admin),
+) -> RpmTrendResponse:
+    """Return per-bucket RPM samples over [start, end)."""
+    gw = UserStatsGateway()
+    raw = await gw.fetch_rpm_trend(
+        format_iso(start), format_iso(end), bucket_seconds,
+    )
+    return RpmTrendResponse(code=200, message="success", data=RpmTrendData(**raw))

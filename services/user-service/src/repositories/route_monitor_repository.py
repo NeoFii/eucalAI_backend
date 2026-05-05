@@ -9,7 +9,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams, PaginatedResult
-from models import ApiCallLog
+from models import ApiCallLog, User
 from repositories.usage_stat_repository import _exclude_invalid_model
 
 
@@ -53,8 +53,14 @@ class RouteMonitorRepository:
         big `request_preview` JSON. Callers should serialize the rows via
         `RouteRequestListItem` (which omits `request_preview`) so the wire
         payload stays small.
+
+        Each returned `ApiCallLog` row has a dynamically-attached `user_uid`
+        attribute (the public NanoID from `users.uid`); the join is an outer
+        join so legacy/orphaned rows still surface (uid will be `None`).
         """
-        query = select(ApiCallLog)
+        query = select(ApiCallLog, User.uid).join(
+            User, ApiCallLog.user_id == User.id, isouter=True
+        )
         if request_id is not None:
             query = query.where(ApiCallLog.request_id == request_id)
         if user_id is not None:
@@ -90,15 +96,15 @@ class RouteMonitorRepository:
             (await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar()
             or 0
         )
-        items = list(
-            (
-                await self.session.execute(
-                    query.offset((params.page - 1) * params.page_size).limit(params.page_size)
-                )
+        rows = (
+            await self.session.execute(
+                query.offset((params.page - 1) * params.page_size).limit(params.page_size)
             )
-            .scalars()
-            .all()
-        )
+        ).all()
+        items: list[ApiCallLog] = []
+        for log, uid in rows:
+            log.user_uid = uid  # dynamic attribute consumed by RouteRequestListItem
+            items.append(log)
         return PaginatedResult(
             items=items, total=total, page=params.page, page_size=params.page_size
         )
@@ -106,12 +112,24 @@ class RouteMonitorRepository:
     # ---------- 详情 ----------
 
     async def get_request_detail(self, request_id: str) -> ApiCallLog | None:
-        """Fetch a single row including the full request_preview JSON."""
-        return (
+        """Fetch a single row including the full request_preview JSON.
+
+        The returned row has a dynamically-attached `user_uid` attribute
+        (the public NanoID from `users.uid`); outer-join so missing user
+        records still yield the log row with `user_uid = None`.
+        """
+        row = (
             await self.session.execute(
-                select(ApiCallLog).where(ApiCallLog.request_id == request_id)
+                select(ApiCallLog, User.uid)
+                .join(User, ApiCallLog.user_id == User.id, isouter=True)
+                .where(ApiCallLog.request_id == request_id)
             )
-        ).scalar_one_or_none()
+        ).one_or_none()
+        if row is None:
+            return None
+        log, uid = row
+        log.user_uid = uid
+        return log
 
     # ---------- 对比/回放 ----------
 
@@ -125,29 +143,39 @@ class RouteMonitorRepository:
 
         Siblings are ordered most-recent first and exclude the target row.
         If the target has no input_hash (legacy/old rows), siblings is empty.
+
+        Both target and sibling rows have a dynamically-attached `user_uid`
+        attribute (outer-joined from users.uid).
         """
-        target = (
+        target_row = (
             await self.session.execute(
-                select(ApiCallLog).where(ApiCallLog.request_id == request_id)
+                select(ApiCallLog, User.uid)
+                .join(User, ApiCallLog.user_id == User.id, isouter=True)
+                .where(ApiCallLog.request_id == request_id)
             )
-        ).scalar_one_or_none()
-        if target is None or not target.input_hash:
+        ).one_or_none()
+        if target_row is None:
+            return None, []
+        target, target_uid = target_row
+        target.user_uid = target_uid
+        if not target.input_hash:
             return target, []
-        siblings = list(
-            (
-                await self.session.execute(
-                    select(ApiCallLog)
-                    .where(
-                        ApiCallLog.input_hash == target.input_hash,
-                        ApiCallLog.request_id != request_id,
-                    )
-                    .order_by(ApiCallLog.created_at.desc())
-                    .limit(limit)
+        sibling_rows = (
+            await self.session.execute(
+                select(ApiCallLog, User.uid)
+                .join(User, ApiCallLog.user_id == User.id, isouter=True)
+                .where(
+                    ApiCallLog.input_hash == target.input_hash,
+                    ApiCallLog.request_id != request_id,
                 )
+                .order_by(ApiCallLog.created_at.desc())
+                .limit(limit)
             )
-            .scalars()
-            .all()
-        )
+        ).all()
+        siblings: list[ApiCallLog] = []
+        for log, uid in sibling_rows:
+            log.user_uid = uid
+            siblings.append(log)
         return target, siblings
 
     # ---------- 聚合仪表盘 ----------

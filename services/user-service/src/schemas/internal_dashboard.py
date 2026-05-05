@@ -52,3 +52,14 @@ class ModelCallStatItem(BaseModel):
 class UsageTrendsResponse(BaseModel):
     daily: list[DailyUsageTrendItem]
     by_model: list[ModelCallStatItem]
+
+
+class RpmTrendPoint(BaseModel):
+    bucket_start: str  # ISO 8601, naive (DB-local) timestamp aligned to the bucket grid
+    request_count: int
+    rpm: float
+
+
+class RpmTrendResponse(BaseModel):
+    bucket_seconds: int
+    points: list[RpmTrendPoint]

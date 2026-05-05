@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import case, cast, func, or_, select, Date
 
 from common.db import BaseRepository, ListParams, PaginatedResult
-from common.utils.timezone import now
+from common.utils.timezone import format_iso, now
 from models import ApiCallLog, UsageStat
 
 
@@ -336,3 +336,51 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             "revenue_in_range": revenue_in_range,
             "provider_cost_in_range": provider_cost_in_range,
         }
+
+    async def get_rpm_trend(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        bucket_seconds: int,
+    ) -> list[dict]:
+        """Aggregate api_call_logs request counts into fixed-width time buckets.
+
+        Used to render the platform RPM trend chart. Buckets that contain no
+        rows are filled with 0 by the caller / Python side to keep the time
+        axis continuous (this method only returns buckets with > 0 rows).
+
+        Excludes ``error_code='invalid_model'`` rows for parity with other
+        chart-facing aggregations (cost / request-share / ranking views).
+        """
+        # MySQL: align created_at to bucket boundary using
+        #   FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(t) / N) * N)
+        bucket_expr = func.from_unixtime(
+            func.floor(func.unix_timestamp(ApiCallLog.created_at) / bucket_seconds)
+            * bucket_seconds
+        ).label("bucket_start")
+
+        query = (
+            select(
+                bucket_expr,
+                func.count().label("request_count"),
+            )
+            .where(
+                ApiCallLog.created_at >= start,
+                ApiCallLog.created_at < end,
+                _exclude_invalid_model(),
+            )
+            .group_by(bucket_expr)
+            .order_by(bucket_expr.asc())
+        )
+        rows = (await self.session.execute(query)).all()
+
+        bucket_minutes = bucket_seconds / 60.0
+        return [
+            {
+                "bucket_start": format_iso(r.bucket_start),
+                "request_count": int(r.request_count or 0),
+                "rpm": round((r.request_count or 0) / bucket_minutes, 3),
+            }
+            for r in rows
+        ]
