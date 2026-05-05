@@ -302,3 +302,8 @@ class RuntimeConfigStore:
             self._cached = config
             self._mtime = mtime
             return config
+
+    async def aload(self) -> Dict[str, Any]:
+        """Async wrapper that offloads file I/O to a thread."""
+        import asyncio
+        return await asyncio.to_thread(self.load)

@@ -111,14 +111,16 @@ class ChannelSelector:
         return available[-1]
 
     def report_failure(self, channel_slug: str) -> None:
+        should_disable = False
         with self._lock:
             self._failures[channel_slug] = time.monotonic() + self._cooldown
             count = self._failure_counts.get(channel_slug, 0) + 1
             self._failure_counts[channel_slug] = count
-
-        if self._auto_disable_enabled and count >= self._auto_disable_threshold:
-            with self._lock:
+            if self._auto_disable_enabled and count >= self._auto_disable_threshold:
                 self._disabled_until[channel_slug] = time.monotonic() + self._auto_disable_cooldown
+                should_disable = True
+
+        if should_disable:
             _logger.warning(
                 "channel %s auto-disabled after %d consecutive failures, cooldown %.0fs",
                 channel_slug, count, self._auto_disable_cooldown,
@@ -137,3 +139,12 @@ class ChannelSelector:
 
     def update_health_cache(self, health_data: dict[str, str]) -> None:
         self._health_cache = health_data
+
+    def is_channel_available(self, channel_slug: str) -> bool:
+        """Check if a channel is not in cooldown or auto-disabled."""
+        now = time.monotonic()
+        with self._lock:
+            return (
+                self._disabled_until.get(channel_slug, 0) < now
+                and self._failures.get(channel_slug, 0) < now
+            )

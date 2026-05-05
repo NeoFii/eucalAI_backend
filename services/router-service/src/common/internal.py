@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import hashlib
 import hmac
 import json
+import logging
 import time
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
@@ -15,11 +16,52 @@ from fastapi import Header, HTTPException, Request, status
 
 from common.observability import REQUEST_ID_HEADER, get_request_id, TRACE_ID_HEADER, get_trace_id
 
+_logger = logging.getLogger("router_service")
+
 INTERNAL_CALLER_HEADER = "X-Internal-Service"
 INTERNAL_TIMESTAMP_HEADER = "X-Internal-Timestamp"
 INTERNAL_SIGNATURE_HEADER = "X-Internal-Signature"
 INVALID_INTERNAL_SECRET_DETAIL = "Invalid internal secret"
 INVALID_INTERNAL_CALLER_DETAIL = "Invalid internal caller"
+
+
+class InternalHttpPool:
+    """Shared httpx connection pool for all internal service-to-service calls."""
+
+    _client: httpx.AsyncClient | None = None
+
+    @classmethod
+    async def init(
+        cls,
+        *,
+        max_connections: int = 100,
+        max_keepalive_connections: int = 20,
+        default_timeout: float = 10.0,
+    ) -> None:
+        if cls._client is not None:
+            return
+        cls._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(default_timeout),
+            limits=httpx.Limits(
+                max_connections=max_connections,
+                max_keepalive_connections=max_keepalive_connections,
+            ),
+        )
+        _logger.info(
+            "InternalHttpPool initialized (max_conn=%d, keepalive=%d)",
+            max_connections, max_keepalive_connections,
+        )
+
+    @classmethod
+    def get_client(cls) -> httpx.AsyncClient | None:
+        return cls._client
+
+    @classmethod
+    async def close(cls) -> None:
+        if cls._client is not None:
+            await cls._client.aclose()
+            cls._client = None
+            _logger.info("InternalHttpPool closed")
 
 
 class InternalServiceError(httpx.HTTPError):
@@ -346,10 +388,12 @@ async def request_internal_json(
 
     _check_circuit_open(key=breaker_key, target_service=target_service, path=path)
 
+    pooled_client = InternalHttpPool.get_client()
+
     for attempt in range(attempts):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.request(
+            if pooled_client is not None:
+                response = await pooled_client.request(
                     method,
                     url,
                     headers=build_internal_headers(
@@ -362,7 +406,24 @@ async def request_internal_json(
                     ),
                     json=json_body,
                     params=query_params,
+                    timeout=timeout,
                 )
+            else:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.request(
+                        method,
+                        url,
+                        headers=build_internal_headers(
+                            secret=secret,
+                            caller_service=caller_service,
+                            method=method,
+                            path=path,
+                            json_body=json_body,
+                            query_params=query_params,
+                        ),
+                        json=json_body,
+                        params=query_params,
+                    )
         except httpx.HTTPError as exc:
             if attempt == attempts - 1:
                 _record_failure(

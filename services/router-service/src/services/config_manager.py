@@ -5,15 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, TYPE_CHECKING
 
 from common.internal import InternalServiceResponseError
 from common.observability import log_event
-from gateways.admin_config import AdminConfigGateway
 from utils.runtime_config import (
     RuntimeConfigStore,
     normalize_runtime_config,
 )
+
+if TYPE_CHECKING:
+    from gateways.admin_config import AdminConfigGateway
 
 _logger = logging.getLogger("router_service")
 
@@ -25,14 +27,19 @@ class ConfigManager:
         self,
         settings: Any,
         runtime_config_path: str,
+        admin_gateway: "AdminConfigGateway | None" = None,
     ) -> None:
         self._settings = settings
+        self._admin_gateway = admin_gateway
         self._local_store = RuntimeConfigStore(runtime_config_path)
         self._cached_config: Dict[str, Any] | None = None
         self._config_version: int | None = None
         self._config_source: str = "local_fallback"
         self._last_updated_at: datetime | None = None
         self._refresh_task: asyncio.Task | None = None
+
+    def set_admin_gateway(self, gateway: "AdminConfigGateway") -> None:
+        self._admin_gateway = gateway
 
     @property
     def config_version(self) -> int | None:
@@ -48,16 +55,17 @@ class ConfigManager:
 
     async def start(self) -> None:
         admin_config = None
-        try:
-            admin_config = await AdminConfigGateway.fetch_active_config(self._settings)
-        except InternalServiceResponseError as exc:
-            if exc.status_code in (401, 403):
-                raise RuntimeError(
-                    f"admin-service rejected credentials (HTTP {exc.status_code}): {exc.detail}"
-                ) from exc
-            _logger.warning("admin-service returned error, trying local fallback", exc_info=True)
-        except Exception:
-            _logger.warning("failed to fetch config from admin-service", exc_info=True)
+        if self._admin_gateway is not None:
+            try:
+                admin_config = await self._admin_gateway.fetch_active_config()
+            except InternalServiceResponseError as exc:
+                if exc.status_code in (401, 403):
+                    raise RuntimeError(
+                        f"admin-service rejected credentials (HTTP {exc.status_code}): {exc.detail}"
+                    ) from exc
+                _logger.warning("admin-service returned error, trying local fallback", exc_info=True)
+            except Exception:
+                _logger.warning("failed to fetch config from admin-service", exc_info=True)
 
         if admin_config is not None:
             try:
@@ -72,7 +80,7 @@ class ConfigManager:
 
         if admin_config is None:
             try:
-                local = self._local_store.load()
+                local = await self._local_store.aload()
                 if not local.get("model_providers"):
                     raise RuntimeError(
                         "local runtime_config.json has no model_providers — "
@@ -107,8 +115,10 @@ class ConfigManager:
         interval = self._settings.CONFIG_REFRESH_INTERVAL_SECONDS
         while True:
             await asyncio.sleep(interval)
+            if self._admin_gateway is None:
+                continue
             try:
-                resp = await AdminConfigGateway.fetch_active_config(self._settings)
+                resp = await self._admin_gateway.fetch_active_config()
                 if resp is None:
                     if self._config_source == "admin":
                         self._config_source = "cached_previous"

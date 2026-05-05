@@ -3,36 +3,34 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.calllog_buffer import CallLogBuffer
 
 logger = logging.getLogger("router_service.calllog")
 
 
 class CallLogGateway:
 
-    @staticmethod
-    async def create_call_log(*, settings: Any, **fields: Any) -> dict | None:
-        from core.dependencies import get_calllog_buffer
+    def __init__(self, buffer: "CallLogBuffer | None") -> None:
+        self._buffer = buffer
 
-        buf = get_calllog_buffer()
-        if buf is None:
+    async def create_call_log(self, **fields: Any) -> dict | None:
+        if self._buffer is None:
             logger.warning("call-log buffer not initialized, dropping create for %s", fields.get("request_id"))
             return None
         request_id = fields.pop("request_id", None)
         if not request_id:
             return None
-        await buf.record(request_id, **fields)
+        await self._buffer.record(request_id, **fields)
         return {"request_id": request_id}
 
-    @staticmethod
     async def update_call_log(
-        *, settings: Any, request_id: str, **fields: Any
+        self, *, request_id: str, **fields: Any
     ) -> dict | None:
-        from core.dependencies import get_calllog_buffer
-
-        buf = get_calllog_buffer()
-        if buf is None:
+        if self._buffer is None:
             logger.warning("call-log buffer not initialized, dropping update for %s", request_id)
             return None
-        await buf.update(request_id, **fields)
+        await self._buffer.update(request_id, **fields)
         return {"request_id": request_id}

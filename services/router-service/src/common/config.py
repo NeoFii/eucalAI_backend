@@ -1,4 +1,4 @@
-"""Shared base settings for all services."""
+"""Base settings for router-service (slimmed — no DB, JWT, or password policy)."""
 
 from typing import List, Union
 
@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class BaseServiceSettings(BaseSettings):
-    """Common settings shared across services."""
+    """Common settings shared across services — router-specific slim version."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -41,30 +41,7 @@ class BaseServiceSettings(BaseSettings):
     INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS: float = 30.0
     TIMEZONE: str = "Asia/Shanghai"
 
-    DATABASE_URL: str = ""
-    DATABASE_POOL_SIZE: int = 10
-    DATABASE_MAX_OVERFLOW: int = 20
-    DATABASE_ECHO: bool = False
-
-    JWT_SECRET_KEY: str = ""
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    JWT_SECRET_KEY_MIN_LENGTH: int = 32
-
-    COOKIE_SECURE: bool = True
-    COOKIE_SAMESITE: str = "strict"
-
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
-
-    SNOWFLAKE_WORKER_ID: int = 1
-    SNOWFLAKE_DATACENTER_ID: int = 1
-
-    PASSWORD_MIN_LENGTH: int = 8
-    PASSWORD_REQUIRE_UPPERCASE: bool = True
-    PASSWORD_REQUIRE_LOWERCASE: bool = True
-    PASSWORD_REQUIRE_DIGIT: bool = True
-    PASSWORD_REQUIRE_SPECIAL: bool = True
 
     LOG_DIR: str = "logs"
     LOG_LEVEL: str = "INFO"
@@ -96,14 +73,6 @@ class BaseServiceSettings(BaseSettings):
     @model_validator(mode="after")
     def validate_required_fields(self) -> "BaseServiceSettings":
         """Validate required security-sensitive settings."""
-        if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY in {"your-secret-key", "change-me"}:
-            raise ValueError("JWT_SECRET_KEY must be explicitly configured")
-
-        if len(self.JWT_SECRET_KEY) < self.JWT_SECRET_KEY_MIN_LENGTH:
-            raise ValueError(
-                f"JWT_SECRET_KEY length must be at least {self.JWT_SECRET_KEY_MIN_LENGTH}"
-            )
-
         if not self.INTERNAL_SECRET:
             raise ValueError("INTERNAL_SECRET must be configured")
 

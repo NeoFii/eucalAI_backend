@@ -167,7 +167,7 @@ def _available_models(config: dict) -> set:
     return set(config.get("model_providers", {}).keys())
 
 
-async def _resolve_target(
+async def resolve_target(
     model: str,
     config: dict,
     *,
@@ -199,15 +199,8 @@ async def _resolve_target_with_affinity(
             for ch in channels:
                 if ch["channel_slug"] == cached_slug:
                     selector = get_channel_selector()
-                    import time
-                    now = time.monotonic()
                     slug = ch["channel_slug"]
-                    with selector._lock:
-                        is_available = (
-                            selector._disabled_until.get(slug, 0) < now
-                            and selector._failures.get(slug, 0) < now
-                        )
-                    if is_available:
+                    if selector.is_channel_available(slug):
                         from services.upstream import _validate_upstream_url
                         api_base = normalize_api_base(str(ch["api_base"]))
                         _validate_upstream_url(api_base)
@@ -227,7 +220,7 @@ async def _resolve_target_with_affinity(
                         }
                     break
 
-    target_info = await _resolve_target(model, config)
+    target_info = await resolve_target(model, config)
 
     if affinity_key and affinity_store is not None:
         channel_slug = target_info.get("channel_slug")

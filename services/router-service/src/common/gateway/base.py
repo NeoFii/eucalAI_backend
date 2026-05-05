@@ -1,10 +1,6 @@
-"""Minimal shared gateway base class."""
+"""Gateway base — intentionally empty.
 
-from __future__ import annotations
-
-
-class BaseGateway:
-    """Base gateway storing the remote service identity."""
-
-    def __init__(self, service_name: str) -> None:
-        self.service_name = service_name
+All gateways in router-service are standalone classes with injected
+dependencies (settings, buffers). No shared base class is needed; the
+real abstraction layer is `common.internal.request_internal_json`.
+"""

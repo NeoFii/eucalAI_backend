@@ -10,6 +10,7 @@ from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.config import RouterSettings
+    from gateways.calllog_batch import BatchCallLogGateway
 
 logger = logging.getLogger("router_service.calllog_buffer")
 
@@ -28,18 +29,23 @@ class CallLogBuffer:
     def __init__(
         self,
         *,
-        settings: RouterSettings,
+        settings: "RouterSettings",
         flush_interval: float = 5.0,
         max_buffer: int = 10000,
         max_retries: int = 3,
+        batch_gateway: "BatchCallLogGateway | None" = None,
     ) -> None:
         self._settings = settings
         self._flush_interval = flush_interval
         self._max_buffer = max_buffer
         self._max_retries = max_retries
+        self._batch_gateway = batch_gateway
         self._lock = asyncio.Lock()
         self._entries: dict[str, PendingLogEntry] = {}
         self._task: asyncio.Task | None = None
+
+    def set_batch_gateway(self, gateway: "BatchCallLogGateway") -> None:
+        self._batch_gateway = gateway
 
     async def record(self, request_id: str, **fields: Any) -> None:
         async with self._lock:
@@ -109,12 +115,11 @@ class CallLogBuffer:
                 **entry.fields,
             })
 
-        from gateways.calllog_batch import BatchCallLogGateway
+        if self._batch_gateway is None:
+            logger.warning("batch gateway not set, dropping %d entries", len(entries_list))
+            return
 
-        ok = await BatchCallLogGateway.flush_batch(
-            settings=self._settings,
-            entries=entries_list,
-        )
+        ok = await self._batch_gateway.flush_batch(entries=entries_list)
         if not ok:
             async with self._lock:
                 for entry in batch.values():

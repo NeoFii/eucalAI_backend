@@ -12,11 +12,15 @@ from fastapi import Depends, Header, HTTPException, Request
 from common.core.exceptions import ServiceUnavailableException
 from common.internal import InternalServiceError, InternalServiceResponseError
 from common.observability import set_uid
-from gateways.user_identity import UserIdentityGateway, ValidatedApiKey
+from gateways.user_identity import ValidatedApiKey
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
 
+    from gateways.admin_config import AdminConfigGateway
+    from gateways.calllog import CallLogGateway
+    from gateways.calllog_batch import BatchCallLogGateway
+    from gateways.user_identity import UserIdentityGateway
     from services.calllog_buffer import CallLogBuffer
     from services.channel_affinity import ChannelAffinityStore
     from services.channel_selector import ChannelSelector
@@ -34,6 +38,12 @@ _redis: Optional["aioredis.Redis"] = None
 _calllog_buffer: Optional["CallLogBuffer"] = None
 _rate_limiter: Optional["RateLimiter"] = None
 _affinity_store: Optional["ChannelAffinityStore"] = None
+
+# Gateway instances
+_user_identity_gateway: Optional["UserIdentityGateway"] = None
+_admin_config_gateway: Optional["AdminConfigGateway"] = None
+_calllog_gateway: Optional["CallLogGateway"] = None
+_batch_calllog_gateway: Optional["BatchCallLogGateway"] = None
 
 # API key cache: sha256(raw_key) -> ValidatedApiKey
 _API_KEY_CACHE_TTL = 60.0
@@ -55,6 +65,7 @@ def init_globals(
 ) -> None:
     global _inference_client, _config_manager, _settings, _channel_selector
     global _redis, _calllog_buffer, _rate_limiter, _affinity_store
+    global _user_identity_gateway, _admin_config_gateway, _calllog_gateway, _batch_calllog_gateway
 
     _settings = settings
     _inference_client = inference_client
@@ -64,6 +75,16 @@ def init_globals(
     _calllog_buffer = calllog_buffer
     _rate_limiter = rate_limiter
     _affinity_store = affinity_store
+
+    from gateways.admin_config import AdminConfigGateway
+    from gateways.calllog import CallLogGateway
+    from gateways.calllog_batch import BatchCallLogGateway
+    from gateways.user_identity import UserIdentityGateway
+
+    _user_identity_gateway = UserIdentityGateway(settings)
+    _admin_config_gateway = AdminConfigGateway(settings)
+    _calllog_gateway = CallLogGateway(calllog_buffer)
+    _batch_calllog_gateway = BatchCallLogGateway(settings)
 
 
 def get_config_manager() -> "ConfigManager":
@@ -104,6 +125,30 @@ def get_rate_limiter() -> "RateLimiter | None":
 
 def get_affinity_store() -> "ChannelAffinityStore | None":
     return _affinity_store
+
+
+def get_user_identity_gateway() -> "UserIdentityGateway":
+    if _user_identity_gateway is None:
+        raise RuntimeError("user identity gateway not initialized")
+    return _user_identity_gateway
+
+
+def get_admin_config_gateway() -> "AdminConfigGateway":
+    if _admin_config_gateway is None:
+        raise RuntimeError("admin config gateway not initialized")
+    return _admin_config_gateway
+
+
+def get_calllog_gateway() -> "CallLogGateway":
+    if _calllog_gateway is None:
+        raise RuntimeError("calllog gateway not initialized")
+    return _calllog_gateway
+
+
+def get_batch_calllog_gateway() -> "BatchCallLogGateway":
+    if _batch_calllog_gateway is None:
+        raise RuntimeError("batch calllog gateway not initialized")
+    return _batch_calllog_gateway
 
 
 def extract_client_ip(request: Request) -> str | None:
@@ -158,7 +203,7 @@ async def require_api_key(
         return cached
 
     try:
-        principal = await UserIdentityGateway.validate_api_key(
+        principal = await get_user_identity_gateway().validate_api_key(
             api_key=raw_key,
             model=await _extract_requested_model(request),
             client_ip=extract_client_ip(request),

@@ -1,14 +1,17 @@
-"""Gateway contracts for router-service cross-service calls."""
+"""Gateway for user-service API-key validation."""
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 
-from common.gateway.base import BaseGateway
 from common.internal import post_internal_json
+
+if TYPE_CHECKING:
+    from core.config import RouterSettings
 
 IDENTITY_TIMEOUT_SECONDS = 3.0
 logger = logging.getLogger("router_service")
@@ -25,27 +28,24 @@ class ValidatedApiKey:
     user_rpm_limit: int | None = None
 
 
-class UserIdentityGateway(BaseGateway):
+class UserIdentityGateway:
     """Gateway for user-service API-key validation."""
 
-    def __init__(self) -> None:
-        super().__init__(service_name="user-service")
+    def __init__(self, settings: "RouterSettings") -> None:
+        self._settings = settings
 
-    @staticmethod
     async def validate_api_key(
+        self,
         *,
         api_key: str,
         model: str | None = None,
         client_ip: str | None = None,
     ) -> ValidatedApiKey:
-        from core.dependencies import get_settings
-
-        settings = get_settings()
         payload = await post_internal_json(
-            base_url=settings.USER_SERVICE_URL,
+            base_url=self._settings.USER_SERVICE_URL,
             target_service="user-service",
             path="/api/v1/internal/api-keys/validate",
-            secret=settings.INTERNAL_SECRET,
+            secret=self._settings.INTERNAL_SECRET,
             caller_service="router-service",
             timeout=IDENTITY_TIMEOUT_SECONDS,
             json_body={
@@ -53,10 +53,10 @@ class UserIdentityGateway(BaseGateway):
                 "model": model,
                 "client_ip": client_ip,
             },
-            max_retries=settings.INTERNAL_HTTP_MAX_RETRIES,
-            retry_backoff_seconds=settings.INTERNAL_HTTP_RETRY_BACKOFF_SECONDS,
-            circuit_breaker_threshold=settings.INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD,
-            circuit_breaker_cooldown_seconds=settings.INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+            max_retries=self._settings.INTERNAL_HTTP_MAX_RETRIES,
+            retry_backoff_seconds=self._settings.INTERNAL_HTTP_RETRY_BACKOFF_SECONDS,
+            circuit_breaker_threshold=self._settings.INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD,
+            circuit_breaker_cooldown_seconds=self._settings.INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
         )
         try:
             return ValidatedApiKey(

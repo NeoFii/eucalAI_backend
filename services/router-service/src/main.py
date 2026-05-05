@@ -30,6 +30,8 @@ def create_app(
     runtime_config_path: str | None = None,
     log_dir: str | None = None,
 ) -> FastAPI:
+    from gateways.admin_config import AdminConfigGateway
+    from gateways.calllog_batch import BatchCallLogGateway
     from services.config_manager import ConfigManager
     from services.inference_client import InferenceClient
     from services.channel_selector import ChannelSelector
@@ -51,6 +53,9 @@ def create_app(
     )
     logger = get_app_logger()
 
+    admin_gateway = AdminConfigGateway(settings)
+    batch_calllog_gateway = BatchCallLogGateway(settings)
+
     inference_client = InferenceClient(
         base_url=settings.INFERENCE_SERVICE_URL,
         secret=settings.INFERENCE_SERVICE_SECRET,
@@ -63,6 +68,7 @@ def create_app(
     config_manager = ConfigManager(
         settings=settings,
         runtime_config_path=runtime_config_path,
+        admin_gateway=admin_gateway,
     )
 
     channel_selector = ChannelSelector(
@@ -80,8 +86,16 @@ def create_app(
     async def lifespan(app: FastAPI):
         import asyncio
 
+        from common.internal import InternalHttpPool
+
         nonlocal _health_refresh_task, _redis_conn, _calllog_buffer
         log_event(logger, logging.INFO, "serviceStarting", service="router-service")
+
+        await InternalHttpPool.init(
+            max_connections=100,
+            max_keepalive_connections=20,
+            default_timeout=10.0,
+        )
         await config_manager.start()
 
         if settings.ROUTER_REDIS_URL:
@@ -99,6 +113,7 @@ def create_app(
             flush_interval=settings.CALLLOG_FLUSH_INTERVAL,
             max_buffer=settings.CALLLOG_MAX_BUFFER,
             max_retries=settings.CALLLOG_MAX_RETRIES,
+            batch_gateway=batch_calllog_gateway,
         )
         await _calllog_buffer.start()
 
@@ -152,6 +167,7 @@ def create_app(
             await _calllog_buffer.stop()
         await config_manager.stop()
         await inference_client.close()
+        await InternalHttpPool.close()
         if _redis_conn is not None:
             await _redis_conn.aclose()
         log_event(logger, logging.INFO, "serviceStopping", service="router-service")

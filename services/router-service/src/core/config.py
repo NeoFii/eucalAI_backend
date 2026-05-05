@@ -5,8 +5,6 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Dict, List
 
-from pydantic import model_validator
-
 from common.config import BaseServiceSettings
 
 # ---------------------------------------------------------------------------
@@ -63,15 +61,6 @@ class RouterSettings(BaseServiceSettings):
     CHANNEL_AFFINITY_LRU_MAXSIZE: int = 10000
 
     ROUTER_RUNTIME_CONFIG: str = ""
-
-    # Override base class validator: router-service has no DB/JWT
-    @model_validator(mode="after")
-    def validate_required_fields(self) -> "RouterSettings":
-        if not self.INTERNAL_SECRET:
-            raise ValueError("INTERNAL_SECRET must be configured")
-        if len(self.INTERNAL_SECRET) < 32:
-            raise ValueError("INTERNAL_SECRET length must be at least 32")
-        return self
 
 
 @lru_cache

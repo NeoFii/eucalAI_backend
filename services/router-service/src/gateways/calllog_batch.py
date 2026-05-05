@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from common.internal import post_internal_json
+
+if TYPE_CHECKING:
+    from core.config import RouterSettings
 
 logger = logging.getLogger("router_service.calllog_batch")
 
@@ -14,16 +17,18 @@ _BATCH_TIMEOUT = 10.0
 
 class BatchCallLogGateway:
 
-    @staticmethod
-    async def flush_batch(*, settings: Any, entries: list[dict]) -> bool:
+    def __init__(self, settings: "RouterSettings") -> None:
+        self._settings = settings
+
+    async def flush_batch(self, entries: list[dict]) -> bool:
         if not entries:
             return True
         try:
             await post_internal_json(
-                base_url=settings.USER_SERVICE_URL,
+                base_url=self._settings.USER_SERVICE_URL,
                 target_service="user-service",
                 path="/api/v1/internal/call-logs/batch",
-                secret=settings.INTERNAL_SECRET,
+                secret=self._settings.INTERNAL_SECRET,
                 caller_service="router-service",
                 timeout=_BATCH_TIMEOUT,
                 json_body={"entries": entries},
