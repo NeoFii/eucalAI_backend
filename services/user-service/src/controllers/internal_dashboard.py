@@ -129,7 +129,7 @@ async def get_usage_trends(
 async def get_rpm_trend(
     start: datetime,
     end: datetime,
-    bucket_seconds: int = Query(60, ge=10, le=21600),
+    bucket_seconds: int = Query(60, ge=10, le=86400),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> RpmTrendResponse:
