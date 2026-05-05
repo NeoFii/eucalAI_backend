@@ -1,0 +1,84 @@
+{
+  "timestamp": "20260506_020036",
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "total_gpu_mb": 32109.0,
+  "baseline_allocated_mb": 14603.4,
+  "baseline_reserved_mb": 14638.0,
+  "model_load_time_seconds": 5.6,
+  "levels": [
+    {
+      "input_length": 4096,
+      "concurrency": 32,
+      "peak_allocated_mb": 15963.3,
+      "delta_mb": 1359.9,
+      "p50_ms": 3737.67,
+      "p95_ms": 3789.9,
+      "p99_ms": 3789.9,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 64,
+      "peak_allocated_mb": 15914.8,
+      "delta_mb": 1311.4,
+      "p50_ms": 4090.54,
+      "p95_ms": 4143.52,
+      "p99_ms": 4143.52,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 128,
+      "peak_allocated_mb": 15961.3,
+      "delta_mb": 1357.9,
+      "p50_ms": 4149.09,
+      "p95_ms": 4210.8,
+      "p99_ms": 4210.8,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 256,
+      "peak_allocated_mb": 15958.6,
+      "delta_mb": 1355.2,
+      "p50_ms": 3685.45,
+      "p95_ms": 3758.52,
+      "p99_ms": 3758.52,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 512,
+      "peak_allocated_mb": 15940.6,
+      "delta_mb": 1337.2,
+      "p50_ms": 3683.59,
+      "p95_ms": 3749.0,
+      "p99_ms": 3749.0,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 1024,
+      "peak_allocated_mb": 16042.0,
+      "delta_mb": 1438.6,
+      "p50_ms": 3761.28,
+      "p95_ms": 3844.41,
+      "p99_ms": 3844.41,
+      "success_count": 20,
+      "oom_count": 0
+    }
+  ],
+  "recommendations": {
+    "max_safe_concurrency_by_input_length": {
+      "4096": 1024
+    },
+    "utilization_at_max_safe": {
+      "4096": 50.0
+    }
+  }
+}

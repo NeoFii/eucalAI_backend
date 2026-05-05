@@ -1,0 +1,220 @@
+{
+  "timestamp": "20260506_015640",
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "total_gpu_mb": 32109.0,
+  "baseline_allocated_mb": 14603.4,
+  "baseline_reserved_mb": 14638.0,
+  "model_load_time_seconds": 5.4,
+  "levels": [
+    {
+      "input_length": 256,
+      "concurrency": 1,
+      "peak_allocated_mb": 14670.8,
+      "delta_mb": 67.4,
+      "p50_ms": 65.33,
+      "p95_ms": 73.43,
+      "p99_ms": 73.43,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 256,
+      "concurrency": 2,
+      "peak_allocated_mb": 14727.0,
+      "delta_mb": 123.6,
+      "p50_ms": 142.43,
+      "p95_ms": 185.51,
+      "p99_ms": 185.51,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 256,
+      "concurrency": 4,
+      "peak_allocated_mb": 14797.4,
+      "delta_mb": 194.0,
+      "p50_ms": 524.53,
+      "p95_ms": 542.98,
+      "p99_ms": 542.98,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 256,
+      "concurrency": 8,
+      "peak_allocated_mb": 14920.8,
+      "delta_mb": 317.4,
+      "p50_ms": 1239.36,
+      "p95_ms": 1294.55,
+      "p99_ms": 1294.55,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 256,
+      "concurrency": 16,
+      "peak_allocated_mb": 15200.6,
+      "delta_mb": 597.2,
+      "p50_ms": 2660.81,
+      "p95_ms": 2709.73,
+      "p99_ms": 2709.73,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 256,
+      "concurrency": 32,
+      "peak_allocated_mb": 15334.8,
+      "delta_mb": 731.4,
+      "p50_ms": 3557.32,
+      "p95_ms": 3615.0,
+      "p99_ms": 3615.0,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 1024,
+      "concurrency": 1,
+      "peak_allocated_mb": 14884.2,
+      "delta_mb": 280.8,
+      "p50_ms": 102.89,
+      "p95_ms": 111.23,
+      "p99_ms": 111.23,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 1024,
+      "concurrency": 2,
+      "peak_allocated_mb": 14989.9,
+      "delta_mb": 386.5,
+      "p50_ms": 215.34,
+      "p95_ms": 297.83,
+      "p99_ms": 297.83,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 1024,
+      "concurrency": 4,
+      "peak_allocated_mb": 15113.5,
+      "delta_mb": 510.1,
+      "p50_ms": 572.54,
+      "p95_ms": 679.78,
+      "p99_ms": 679.78,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 1024,
+      "concurrency": 8,
+      "peak_allocated_mb": 15311.2,
+      "delta_mb": 707.8,
+      "p50_ms": 1379.43,
+      "p95_ms": 1580.38,
+      "p99_ms": 1580.38,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 1024,
+      "concurrency": 16,
+      "peak_allocated_mb": 15732.5,
+      "delta_mb": 1129.1,
+      "p50_ms": 3208.18,
+      "p95_ms": 3255.87,
+      "p99_ms": 3255.87,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 1024,
+      "concurrency": 32,
+      "peak_allocated_mb": 15966.9,
+      "delta_mb": 1363.5,
+      "p50_ms": 3760.32,
+      "p95_ms": 3813.86,
+      "p99_ms": 3813.86,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 1,
+      "peak_allocated_mb": 14884.2,
+      "delta_mb": 280.8,
+      "p50_ms": 104.04,
+      "p95_ms": 111.42,
+      "p99_ms": 111.42,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 2,
+      "peak_allocated_mb": 14971.7,
+      "delta_mb": 368.3,
+      "p50_ms": 223.09,
+      "p95_ms": 299.97,
+      "p99_ms": 299.97,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 4,
+      "peak_allocated_mb": 15075.8,
+      "delta_mb": 472.4,
+      "p50_ms": 611.55,
+      "p95_ms": 649.75,
+      "p99_ms": 649.75,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 8,
+      "peak_allocated_mb": 15347.8,
+      "delta_mb": 744.4,
+      "p50_ms": 1358.63,
+      "p95_ms": 1425.96,
+      "p99_ms": 1425.96,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 16,
+      "peak_allocated_mb": 15724.1,
+      "delta_mb": 1120.7,
+      "p50_ms": 2934.08,
+      "p95_ms": 3019.18,
+      "p99_ms": 3019.18,
+      "success_count": 20,
+      "oom_count": 0
+    },
+    {
+      "input_length": 4096,
+      "concurrency": 32,
+      "peak_allocated_mb": 15973.9,
+      "delta_mb": 1370.5,
+      "p50_ms": 3763.87,
+      "p95_ms": 3836.27,
+      "p99_ms": 3836.27,
+      "success_count": 20,
+      "oom_count": 0
+    }
+  ],
+  "recommendations": {
+    "max_safe_concurrency_by_input_length": {
+      "256": 32,
+      "1024": 32,
+      "4096": 32
+    },
+    "utilization_at_max_safe": {
+      "256": 47.8,
+      "1024": 49.7,
+      "4096": 49.7
+    }
+  }
+}

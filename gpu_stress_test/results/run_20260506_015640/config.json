@@ -1,0 +1,21 @@
+{
+  "concurrency_levels": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ],
+  "input_lengths": [
+    256,
+    1024,
+    4096
+  ],
+  "requests_per_level": 20,
+  "warmup_requests": 3,
+  "cooldown_seconds": 5.0,
+  "stop_on_oom": true,
+  "model_paths_config": "services/inference-service/config/model_paths.json",
+  "output_dir": "gpu_stress_test/results"
+}

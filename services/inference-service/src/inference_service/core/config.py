@@ -143,7 +143,7 @@ class InferenceSettings(BaseServiceSettings):
     CONFIG_REFRESH_INTERVAL_SECONDS: int = 60
     CONFIG_FETCH_TIMEOUT_SECONDS: float = 5.0
 
-    GPU_CONCURRENCY_LIMIT: int = 2
+    GPU_CONCURRENCY_LIMIT: int = 8
 
     # Override base class validator: inference-service has no DB/JWT/Redis
     @model_validator(mode="after")
