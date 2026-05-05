@@ -295,12 +295,7 @@ async def chat_completions(
             raise HTTPException(status_code=502, detail="upstream service error") from exc
     upstream_latency_ms = (time.monotonic() - t_upstream) * 1000
 
-    headers = {
-        "X-Router-Selected-Model": selected_model,
-        "X-Router-Provider": target_info["provider_slug"],
-        "X-Router-Config-Version": str(config_version) if config_version is not None else "local",
-        "X-Router-Config-Source": config_source,
-    }
+    headers = {}
     if is_stream:
         async def _stream_sse():
             collected_content = ""
@@ -319,12 +314,16 @@ async def chat_completions(
                     for c in choices:
                         delta = c.get("delta") or {}
                         delta.pop("reasoning_content", None)
-                        psf = delta.get("provider_specific_fields")
-                        if isinstance(psf, dict):
-                            psf.pop("reasoning_content", None)
+                        delta.pop("provider_specific_fields", None)
+                        c.pop("provider_specific_fields", None)
                         dc = delta.get("content")
                         if isinstance(dc, str):
                             collected_content += dc
+                    chunk_dict.pop("provider", None)
+                    cu = chunk_dict.get("usage")
+                    if isinstance(cu, dict):
+                        cu.pop("cost_details", None)
+                        cu.pop("is_byok", None)
                     yield f"data: {json.dumps(chunk_dict, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
                 stream_ok = True
@@ -497,6 +496,20 @@ async def chat_completions(
             content = message.get("content")
             if isinstance(content, str) and "<think>" in content:
                 message["content"] = strip_think_tags(content)
+
+    response_payload.pop("provider", None)
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        choice.pop("provider_specific_fields", None)
+        message = choice.get("message")
+        if isinstance(message, dict):
+            message.pop("reasoning_content", None)
+            message.pop("provider_specific_fields", None)
+    resp_usage = response_payload.get("usage")
+    if isinstance(resp_usage, dict):
+        resp_usage.pop("cost_details", None)
+        resp_usage.pop("is_byok", None)
 
     resp_preview = ""
     try:
