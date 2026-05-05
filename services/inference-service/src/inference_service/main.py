@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict
@@ -49,16 +48,20 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        from inference_service.services.classify_service import ClassifyService
+        from common.internal import close_internal_clients
+        from inference_service.gateways.admin_config import AdminConfigGateway
+        from inference_service.services.classify_service import init_gpu_semaphore
         from inference_service.services.config_manager import ConfigManager
         from inference_service.services.router_engine import HybridIntegratedDifficultyRouter
 
         log_event(logger, logging.INFO, "serviceStarting", service=settings.SERVICE_NAME)
         model_paths = load_model_paths(model_paths_config)
 
+        gateway = AdminConfigGateway()
         config_mgr = ConfigManager(
-            settings=settings,
+            gateway=gateway,
             runtime_config_path=runtime_config_path,
+            refresh_interval_seconds=settings.CONFIG_REFRESH_INTERVAL_SECONDS,
         )
         await config_mgr.start()
         set_config_manager(config_mgr)
@@ -69,11 +72,13 @@ def create_app() -> FastAPI:
         )
         set_engine(engine)
 
-        ClassifyService.init_semaphore(settings.GPU_CONCURRENCY_LIMIT)
+        init_gpu_semaphore(settings.GPU_CONCURRENCY_LIMIT)
 
         log_event(logger, logging.INFO, "serviceReady", service=settings.SERVICE_NAME)
         yield
         await config_mgr.stop()
+        engine.cleanup()
+        await close_internal_clients()
         log_event(logger, logging.INFO, "serviceStopping", service=settings.SERVICE_NAME)
 
     from common.internal import build_internal_auth_dependency

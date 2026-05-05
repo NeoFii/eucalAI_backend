@@ -1,4 +1,4 @@
-"""ConfigManager: 3-tier config source (admin → cached_previous → local_fallback)."""
+"""ConfigManager: 3-tier config source (admin -> cached_previous -> local_fallback)."""
 
 from __future__ import annotations
 
@@ -22,11 +22,14 @@ class ConfigManager:
 
     def __init__(
         self,
-        settings: Any,
+        *,
+        gateway: AdminConfigGateway,
         runtime_config_path: str,
+        refresh_interval_seconds: int = 60,
     ) -> None:
-        self._settings = settings
+        self._gateway = gateway
         self._runtime_config_path = runtime_config_path
+        self._refresh_interval = refresh_interval_seconds
         self._cached_config: Dict[str, Any] | None = None
         self._config_version: int | None = None
         self._config_source: str = "local_fallback"
@@ -58,7 +61,7 @@ class ConfigManager:
     async def start(self) -> None:
         admin_config = None
         try:
-            admin_config = await AdminConfigGateway.fetch_active_config(self._settings)
+            admin_config = await self._gateway.fetch_active_config()
         except InternalServiceResponseError as exc:
             if exc.status_code in (401, 403):
                 raise RuntimeError(
@@ -70,14 +73,19 @@ class ConfigManager:
 
         if admin_config is not None:
             try:
-                padded = {**admin_config, "model_providers": {}, "router_alias": admin_config.get("router_alias", "auto")}
-                self._cached_config = normalize_inference_config(padded)
+                self._cached_config = normalize_inference_config(admin_config)
                 self._config_version = admin_config.get("version")
                 self._config_source = "admin"
                 self._last_updated_at = datetime.now(timezone.utc)
-                log_event(_logger, logging.INFO, "configLoadedFromAdmin", version=self._config_version)
+                log_event(
+                    _logger, logging.INFO, "configLoadedFromAdmin",
+                    version=self._config_version,
+                )
             except Exception:
-                _logger.warning("admin config normalization failed, trying local fallback", exc_info=True)
+                _logger.warning(
+                    "admin config normalization failed, trying local fallback",
+                    exc_info=True,
+                )
                 admin_config = None
 
         if admin_config is None:
@@ -107,21 +115,23 @@ class ConfigManager:
         return self._cached_config
 
     async def _poll_loop(self) -> None:
-        interval = self._settings.CONFIG_REFRESH_INTERVAL_SECONDS
         while True:
-            await asyncio.sleep(interval)
+            await asyncio.sleep(self._refresh_interval)
             try:
-                resp = await AdminConfigGateway.fetch_active_config(self._settings)
+                resp = await self._gateway.fetch_active_config()
                 if resp is None:
                     if self._config_source == "admin":
                         self._config_source = "cached_previous"
                         _logger.warning("admin config unavailable, using cached_previous")
                     continue
-                padded = {**resp, "model_providers": {}, "router_alias": resp.get("router_alias", "auto")}
-                new_config = normalize_inference_config(padded)
+                new_config = normalize_inference_config(resp)
                 new_version = resp.get("version")
                 if new_version != self._config_version:
-                    log_event(_logger, logging.INFO, "configUpdated", oldVersion=self._config_version, newVersion=new_version)
+                    log_event(
+                        _logger, logging.INFO, "configUpdated",
+                        oldVersion=self._config_version,
+                        newVersion=new_version,
+                    )
                 self._cached_config = new_config
                 self._config_version = new_version
                 self._config_source = "admin"
@@ -130,9 +140,16 @@ class ConfigManager:
                 raise
             except InternalServiceResponseError as exc:
                 if exc.status_code in (401, 403):
-                    _logger.error("admin credentials rejected (HTTP %s), using cached config", exc.status_code)
+                    _logger.error(
+                        "admin credentials rejected (HTTP %s), using cached config",
+                        exc.status_code,
+                    )
                 else:
-                    _logger.warning("config refresh failed (HTTP %s), keeping current config", exc.status_code, exc_info=True)
+                    _logger.warning(
+                        "config refresh failed (HTTP %s), keeping current config",
+                        exc.status_code,
+                        exc_info=True,
+                    )
                 if self._config_source == "admin":
                     self._config_source = "cached_previous"
             except Exception:

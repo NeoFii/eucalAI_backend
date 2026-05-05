@@ -161,6 +161,7 @@ class HybridIntegratedDifficultyRouter:
 
         logger.info("loading Qwen backbone: %s", model_paths.qwen_backbone)
         tokenizer_dir = _ensure_special_tokens_map(model_paths.qwen_backbone)
+        self._overlay_dir = tokenizer_dir if tokenizer_dir != model_paths.qwen_backbone else None
         self.tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_dir,
             use_fast=False,
@@ -387,83 +388,86 @@ class HybridIntegratedDifficultyRouter:
 
         fallback_routes: List[str] = []
 
-        try:
-            # Build inputs
-            shared_tool = shared_record_from_chat_messages(messages, request_id=request_id)
-            other_full_chat, other_full_debug_text = build_full_llm_input_for_chat_messages(messages)
+        # Build inputs
+        shared_tool = shared_record_from_chat_messages(messages, request_id=request_id)
+        other_full_chat, other_full_debug_text = build_full_llm_input_for_chat_messages(messages)
 
-            tool_canonical_text = shared_tool["canonical_text"]
+        tool_canonical_text = shared_tool["canonical_text"]
 
-            # Get all heads needed
-            swe_scaler, swe_router, swe_heads = self._routers["swe"]
-            tool_scaler, tool_router, tool_heads = self._routers["tool"]
-            gaia_scaler, gaia_router, gaia_heads = self._routers["gaia"]
-            task_scaler, task_router, task_heads = self._routers["task"]
-            prog_scaler, prog_router, prog_heads = self._routers["prog"]
+        # Get all heads needed
+        swe_scaler, swe_router, swe_heads = self._routers["swe"]
+        tool_scaler, tool_router, tool_heads = self._routers["tool"]
+        gaia_scaler, gaia_router, gaia_heads = self._routers["gaia"]
+        task_scaler, task_router, task_heads = self._routers["task"]
+        prog_scaler, prog_router, prog_heads = self._routers["prog"]
 
-            # Forward pass
-            tool_cache = self._run_with_heads(tool_canonical_text, [tool_heads])
-            cache_other = self._run_with_heads(other_full_chat, [swe_heads, gaia_heads, task_heads, prog_heads])
+        # Forward pass
+        tool_cache = self._run_with_heads(tool_canonical_text, [tool_heads])
+        cache_other = self._run_with_heads(other_full_chat, [swe_heads, gaia_heads, task_heads, prog_heads])
 
-            raw_swe = self._forward_cgtabm(cache_other, swe_scaler, swe_router, swe_heads)
-            raw_tool = self._forward_cgtabm(tool_cache, tool_scaler, tool_router, tool_heads)
-            raw_gaia = self._forward_cgtabm(cache_other, gaia_scaler, gaia_router, gaia_heads)
-            raw_task = self._forward_cgtabm(cache_other, task_scaler, task_router, task_heads)
-            raw_prog = self._forward_cgtabm(cache_other, prog_scaler, prog_router, prog_heads)
+        raw_swe = self._forward_cgtabm(cache_other, swe_scaler, swe_router, swe_heads)
+        raw_tool = self._forward_cgtabm(tool_cache, tool_scaler, tool_router, tool_heads)
+        raw_gaia = self._forward_cgtabm(cache_other, gaia_scaler, gaia_router, gaia_heads)
+        raw_task = self._forward_cgtabm(cache_other, task_scaler, task_router, task_heads)
+        raw_prog = self._forward_cgtabm(cache_other, prog_scaler, prog_router, prog_heads)
 
-            raw_scores = {
-                ROUTE_ERROR: raw_swe, ROUTE_TOOL: raw_tool,
-                ROUTE_GENERAL: raw_gaia, ROUTE_TASK: raw_task, ROUTE_CODE: raw_prog,
-            }
-            for route_name, raw_val in raw_scores.items():
-                if not math.isfinite(raw_val):
-                    fallback_routes.append(route_name)
+        raw_scores = {
+            ROUTE_ERROR: raw_swe, ROUTE_TOOL: raw_tool,
+            ROUTE_GENERAL: raw_gaia, ROUTE_TASK: raw_task, ROUTE_CODE: raw_prog,
+        }
+        for route_name, raw_val in raw_scores.items():
+            if not math.isfinite(raw_val):
+                fallback_routes.append(route_name)
 
-            swe_0_2, _ = normalize_route(ROUTE_ERROR, raw_swe)
-            tool_0_2, _ = normalize_route(ROUTE_TOOL, raw_tool)
-            gaia_0_2, _ = normalize_route(ROUTE_GENERAL, raw_gaia)
-            task_0_2, _ = normalize_route(ROUTE_TASK, raw_task)
-            prog_0_2, _ = normalize_route(ROUTE_CODE, raw_prog)
+        swe_0_2, _ = normalize_route(ROUTE_ERROR, raw_swe)
+        tool_0_2, _ = normalize_route(ROUTE_TOOL, raw_tool)
+        gaia_0_2, _ = normalize_route(ROUTE_GENERAL, raw_gaia)
+        task_0_2, _ = normalize_route(ROUTE_TASK, raw_task)
+        prog_0_2, _ = normalize_route(ROUTE_CODE, raw_prog)
 
-            fiveway_scores_0_2 = {
-                ROUTE_ERROR: swe_0_2,
-                ROUTE_TOOL: tool_0_2,
-                ROUTE_GENERAL: gaia_0_2,
-                ROUTE_TASK: task_0_2,
-                ROUTE_CODE: prog_0_2,
-            }
-            config_total_score_0_10, weighted_components = compute_weighted_total_score_0_10(
-                fiveway_scores_0_2, weights,
-            )
+        fiveway_scores_0_2 = {
+            ROUTE_ERROR: swe_0_2,
+            ROUTE_TOOL: tool_0_2,
+            ROUTE_GENERAL: gaia_0_2,
+            ROUTE_TASK: task_0_2,
+            ROUTE_CODE: prog_0_2,
+        }
+        config_total_score_0_10, weighted_components = compute_weighted_total_score_0_10(
+            fiveway_scores_0_2, weights,
+        )
 
-            # Proto weighting
-            d_vec_0_2 = np.array([swe_0_2, tool_0_2, gaia_0_2, task_0_2, prog_0_2], dtype=np.float32)
-            proto_info = self._compute_proto_weighting(messages, d_vec_0_2)
+        # Proto weighting
+        d_vec_0_2 = np.array([swe_0_2, tool_0_2, gaia_0_2, task_0_2, prog_0_2], dtype=np.float32)
+        proto_info = self._compute_proto_weighting(messages, d_vec_0_2)
 
-            if proto_info and proto_info.get("weighted_score_0_2") is not None:
-                final_score_raw = float(proto_info["weighted_score_0_2"])
-                total_score_0_10 = scale_final_score_to_0_10(final_score_raw)
-                final_score_source = FINAL_SCORE_SOURCE
-            else:
-                final_score_raw = config_total_score_0_10 / 5.0
-                total_score_0_10 = config_total_score_0_10
-                final_score_source = "runtime_weighted_0_10_fallback"
+        if proto_info and proto_info.get("weighted_score_0_2") is not None:
+            final_score_raw = float(proto_info["weighted_score_0_2"])
+            total_score_0_10 = scale_final_score_to_0_10(final_score_raw)
+            final_score_source = FINAL_SCORE_SOURCE
+        else:
+            final_score_raw = config_total_score_0_10 / 5.0
+            total_score_0_10 = config_total_score_0_10
+            final_score_source = "runtime_weighted_0_10_fallback"
 
-            routing_tier = resolve_score_band(total_score_0_10, score_bands)
-            selected_model = tier_model_map[routing_tier]
+        routing_tier = resolve_score_band(total_score_0_10, score_bands)
+        selected_model = tier_model_map[routing_tier]
 
-            return {
-                "request_id": request_id,
-                "scores_0_2": {k: round(v, 4) for k, v in fiveway_scores_0_2.items()},
-                "proto_weighted_0_2": round(proto_info["weighted_score_0_2"], 4) if proto_info else None,
-                "total_score_0_10": round(total_score_0_10, 4),
-                "score_source": final_score_source,
-                "routing_tier": routing_tier,
-                "selected_model": selected_model,
-                "tier_model_map": tier_model_map,
-                "score_bands_raw": score_bands_raw,
-                "fallback_routes": fallback_routes,
-            }
-        finally:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        return {
+            "request_id": request_id,
+            "scores_0_2": {k: round(v, 4) for k, v in fiveway_scores_0_2.items()},
+            "proto_weighted_0_2": round(proto_info["weighted_score_0_2"], 4) if proto_info else None,
+            "total_score_0_10": round(total_score_0_10, 4),
+            "score_source": final_score_source,
+            "routing_tier": routing_tier,
+            "selected_model": selected_model,
+            "tier_model_map": tier_model_map,
+            "score_bands_raw": score_bands_raw,
+            "fallback_routes": fallback_routes,
+        }
+
+    def cleanup(self) -> None:
+        """Remove temporary overlay directory created during init."""
+        import shutil
+        if self._overlay_dir and os.path.isdir(self._overlay_dir):
+            shutil.rmtree(self._overlay_dir, ignore_errors=True)
+            self._overlay_dir = None

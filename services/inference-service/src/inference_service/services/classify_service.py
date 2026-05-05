@@ -19,13 +19,15 @@ logger = logging.getLogger("inference_service")
 
 CLASSIFY_SOFT_TIMEOUT_SECONDS = 30.0
 
+_gpu_semaphore: asyncio.Semaphore | None = None
+
+
+def init_gpu_semaphore(limit: int) -> None:
+    global _gpu_semaphore
+    _gpu_semaphore = asyncio.Semaphore(limit)
+
 
 class ClassifyService:
-    _gpu_semaphore: asyncio.Semaphore | None = None
-
-    @classmethod
-    def init_semaphore(cls, limit: int) -> None:
-        cls._gpu_semaphore = asyncio.Semaphore(limit)
 
     @staticmethod
     async def classify(
@@ -40,11 +42,10 @@ class ClassifyService:
         request_id = get_request_id() or request.request_id or ""
         messages_count = len(request.messages)
 
-        sem = ClassifyService._gpu_semaphore
         queued_ms = 0.0
-        if sem is not None:
+        if _gpu_semaphore is not None:
             t_queue = time.monotonic()
-            await sem.acquire()
+            await _gpu_semaphore.acquire()
             queued_ms = round((time.monotonic() - t_queue) * 1000, 2)
         try:
             t_start = time.monotonic()
@@ -71,8 +72,8 @@ class ClassifyService:
                 raise
             elapsed = time.monotonic() - t_start
         finally:
-            if sem is not None:
-                sem.release()
+            if _gpu_semaphore is not None:
+                _gpu_semaphore.release()
 
         latency_ms = round(elapsed * 1000, 2)
         soft_timeout = elapsed > CLASSIFY_SOFT_TIMEOUT_SECONDS

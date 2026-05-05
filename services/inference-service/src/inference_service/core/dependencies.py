@@ -6,13 +6,12 @@ import hmac
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, Header
+from fastapi import Header
 
 from inference_service.core.config import get_settings
 from inference_service.core.exceptions import InferenceAuthError, InferenceUnavailableError
 
 if TYPE_CHECKING:
-    from inference_service.core.config import InferenceSettings
     from inference_service.services.config_manager import ConfigManager
     from inference_service.services.router_engine import HybridIntegratedDifficultyRouter
 
@@ -50,11 +49,15 @@ def require_inference_secret(
     settings = get_settings()
     expected = settings.INFERENCE_SERVICE_SECRET
     if not expected:
-        if settings.INFERENCE_ALLOW_INSECURE_DEV:
+        if settings.INFERENCE_ALLOW_INSECURE_DEV and settings.ENV != "production":
             logger.warning(
                 "INFERENCE_SERVICE_SECRET not set — classify endpoint UNPROTECTED (dev mode)"
             )
             return ""
+        if settings.INFERENCE_ALLOW_INSECURE_DEV and settings.ENV == "production":
+            logger.error(
+                "INFERENCE_ALLOW_INSECURE_DEV is set in production — refusing to bypass auth"
+            )
         raise InferenceUnavailableError("inference service not configured")
     if not x_inference_secret or not hmac.compare_digest(
         x_inference_secret.encode("utf-8"), expected.encode("utf-8")
