@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Generic, Iterable, TypeVar
+from typing import Any, Generic, Iterable, Sequence, TypeVar
 
 from sqlalchemy import asc, desc, func, select
 
@@ -40,10 +40,15 @@ class BaseRepository(Generic[ModelT]):
         params: ListParams,
         *,
         extra_filters: Iterable | None = None,
+        options: Sequence[Any] | None = None,
     ) -> PaginatedResult[ModelT]:
         statement = self._base_query()
         if extra_filters:
             statement = statement.where(*tuple(extra_filters))
+
+        if options:
+            for opt in options:
+                statement = statement.options(opt)
 
         if params.time_field is not None:
             start, end = params.validate_time_range()
@@ -66,7 +71,7 @@ class BaseRepository(Generic[ModelT]):
         offset = (params.page - 1) * params.page_size
         rows = await self.session.execute(statement.offset(offset).limit(params.page_size))
         return PaginatedResult(
-            items=list(rows.scalars().all()),
+            items=list(rows.scalars().unique().all()),
             total=total,
             page=params.page,
             page_size=params.page_size,

@@ -22,7 +22,7 @@ from common.core.exceptions import (
 from common.observability import log_event
 from common.token_blacklist import blacklist_token, is_token_blacklisted
 from common.utils.jwt import create_access_token, create_refresh_token, decode_token, get_token_jti
-from common.utils.password import hash_password, verify_password
+from common.utils.password import hash_password, hash_password_async, verify_password_async
 from common.utils.timezone import now
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class AdminAuthService:
         admin = await user_repo.get_by_email(email)
 
         if not admin:
-            verify_password("dummy", _DUMMY_HASH)
+            await verify_password_async("dummy", _DUMMY_HASH)
             raise InvalidCredentialsException()
 
         was_locked = bool(admin.login_locked_until and admin.login_locked_until > now())
@@ -71,7 +71,7 @@ class AdminAuthService:
                 detail=f"Too many failed login attempts. Try again in {remaining_minutes} minutes."
             )
 
-        if not verify_password(password, admin.password_hash):
+        if not await verify_password_async(password, admin.password_hash):
             admin.login_fail_count = (admin.login_fail_count or 0) + 1
             await AdminAuditService.record(
                 db,
@@ -222,7 +222,7 @@ class AdminAuthService:
         refresh_token_str: str | None = None,
     ) -> None:
         """Change the admin password."""
-        if not verify_password(old_password, admin.password_hash):
+        if not await verify_password_async(old_password, admin.password_hash):
             raise InvalidCredentialsException(detail="Old password is incorrect")
 
         from utils.password import check_password_strength
@@ -231,7 +231,7 @@ class AdminAuthService:
         if not ok:
             raise WeakPasswordException(detail=message)
 
-        admin.password_hash = hash_password(new_password)
+        admin.password_hash = await hash_password_async(new_password)
         admin.password_changed_at = now()
         await AdminAuditService.record(
             db,

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.routing_config import ProviderCredential, RoutingConfig
+from common.db.query import ListParams
 from common.db.repository import BaseRepository
 
 _logger = logging.getLogger(__name__)
@@ -55,17 +56,10 @@ class RoutingConfigRepository(BaseRepository[RoutingConfig]):
     async def list_versions(
         self, *, page: int = 1, page_size: int = 20
     ) -> tuple[list[RoutingConfig], int]:
-        total = int(
-            (await self.session.execute(select(func.count(RoutingConfig.id)))).scalar() or 0
+        result = await self.get_list(
+            ListParams(page=page, page_size=page_size, order_by="version", order_dir="desc"),
         )
-        offset = (page - 1) * page_size
-        rows = await self.session.execute(
-            select(RoutingConfig)
-            .order_by(RoutingConfig.version.desc())
-            .offset(offset)
-            .limit(page_size)
-        )
-        return list(rows.scalars().all()), total
+        return list(result.items), result.total
 
     async def publish(self, config: RoutingConfig, published_by: int) -> None:
         await self.session.execute(
@@ -105,17 +99,10 @@ class ProviderCredentialRepository(BaseRepository[ProviderCredential]):
     async def list_all(
         self, *, page: int = 1, page_size: int = 50
     ) -> tuple[list[ProviderCredential], int]:
-        total = int(
-            (await self.session.execute(select(func.count(ProviderCredential.id)))).scalar() or 0
+        result = await self.get_list(
+            ListParams(page=page, page_size=page_size, order_by="created_at", order_dir="desc"),
         )
-        offset = (page - 1) * page_size
-        rows = await self.session.execute(
-            select(ProviderCredential)
-            .order_by(ProviderCredential.created_at.desc())
-            .offset(offset)
-            .limit(page_size)
-        )
-        return list(rows.scalars().all()), total
+        return list(result.items), result.total
 
     async def get_active_by_slugs(self, slugs: Sequence[str]) -> dict[str, ProviderCredential]:
         if not slugs:

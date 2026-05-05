@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.pool import Pool, PoolAccount, PoolModel
+from common.db.query import ListParams
 from common.db.repository import BaseRepository
 
 
@@ -28,18 +29,11 @@ class PoolRepository(BaseRepository[Pool]):
     async def list_pools(
         self, *, page: int = 1, page_size: int = 50,
     ) -> tuple[list[Pool], int]:
-        count_stmt = select(func.count(Pool.id))
-        total = int((await self.session.execute(count_stmt)).scalar() or 0)
-
-        stmt = (
-            select(Pool)
-            .options(selectinload(Pool.models), selectinload(Pool.accounts))
-            .order_by(Pool.priority.desc(), Pool.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+        result = await self.get_list(
+            ListParams(page=page, page_size=page_size, order_by="priority", order_dir="desc"),
+            options=[selectinload(Pool.models), selectinload(Pool.accounts)],
         )
-        rows = await self.session.execute(stmt)
-        return list(rows.scalars().unique().all()), total
+        return list(result.items), result.total
 
     async def get_active_for_routing(
         self, model_slugs: Sequence[str],

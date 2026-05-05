@@ -95,6 +95,40 @@ class AdminAuditService:
         return audit_log
 
     @staticmethod
+    async def record_auto(
+        db: AsyncSession,
+        *,
+        actor_admin_id: int,
+        target_admin_id: int | None = None,
+        action: str,
+        resource_type: str,
+        resource_id: str | None = None,
+        status: str = "success",
+        before_data: dict[str, Any] | None = None,
+        after_data: dict[str, Any] | None = None,
+        reason: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> AdminAuditLog:
+        """Record with ip/user_agent auto-filled from request context if not provided."""
+        from common.request_context import get_request_ip, get_request_user_agent
+
+        return await AdminAuditService.record(
+            db,
+            actor_admin_id=actor_admin_id,
+            target_admin_id=target_admin_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            status=status,
+            before_data=before_data,
+            after_data=after_data,
+            reason=reason,
+            ip_address=ip_address or get_request_ip(),
+            user_agent=user_agent or get_request_user_agent(),
+        )
+
+    @staticmethod
     async def list_logs(
         db: AsyncSession,
         *,

@@ -1,16 +1,9 @@
-"""Admin -> user-service gateway for the route-monitor panel."""
+"""Admin -> router-service gateway for the route-monitor panel."""
 
 from __future__ import annotations
 
-from typing import NoReturn
-
-from common.core.exceptions import NotFoundException, ServiceUnavailableException, ValidationException
+from common.core.exceptions import NotFoundException, ValidationException
 from common.gateway.base import BaseGateway
-from common.internal import (
-    InternalServiceError,
-    InternalServiceResponseError,
-    get_internal_json,
-)
 from core.config import settings
 
 ROUTE_MONITOR_TIMEOUT_SECONDS = 8.0
@@ -20,30 +13,16 @@ class RouteMonitorGateway(BaseGateway):
     """HTTP gateway for route-monitor read endpoints in user-service."""
 
     def __init__(self) -> None:
-        super().__init__(service_name="user-service")
-
-    def _common_kwargs(self) -> dict:
-        return {
-            "base_url": settings.USER_SERVICE_URL,
-            "target_service": self.service_name,
-            "secret": settings.INTERNAL_SECRET,
-            "caller_service": settings.SERVICE_NAME,
-            "timeout": ROUTE_MONITOR_TIMEOUT_SECONDS,
-            "max_retries": settings.INTERNAL_HTTP_MAX_RETRIES,
-            "retry_backoff_seconds": settings.INTERNAL_HTTP_RETRY_BACKOFF_SECONDS,
-            "circuit_breaker_threshold": settings.INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD,
-            "circuit_breaker_cooldown_seconds": (
-                settings.INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS
-            ),
-        }
-
-    def _handle_error(self, exc: InternalServiceError) -> NoReturn:
-        if isinstance(exc, InternalServiceResponseError):
-            if exc.status_code == 404:
-                raise NotFoundException(detail=exc.detail or "Route request not found") from exc
-            if exc.status_code in (400, 422):
-                raise ValidationException(detail=exc.detail or "Validation error") from exc
-        raise ServiceUnavailableException("User service unavailable") from exc
+        super().__init__(
+            "user-service",
+            base_url=settings.USER_SERVICE_URL,
+            timeout=ROUTE_MONITOR_TIMEOUT_SECONDS,
+            error_map={
+                404: NotFoundException,
+                400: ValidationException,
+                422: ValidationException,
+            },
+        )
 
     async def list_requests(
         self,
@@ -88,23 +67,14 @@ class RouteMonitorGateway(BaseGateway):
             qp["start"] = start
         if end:
             qp["end"] = end
-        try:
-            return await get_internal_json(
-                path="/api/v1/internal/route-monitor/requests",
-                query_params=qp,
-                **self._common_kwargs(),
-            )
-        except InternalServiceError as exc:
-            self._handle_error(exc)
+        return await self._get(
+            "/api/v1/internal/route-monitor/requests", query_params=qp,
+        )
 
     async def get_request_detail(self, request_id: str) -> dict:
-        try:
-            return await get_internal_json(
-                path=f"/api/v1/internal/route-monitor/requests/{request_id}",
-                **self._common_kwargs(),
-            )
-        except InternalServiceError as exc:
-            self._handle_error(exc)
+        return await self._get(
+            f"/api/v1/internal/route-monitor/requests/{request_id}",
+        )
 
     async def get_aggregates(
         self,
@@ -126,21 +96,12 @@ class RouteMonitorGateway(BaseGateway):
             qp["model_name"] = model_name
         if provider_slug:
             qp["provider_slug"] = provider_slug
-        try:
-            return await get_internal_json(
-                path="/api/v1/internal/route-monitor/aggregates",
-                query_params=qp,
-                **self._common_kwargs(),
-            )
-        except InternalServiceError as exc:
-            self._handle_error(exc)
+        return await self._get(
+            "/api/v1/internal/route-monitor/aggregates", query_params=qp,
+        )
 
     async def get_compare(self, request_id: str, *, limit: int = 20) -> dict:
-        try:
-            return await get_internal_json(
-                path=f"/api/v1/internal/route-monitor/compare/{request_id}",
-                query_params={"limit": limit},
-                **self._common_kwargs(),
-            )
-        except InternalServiceError as exc:
-            self._handle_error(exc)
+        return await self._get(
+            f"/api/v1/internal/route-monitor/compare/{request_id}",
+            query_params={"limit": limit},
+        )

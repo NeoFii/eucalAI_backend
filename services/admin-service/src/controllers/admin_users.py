@@ -1,10 +1,10 @@
 """Admin management endpoints."""
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api import PaginatedResponse
-from core.dependencies import get_db_session, get_request_meta
+from core.dependencies import get_db_session
 from models import AdminUser
 from core.policies import require_super_admin
 from schemas import (
@@ -59,11 +59,9 @@ async def list_admin_users(
 @router.post("", response_model=CreateAdminResponse, summary="Create admin user")
 async def create_admin_user(
     payload: CreateAdminRequest,
-    request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> CreateAdminResponse:
-    ip_address, user_agent = get_request_meta(request)
     admin = await AdminManagementService.create_admin(
         db,
         actor_admin=current_admin,
@@ -71,8 +69,6 @@ async def create_admin_user(
         name=payload.name,
         password=payload.password,
         role=payload.role,
-        ip_address=ip_address,
-        user_agent=user_agent,
     )
     return CreateAdminResponse(
         code=200,
@@ -93,18 +89,11 @@ async def create_admin_user(
 async def update_admin_user_status(
     uid: str,
     payload: UpdateAdminStatusRequest,
-    request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminBaseResponse:
-    ip_address, user_agent = get_request_meta(request)
     await AdminManagementService.update_admin_status(
-        db,
-        actor_admin=current_admin,
-        target_uid=uid,
-        status=payload.status,
-        ip_address=ip_address,
-        user_agent=user_agent,
+        db, actor_admin=current_admin, target_uid=uid, status=payload.status,
     )
     return AdminBaseResponse(code=200, message="success")
 
@@ -115,18 +104,11 @@ async def update_admin_user_status(
 async def reset_admin_user_password(
     uid: str,
     payload: ResetAdminPasswordRequest,
-    request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminBaseResponse:
-    ip_address, user_agent = get_request_meta(request)
     await AdminManagementService.reset_admin_password(
-        db,
-        actor_admin=current_admin,
-        target_uid=uid,
-        new_password=payload.new_password,
-        ip_address=ip_address,
-        user_agent=user_agent,
+        db, actor_admin=current_admin, target_uid=uid, new_password=payload.new_password,
     )
     return AdminBaseResponse(code=200, message="success")
 
@@ -135,17 +117,10 @@ async def reset_admin_user_password(
 async def update_admin_user_role(
     uid: str,
     payload: UpdateAdminRoleRequest,
-    request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminBaseResponse:
-    ip_address, user_agent = get_request_meta(request)
     await AdminManagementService.update_admin_role(
-        db,
-        actor_admin=current_admin,
-        target_uid=uid,
-        role=payload.role,
-        ip_address=ip_address,
-        user_agent=user_agent,
+        db, actor_admin=current_admin, target_uid=uid, role=payload.role,
     )
     return AdminBaseResponse(code=200, message="success")

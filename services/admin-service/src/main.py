@@ -21,7 +21,7 @@ from services.bootstrap_service import AdminBootstrapService
 from common.db.schema_version import ensure_database_at_head
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
-from common.internal import build_internal_auth_dependency
+from common.internal import build_internal_auth_dependency, close_internal_clients
 from common.internal_logs import build_internal_logs_router
 from common.observability import configure_logging_from_settings, install_observability, log_event
 from common.redis import check_redis_ready, close_redis, init_redis
@@ -66,6 +66,7 @@ async def lifespan(app: FastAPI):
     yield
 
     log_event(logger, logging.INFO, "service_stopping", service=settings.SERVICE_NAME)
+    await close_internal_clients()
     await close_redis()
     await close_db()
 

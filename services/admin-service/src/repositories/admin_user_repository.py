@@ -6,6 +6,7 @@ from sqlalchemy import func, select, text
 
 from models import AdminUser
 from common.db import BaseRepository
+from common.db.query import ListParams
 
 
 class AdminUserRepository(BaseRepository[AdminUser]):
@@ -41,15 +42,10 @@ class AdminUserRepository(BaseRepository[AdminUser]):
         return int(result.scalar() or 0)
 
     async def list_admins(self, *, page: int, page_size: int) -> tuple[list[AdminUser], int]:
-        statement = select(AdminUser).order_by(AdminUser.created_at.desc(), AdminUser.id.desc())
-        total = int(
-            (
-                await self.session.execute(select(func.count()).select_from(statement.subquery()))
-            ).scalar()
-            or 0
+        result = await self.get_list(
+            ListParams(page=page, page_size=page_size, order_by="created_at", order_dir="desc"),
         )
-        rows = await self.session.execute(statement.offset((page - 1) * page_size).limit(page_size))
-        return list(rows.scalars().all()), total
+        return list(result.items), result.total
 
     async def acquire_named_lock(self, lock_name: str, timeout_seconds: int) -> bool:
         result = await self.session.execute(

@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.dependencies import get_db_session, get_request_meta
+from core.dependencies import get_db_session
 from models import AdminUser
 from core.policies import require_super_admin
 from schemas.common import AdminBaseResponse
@@ -42,15 +42,10 @@ _MODEL_SLUG_PATH = Path(..., max_length=120)
 @router.post("", response_model=PoolResponse, summary="Create pool")
 async def create_pool(
     payload: PoolCreate,
-    http_request: Request,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    item = await PoolService.create_pool(
-        db, payload, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    item = await PoolService.create_pool(db, payload, actor_admin_id=current_admin.id)
     return PoolResponse(data=item)
 
 
@@ -93,31 +88,21 @@ async def get_pool(
 @router.patch("/{slug}", response_model=PoolResponse, summary="Update pool")
 async def update_pool(
     payload: PoolUpdate,
-    http_request: Request,
     slug: str = _SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    item = await PoolService.update_pool(
-        db, slug, payload, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    item = await PoolService.update_pool(db, slug, payload, actor_admin_id=current_admin.id)
     return PoolResponse(data=item)
 
 
 @router.delete("/{slug}", response_model=PoolResponse, summary="Disable pool")
 async def disable_pool(
-    http_request: Request,
     slug: str = _SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    item = await PoolService.disable_pool(
-        db, slug, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    item = await PoolService.disable_pool(db, slug, actor_admin_id=current_admin.id)
     return PoolResponse(data=item)
 
 
@@ -127,16 +112,11 @@ async def disable_pool(
 @router.post("/{slug}/models", response_model=PoolModelResponse, summary="Add pool model")
 async def add_pool_model(
     payload: PoolModelCreate,
-    http_request: Request,
     slug: str = _SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolModelResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    item = await PoolService.add_pool_model(
-        db, slug, payload, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    item = await PoolService.add_pool_model(db, slug, payload, actor_admin_id=current_admin.id)
     return PoolModelResponse(data=item)
 
 
@@ -146,48 +126,35 @@ async def add_pool_model(
 )
 async def update_pool_model(
     payload: PoolModelUpdate,
-    http_request: Request,
     slug: str = _SLUG_PATH,
     model_slug: str = _MODEL_SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolModelResponse:
-    ip_address, user_agent = get_request_meta(http_request)
     item = await PoolService.update_pool_model(
         db, slug, model_slug, payload, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
     )
     return PoolModelResponse(data=item)
 
 
 @router.delete("/{slug}/models/{model_slug}", summary="Remove pool model")
 async def remove_pool_model(
-    http_request: Request,
     slug: str = _SLUG_PATH,
     model_slug: str = _MODEL_SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
-    ip_address, user_agent = get_request_meta(http_request)
-    await PoolService.remove_pool_model(
-        db, slug, model_slug, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    await PoolService.remove_pool_model(db, slug, model_slug, actor_admin_id=current_admin.id)
     return AdminBaseResponse()
 
 
 @router.post("/{slug}/models/sync", response_model=SyncModelsResponse, summary="Sync models from upstream")
 async def sync_models(
-    http_request: Request,
     slug: str = _SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> SyncModelsResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    result = await PoolService.sync_models(
-        db, slug, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    result = await PoolService.sync_models(db, slug, actor_admin_id=current_admin.id)
     return SyncModelsResponse(data=result)
 
 
@@ -198,16 +165,11 @@ async def sync_models(
 @router.post("/{slug}/accounts", response_model=PoolAccountResponse, summary="Add pool account")
 async def add_pool_account(
     payload: PoolAccountCreate,
-    http_request: Request,
     slug: str = _SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolAccountResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    item = await PoolService.add_pool_account(
-        db, slug, payload, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    item = await PoolService.add_pool_account(db, slug, payload, actor_admin_id=current_admin.id)
     return PoolAccountResponse(data=item)
 
 
@@ -217,16 +179,13 @@ async def add_pool_account(
 )
 async def update_pool_account(
     payload: PoolAccountUpdate,
-    http_request: Request,
     slug: str = _SLUG_PATH,
     account_id: int = Path(...),
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolAccountResponse:
-    ip_address, user_agent = get_request_meta(http_request)
     item = await PoolService.update_pool_account(
         db, slug, account_id, payload, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
     )
     return PoolAccountResponse(data=item)
 
@@ -236,30 +195,22 @@ async def update_pool_account(
     response_model=PoolAccountResponse, summary="Disable pool account",
 )
 async def disable_pool_account(
-    http_request: Request,
     slug: str = _SLUG_PATH,
     account_id: int = Path(...),
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> PoolAccountResponse:
-    ip_address, user_agent = get_request_meta(http_request)
     item = await PoolService.disable_pool_account(
         db, slug, account_id, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
     )
     return PoolAccountResponse(data=item)
 
 
 @router.post("/{slug}/accounts/check", response_model=CheckBalancesResponse, summary="Check account balances")
 async def check_balances(
-    http_request: Request,
     slug: str = _SLUG_PATH,
     current_admin: AdminUser = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> CheckBalancesResponse:
-    ip_address, user_agent = get_request_meta(http_request)
-    result = await PoolService.check_balances(
-        db, slug, actor_admin_id=current_admin.id,
-        ip_address=ip_address, user_agent=user_agent,
-    )
+    result = await PoolService.check_balances(db, slug, actor_admin_id=current_admin.id)
     return CheckBalancesResponse(data=result)

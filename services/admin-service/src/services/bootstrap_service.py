@@ -11,7 +11,7 @@ from repositories.admin_user_repository import AdminUserRepository
 from services.audit_service import AdminAuditService
 from utils.password import check_password_strength
 from common.utils.nanoid_uid import generate_nanoid_uid
-from common.utils.password import hash_password
+from common.utils.password import hash_password_async
 from common.utils.timezone import now
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ class AdminBootstrapService:
             ok, message = check_password_strength(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
             if not ok:
                 raise RuntimeError(f"Invalid bootstrap password: {message}")
-            admin.password_hash = hash_password(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
+            admin.password_hash = await hash_password_async(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
             admin.password_changed_at = now()
             admin.password_changed_by_admin_id = admin.id
             changed = True
@@ -136,7 +136,7 @@ class AdminBootstrapService:
                 ok, message = check_password_strength(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
                 if not ok:
                     raise RuntimeError(f"Invalid bootstrap password: {message}")
-                existing.password_hash = hash_password(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
+                existing.password_hash = await hash_password_async(settings.BOOTSTRAP_SUPERADMIN_PASSWORD)
                 existing.password_changed_at = now()
                 existing.password_changed_by_admin_id = existing.id
             await db.flush()
@@ -145,7 +145,7 @@ class AdminBootstrapService:
         admin = AdminUser(
             uid=generate_nanoid_uid(),
             email=settings.BOOTSTRAP_SUPERADMIN_EMAIL,
-            password_hash=hash_password(settings.BOOTSTRAP_SUPERADMIN_PASSWORD),
+            password_hash=await hash_password_async(settings.BOOTSTRAP_SUPERADMIN_PASSWORD),
             name=settings.BOOTSTRAP_SUPERADMIN_NAME,
             role="super_admin",
             is_root=True,

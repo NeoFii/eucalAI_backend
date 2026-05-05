@@ -16,6 +16,8 @@ from common.utils.timezone import format_iso, now
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
+_stats_gateway = UserStatsGateway()
+
 
 class DashboardSummaryData(BaseModel):
     total_users: int
@@ -89,7 +91,7 @@ async def get_dashboard_summary(
     if start is None:
         start = end - timedelta(days=30)
 
-    gw = UserStatsGateway()
+    gw = _stats_gateway
     raw = await gw.fetch_dashboard_summary(format_iso(start), format_iso(end))
     return DashboardSummaryResponse(code=200, message="success", data=DashboardSummaryData(**raw))
 
@@ -106,7 +108,7 @@ async def get_user_growth(
     if start is None:
         start = end - timedelta(days=30)
 
-    gw = UserStatsGateway()
+    gw = _stats_gateway
     raw = await gw.fetch_user_growth(format_iso(start), format_iso(end))
     return UserGrowthResponse(
         code=200,
@@ -127,7 +129,7 @@ async def get_usage_trends(
     if start is None:
         start = end - timedelta(days=30)
 
-    gw = UserStatsGateway()
+    gw = _stats_gateway
     raw = await gw.fetch_usage_trends(format_iso(start), format_iso(end))
     return UsageTrendsResponse(code=200, message="success", data=UsageTrendsData(**raw))
 
@@ -155,7 +157,7 @@ async def get_rpm_trend(
     _admin: AdminUser = Depends(require_active_admin),
 ) -> RpmTrendResponse:
     """Return per-bucket RPM samples over [start, end)."""
-    gw = UserStatsGateway()
+    gw = _stats_gateway
     raw = await gw.fetch_rpm_trend(
         format_iso(start), format_iso(end), bucket_seconds,
     )

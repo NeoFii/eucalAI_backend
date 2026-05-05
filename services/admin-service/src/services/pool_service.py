@@ -6,10 +6,10 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from common.internal import get_internal_client
 from models.pool import Pool, PoolAccount, PoolModel
 from repositories.pool_repository import (
     PoolAccountRepository,
@@ -34,6 +34,8 @@ from schemas.pool import (
 from services.audit_service import AdminAuditService
 from common.core.exceptions import NotFoundException, ValidationException
 from common.utils.crypto import decrypt_api_key, encrypt_api_key, mask_api_key
+
+logger = logging.getLogger(__name__)
 
 
 def _pool_model_item(m: PoolModel) -> PoolModelItem:
@@ -122,7 +124,7 @@ class PoolService:
     @staticmethod
     async def create_pool(
         db: AsyncSession, payload: PoolCreate, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolItem:
         repo = PoolRepository(db)
         if await repo.get_by_slug(payload.slug):
@@ -135,12 +137,11 @@ class PoolService:
             remark=payload.remark, created_by=actor_admin_id,
         )
         repo.add(pool)
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="create_pool", resource_type="pool",
             resource_id=payload.slug, status="success",
             after_data=_safe_pool_audit(pool),
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(pool)
@@ -163,7 +164,7 @@ class PoolService:
     @staticmethod
     async def update_pool(
         db: AsyncSession, slug: str, payload: PoolUpdate, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolItem:
         pool = await PoolRepository(db).get_by_slug(slug)
         if pool is None:
@@ -174,12 +175,11 @@ class PoolService:
             setattr(pool, field, value)
         pool.updated_by = actor_admin_id
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="update_pool", resource_type="pool",
             resource_id=slug, status="success",
             before_data=before, after_data=_safe_pool_audit(pool),
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(pool)
@@ -188,7 +188,7 @@ class PoolService:
     @staticmethod
     async def disable_pool(
         db: AsyncSession, slug: str, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolItem:
         pool = await PoolRepository(db).get_by_slug(slug)
         if pool is None:
@@ -199,12 +199,11 @@ class PoolService:
         before = _safe_pool_audit(pool)
         pool.is_enabled = False
         pool.updated_by = actor_admin_id
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="disable_pool", resource_type="pool",
             resource_id=slug, status="success",
             before_data=before, after_data=_safe_pool_audit(pool),
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(pool)
@@ -224,7 +223,7 @@ class PoolService:
     @staticmethod
     async def add_pool_model(
         db: AsyncSession, pool_slug: str, payload: PoolModelCreate, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolModelItem:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         repo = PoolModelRepository(db)
@@ -240,12 +239,11 @@ class PoolService:
             context_length=payload.context_length,
         )
         repo.add(pm)
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="add_pool_model", resource_type="pool_model",
             resource_id=f"{pool_slug}/{payload.model_slug}", status="success",
             after_data={"pool_slug": pool_slug, "model_slug": payload.model_slug, "upstream_model_id": payload.upstream_model_id},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(pm)
@@ -254,7 +252,7 @@ class PoolService:
     @staticmethod
     async def update_pool_model(
         db: AsyncSession, pool_slug: str, model_slug: str, payload: PoolModelUpdate, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolModelItem:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         repo = PoolModelRepository(db)
@@ -265,12 +263,11 @@ class PoolService:
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(pm, field, value)
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="update_pool_model", resource_type="pool_model",
             resource_id=f"{pool_slug}/{model_slug}", status="success",
             after_data={"pool_slug": pool_slug, "model_slug": model_slug},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(pm)
@@ -279,19 +276,18 @@ class PoolService:
     @staticmethod
     async def remove_pool_model(
         db: AsyncSession, pool_slug: str, model_slug: str, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> None:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         removed = await PoolModelRepository(db).remove(pool.id, model_slug)
         if not removed:
             raise NotFoundException(f"model '{model_slug}' not found on pool '{pool_slug}'")
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="remove_pool_model", resource_type="pool_model",
             resource_id=f"{pool_slug}/{model_slug}", status="success",
             before_data={"pool_slug": pool_slug, "model_slug": model_slug},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
 
@@ -302,7 +298,7 @@ class PoolService:
     @staticmethod
     async def add_pool_account(
         db: AsyncSession, pool_slug: str, payload: PoolAccountCreate, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolAccountItem:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         master_key = settings.PROVIDER_SECRET_MASTER_KEY
@@ -317,12 +313,11 @@ class PoolService:
             remark=payload.remark, created_by=actor_admin_id,
         )
         PoolAccountRepository(db).add(account)
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="add_pool_account", resource_type="pool_account",
             resource_id=f"{pool_slug}/{payload.name}", status="success",
             after_data={"pool_slug": pool_slug, "name": payload.name, "mask": masked},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(account)
@@ -331,7 +326,7 @@ class PoolService:
     @staticmethod
     async def update_pool_account(
         db: AsyncSession, pool_slug: str, account_id: int, payload: PoolAccountUpdate, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolAccountItem:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         account = await PoolAccountRepository(db).get_by_id_and_pool(account_id, pool.id)
@@ -347,12 +342,11 @@ class PoolService:
             setattr(account, field, value)
         account.updated_by = actor_admin_id
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="update_pool_account", resource_type="pool_account",
             resource_id=f"{pool_slug}/{account_id}", status="success",
             after_data={"pool_slug": pool_slug, "account_id": account_id, "mask": account.mask},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(account)
@@ -361,7 +355,7 @@ class PoolService:
     @staticmethod
     async def disable_pool_account(
         db: AsyncSession, pool_slug: str, account_id: int, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> PoolAccountItem:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         account = await PoolAccountRepository(db).get_by_id_and_pool(account_id, pool.id)
@@ -372,12 +366,11 @@ class PoolService:
 
         account.status = "disabled"
         account.updated_by = actor_admin_id
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="disable_pool_account", resource_type="pool_account",
             resource_id=f"{pool_slug}/{account_id}", status="success",
             after_data={"pool_slug": pool_slug, "account_id": account_id, "status": "disabled"},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(account)
@@ -440,7 +433,7 @@ class PoolService:
     @staticmethod
     async def sync_models(
         db: AsyncSession, pool_slug: str, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> SyncModelsResult:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
 
@@ -452,12 +445,12 @@ class PoolService:
         enc = active_accounts[0].api_key_enc
         api_key = decrypt_api_key(enc["ciphertext"], enc["iv"], enc["tag"], master_key)
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(
-                f"{pool.base_url.rstrip('/')}/models",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            resp.raise_for_status()
+        client = get_internal_client(pool.base_url, timeout=30)
+        resp = await client.get(
+            f"{pool.base_url.rstrip('/')}/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        resp.raise_for_status()
 
         body = resp.json()
         upstream_items: list[dict] = []
@@ -496,12 +489,11 @@ class PoolService:
                 model_repo.add(pm)
                 added.append(model_id)
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="sync_pool_models", resource_type="pool",
             resource_id=pool_slug, status="success",
             after_data={"added": added, "updated": updated, "existing_count": len(existing), "total_upstream": len(upstream_items)},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         return SyncModelsResult(added=added, updated=updated, existing=existing, total_upstream=len(upstream_items))
@@ -509,7 +501,7 @@ class PoolService:
     @staticmethod
     async def check_balances(
         db: AsyncSession, pool_slug: str, *,
-        actor_admin_id: int, ip_address: str | None = None, user_agent: str | None = None,
+        actor_admin_id: int,
     ) -> CheckBalancesResult:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
         if not pool.health_check_endpoint:
@@ -519,43 +511,42 @@ class PoolService:
         active_accounts = [a for a in (pool.accounts or []) if a.status in ("active", "error")]
         results: list[AccountBalanceResult] = []
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            for account in active_accounts:
-                try:
-                    enc = account.api_key_enc
-                    api_key = decrypt_api_key(enc["ciphertext"], enc["iv"], enc["tag"], master_key)
-                    resp = await client.get(
-                        pool.health_check_endpoint,
-                        headers={"Authorization": f"Bearer {api_key}"},
-                    )
-                    resp.raise_for_status()
-                    body = resp.json()
-                    logging.getLogger("admin_service").info("check_balance raw response for %s: %s", account.name, body)
+        client = get_internal_client(pool.health_check_endpoint, timeout=30)
+        for account in active_accounts:
+            try:
+                enc = account.api_key_enc
+                api_key = decrypt_api_key(enc["ciphertext"], enc["iv"], enc["tag"], master_key)
+                resp = await client.get(
+                    pool.health_check_endpoint,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                resp.raise_for_status()
+                body = resp.json()
+                logger.info("check_balance raw response for %s: %s", account.name, body)
 
-                    balance_fen = _extract_balance(body)
-                    account.balance = balance_fen
-                    account.last_checked_at = datetime.now(UTC)
-                    if account.status == "error":
-                        account.status = "active"
+                balance_fen = _extract_balance(body)
+                account.balance = balance_fen
+                account.last_checked_at = datetime.now(UTC)
+                if account.status == "error":
+                    account.status = "active"
 
-                    results.append(AccountBalanceResult(
-                        account_id=account.id, name=account.name,
-                        balance=balance_fen, status=account.status, error=None,
-                    ))
-                except Exception as exc:
-                    account.status = "error"
-                    account.last_checked_at = datetime.now(UTC)
-                    results.append(AccountBalanceResult(
-                        account_id=account.id, name=account.name,
-                        balance=account.balance, status="error", error=str(exc),
-                    ))
+                results.append(AccountBalanceResult(
+                    account_id=account.id, name=account.name,
+                    balance=balance_fen, status=account.status, error=None,
+                ))
+            except Exception as exc:
+                account.status = "error"
+                account.last_checked_at = datetime.now(UTC)
+                results.append(AccountBalanceResult(
+                    account_id=account.id, name=account.name,
+                    balance=account.balance, status="error", error=str(exc),
+                ))
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="check_pool_balances", resource_type="pool",
             resource_id=pool_slug, status="success",
             after_data={"checked": len(results), "errors": sum(1 for r in results if r.error)},
-            ip_address=ip_address, user_agent=user_agent,
         )
         await db.commit()
         return CheckBalancesResult(results=results)

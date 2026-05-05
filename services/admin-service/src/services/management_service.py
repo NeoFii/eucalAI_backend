@@ -13,7 +13,7 @@ from services.audit_service import AdminAuditService
 from utils.password import check_password_strength
 from common.core.exceptions import NotFoundException, ValidationException
 from common.utils.nanoid_uid import generate_nanoid_uid
-from common.utils.password import hash_password
+from common.utils.password import hash_password_async
 from common.utils.timezone import now
 
 
@@ -42,8 +42,6 @@ class AdminManagementService:
         name: str,
         password: str,
         role: str = "admin",
-        ip_address: str | None = None,
-        user_agent: str | None = None,
     ) -> AdminUser:
         user_repo = AdminUserRepository(db)
         if await user_repo.get_by_email(email):
@@ -56,7 +54,7 @@ class AdminManagementService:
         admin = AdminUser(
             uid=generate_nanoid_uid(),
             email=email,
-            password_hash=hash_password(password),
+            password_hash=await hash_password_async(password),
             name=name,
             role=role,
             status=1,
@@ -67,7 +65,7 @@ class AdminManagementService:
         await db.flush()
         await db.refresh(admin)
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db,
             actor_admin_id=actor_admin.id,
             target_admin_id=admin.id,
@@ -77,8 +75,6 @@ class AdminManagementService:
             status="success",
             before_data=None,
             after_data=AdminManagementService.build_admin_snapshot(admin),
-            ip_address=ip_address,
-            user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(admin)
@@ -91,8 +87,6 @@ class AdminManagementService:
         actor_admin: AdminUser,
         target_uid: str,
         status: int,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
     ) -> AdminUser:
         target_admin = await AdminManagementService._get_mutable_target(db, actor_admin, target_uid)
         before_data = AdminManagementService.build_admin_snapshot(target_admin)
@@ -101,7 +95,7 @@ class AdminManagementService:
         await db.flush()
 
         action = "enable_admin" if status == 1 else "disable_admin"
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db,
             actor_admin_id=actor_admin.id,
             target_admin_id=target_admin.id,
@@ -111,8 +105,6 @@ class AdminManagementService:
             status="success",
             before_data=before_data,
             after_data=AdminManagementService.build_admin_snapshot(target_admin),
-            ip_address=ip_address,
-            user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(target_admin)
@@ -125,8 +117,6 @@ class AdminManagementService:
         actor_admin: AdminUser,
         target_uid: str,
         new_password: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
     ) -> AdminUser:
         target_admin = await AdminManagementService._get_mutable_target(db, actor_admin, target_uid)
         ok, message = check_password_strength(new_password)
@@ -134,7 +124,7 @@ class AdminManagementService:
             raise ValidationException(message)
 
         before_data = AdminManagementService.build_admin_snapshot(target_admin)
-        target_admin.password_hash = hash_password(new_password)
+        target_admin.password_hash = await hash_password_async(new_password)
         target_admin.password_changed_at = now()
         target_admin.password_changed_by_admin_id = actor_admin.id
         target_admin.updated_by_admin_id = actor_admin.id
@@ -142,7 +132,7 @@ class AdminManagementService:
 
         after_data = AdminManagementService.build_admin_snapshot(target_admin)
         after_data["password_changed_at"] = target_admin.password_changed_at.isoformat()
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db,
             actor_admin_id=actor_admin.id,
             target_admin_id=target_admin.id,
@@ -152,8 +142,6 @@ class AdminManagementService:
             status="success",
             before_data=before_data,
             after_data=after_data,
-            ip_address=ip_address,
-            user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(target_admin)
@@ -166,8 +154,6 @@ class AdminManagementService:
         actor_admin: AdminUser,
         target_uid: str,
         role: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
     ) -> AdminUser:
         if not getattr(actor_admin, "is_root", False):
             raise AdminPermissionDeniedException("Only root admin can change roles")
@@ -185,7 +171,7 @@ class AdminManagementService:
         target_admin.updated_by_admin_id = actor_admin.id
         await db.flush()
 
-        await AdminAuditService.record(
+        await AdminAuditService.record_auto(
             db,
             actor_admin_id=actor_admin.id,
             target_admin_id=target_admin.id,
@@ -195,8 +181,6 @@ class AdminManagementService:
             status="success",
             before_data=before_data,
             after_data=AdminManagementService.build_admin_snapshot(target_admin),
-            ip_address=ip_address,
-            user_agent=user_agent,
         )
         await db.commit()
         await db.refresh(target_admin)

@@ -379,6 +379,8 @@ def install_observability(app: FastAPI, *, service_name: str) -> None:
 
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next):
+        from common.request_context import reset_request_meta, set_request_meta
+
         request_id = request.headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex
         trace_id = request.headers.get(TRACE_ID_HEADER) or uuid.uuid4().hex
         span_id = uuid.uuid4().hex[:12]
@@ -389,6 +391,8 @@ def install_observability(app: FastAPI, *, service_name: str) -> None:
         request.state.request_id = request_id
         started_at = perf_counter()
         client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        meta_tokens = set_request_meta(client_ip, user_agent)
 
         try:
             response = await call_next(request)
@@ -438,6 +442,7 @@ def install_observability(app: FastAPI, *, service_name: str) -> None:
             reset_span_id(sid_token)
             reset_trace_id(tid_token)
             reset_request_id(rid_token)
+            reset_request_meta(*meta_tokens)
             return response
 
         durationMs = round((perf_counter() - started_at) * 1000, 2)
@@ -457,4 +462,5 @@ def install_observability(app: FastAPI, *, service_name: str) -> None:
         reset_span_id(sid_token)
         reset_trace_id(tid_token)
         reset_request_id(rid_token)
+        reset_request_meta(*meta_tokens)
         return response
