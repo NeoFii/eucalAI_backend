@@ -14,7 +14,8 @@ from email.mime.text import MIMEText
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.core.exceptions import CodeExpiredException, CodeNotFoundException, InvalidCodeException
-from common.utils.password import hash_password, verify_password
+from common.observability import log_event
+from common.utils.password import hash_password_async, verify_password_async
 from common.utils.timezone import now
 from core.config import settings
 from models.email_verification_code import EmailVerificationCode
@@ -72,7 +73,7 @@ class EmailService:
                 server.sendmail(self.smtp_user, email, message.as_string())
             return True, ""
         except Exception as exc:
-            logger.error("Email send failed: email=%s error=%s", email, exc)
+            log_event(logger, logging.ERROR, "emailSendFailed", email=email, error=str(exc))
             return False, "邮件发送失败，请稍后重试"
 
     async def send_verification_code(
@@ -101,7 +102,7 @@ class EmailService:
 
         verification = EmailVerificationCode(
             email=email,
-            code_hash=hash_password(code),
+            code_hash=await hash_password_async(code),
             purpose=purpose,
             expires_at=expires_at,
         )
@@ -118,7 +119,7 @@ class EmailService:
             await db.commit()
             return result
 
-        logger.info("Verification code sent: email=%s purpose=%s", email, purpose)
+        log_event(logger, logging.INFO, "verificationCodeSent", email=email, purpose=purpose)
         return result
 
     async def verify_code_or_raise(
@@ -131,7 +132,7 @@ class EmailService:
         record = await self.get_valid_code_or_raise(db, email, code, purpose)
         self.mark_code_used(record)
         await db.commit()
-        logger.info("Verification code accepted: email=%s purpose=%s", email, purpose)
+        log_event(logger, logging.INFO, "verificationCodeAccepted", email=email, purpose=purpose)
 
     async def get_valid_code_or_raise(
         self,
@@ -152,7 +153,7 @@ class EmailService:
         if now() > record.expires_at:
             raise CodeExpiredException()
 
-        if not verify_password(code, record.code_hash):
+        if not await verify_password_async(code, record.code_hash):
             record.error_count = (record.error_count or 0) + 1
             if record.error_count >= settings.MAX_CODE_ERRORS:
                 record.locked_until = now() + timedelta(hours=settings.CODE_ERROR_LOCK_HOURS)

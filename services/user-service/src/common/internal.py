@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import hashlib
 import hmac
 import json
 import time
+from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
 from fastapi import Header, HTTPException, Request, status
 
-from common.observability import REQUEST_ID_HEADER, get_request_id, TRACE_ID_HEADER, get_trace_id
+from common.observability import REQUEST_ID_HEADER, TRACE_ID_HEADER, get_request_id, get_trace_id
 
 INTERNAL_CALLER_HEADER = "X-Internal-Service"
 INTERNAL_TIMESTAMP_HEADER = "X-Internal-Timestamp"
@@ -305,6 +305,30 @@ def _record_failure(
         state.opened_until = time.time() + max(cooldown_seconds, 0.0)
 
 
+# ---------------------------------------------------------------------------
+# Shared httpx client pool (connection reuse across requests)
+# ---------------------------------------------------------------------------
+
+_HTTP_CLIENTS: dict[str, httpx.AsyncClient] = {}
+
+
+def get_internal_client(base_url: str, *, timeout: float = 10.0) -> httpx.AsyncClient:
+    key = base_url.rstrip("/")
+    if key not in _HTTP_CLIENTS:
+        _HTTP_CLIENTS[key] = httpx.AsyncClient(
+            timeout=timeout,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _HTTP_CLIENTS[key]
+
+
+async def close_internal_clients() -> None:
+    """Gracefully close all pooled HTTP clients. Call from app shutdown."""
+    for client in _HTTP_CLIENTS.values():
+        await client.aclose()
+    _HTTP_CLIENTS.clear()
+
+
 def _extract_error_detail(response: httpx.Response) -> str | None:
     try:
         payload = response.json()
@@ -348,21 +372,21 @@ async def request_internal_json(
 
     for attempt in range(attempts):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.request(
-                    method,
-                    url,
-                    headers=build_internal_headers(
-                        secret=secret,
-                        caller_service=caller_service,
-                        method=method,
-                        path=path,
-                        json_body=json_body,
-                        query_params=query_params,
-                    ),
-                    json=json_body,
-                    params=query_params,
-                )
+            client = get_internal_client(base_url, timeout=timeout)
+            response = await client.request(
+                method,
+                url,
+                headers=build_internal_headers(
+                    secret=secret,
+                    caller_service=caller_service,
+                    method=method,
+                    path=path,
+                    json_body=json_body,
+                    query_params=query_params,
+                ),
+                json=json_body,
+                params=query_params,
+            )
         except httpx.HTTPError as exc:
             if attempt == attempts - 1:
                 _record_failure(

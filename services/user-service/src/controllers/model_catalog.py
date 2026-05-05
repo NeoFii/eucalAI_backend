@@ -6,11 +6,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Path, Query
 from fastapi.responses import JSONResponse
 
-from gateways.model_catalog import ModelCatalogGateway
+from gateways.model_catalog import model_catalog_gateway
 
 router = APIRouter(tags=["model-catalog"])
 
-_gateway = ModelCatalogGateway()
+_gateway = model_catalog_gateway
 
 
 @router.get("/model-vendors", summary="List model vendors")

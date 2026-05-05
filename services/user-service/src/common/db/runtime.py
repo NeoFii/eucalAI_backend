@@ -65,13 +65,16 @@ class ServiceDatabaseRuntime:
         return self._session_factory
 
     async def get_db(self) -> AsyncGenerator[AsyncSession, None]:
-        """Yield a request-scoped async session."""
+        """Yield a request-scoped async session.
+
+        Callers (services/controllers) own the commit. This generator only
+        provides rollback-on-exception safety.
+        """
         if self._session_factory is None:
             raise RuntimeError("Session factory has not been initialized")
         async with self._session_factory() as session:
             try:
                 yield session
-                await session.commit()
             except Exception:
                 await session.rollback()
                 raise
@@ -80,13 +83,15 @@ class ServiceDatabaseRuntime:
 
     @asynccontextmanager
     async def get_db_context(self) -> AsyncGenerator[AsyncSession, None]:
-        """Yield an async session for non-request contexts."""
+        """Yield an async session for non-request contexts (worker jobs).
+
+        Callers own the commit.
+        """
         if self._session_factory is None:
             raise RuntimeError("Session factory has not been initialized")
         async with self._session_factory() as session:
             try:
                 yield session
-                await session.commit()
             except Exception:
                 await session.rollback()
                 raise

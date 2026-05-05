@@ -6,11 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams
-from common.utils.password import hash_password
+from common.utils.password import hash_password_async
 from controllers.internal import verify_internal_secret
-from core.config import settings
 from core.dependencies import get_db_session
-from gateways.system_settings import SystemSettingsGateway
+from gateways.system_settings import system_settings_gateway
 from repositories.usage_stat_repository import UsageStatRepository
 from repositories.user_repository import UserRepository
 from schemas.internal_user_mgmt import (
@@ -76,7 +75,7 @@ async def get_user_detail(
 ) -> InternalUserDetailResponse:
     user = await _get_user_or_404(db, uid)
     current_tpm = await UsageStatRepository(db).get_user_tpm_last_minute(int(user.id))
-    default_rpm = await SystemSettingsGateway().get_default_user_rpm()
+    default_rpm = await system_settings_gateway.get_default_user_rpm()
     return InternalUserDetailResponse(
         uid=user.uid,
         email=user.email,
@@ -134,7 +133,7 @@ async def reset_user_password(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=msg,
         )
     user = await _get_user_or_404(db, uid)
-    user.password_hash = hash_password(payload.new_password)
+    user.password_hash = await hash_password_async(payload.new_password)
     await AuthService._revoke_all_user_sessions(db, user.id)
     await db.commit()
     return {"uid": user.uid, "success": True}
@@ -196,7 +195,7 @@ async def update_user_rpm(
     before = user.rpm_limit
     user.rpm_limit = payload.rpm_limit
     await db.commit()
-    default_rpm = await SystemSettingsGateway().get_default_user_rpm()
+    default_rpm = await system_settings_gateway.get_default_user_rpm()
     return {
         "uid": user.uid,
         "before_rpm_limit": before,

@@ -25,11 +25,11 @@ from common.core.exceptions import (
 from common.observability import log_event
 from common.utils.jwt import create_access_token, create_refresh_token, decode_token, get_token_jti
 from common.utils.nanoid_uid import generate_nanoid_uid
-from common.utils.password import hash_password, verify_password
+from common.utils.password import hash_password, hash_password_async, verify_password_async
 from common.utils.snowflake import generate_snowflake_id
 from common.utils.timezone import now
 from core.config import settings
-from gateways.system_settings import SystemSettingsGateway
+from gateways.system_settings import system_settings_gateway
 from models import User, UserSession
 from repositories import (
     SessionRepository,
@@ -78,7 +78,7 @@ class AuthService:
         # 生成雪花 ID 作为 uid
         uid = generate_nanoid_uid()
 
-        password_hash = hash_password(data.password)
+        password_hash = await hash_password_async(data.password)
 
         # Snapshot the current global default RPM into `users.rpm_limit` so
         # later edits to the global default don't silently shift this user's
@@ -86,7 +86,7 @@ class AuthService:
         # Gateway is cache-friendly + falls back to env if admin-service is
         # unreachable, so registration never blocks on this lookup.
         try:
-            snapshot_rpm = await SystemSettingsGateway().get_default_user_rpm()
+            snapshot_rpm = await system_settings_gateway.get_default_user_rpm()
         except Exception:  # noqa: BLE001 — never block registration on this
             log_event(logger, logging.WARNING, "userRegisterRpmSnapshotFailed", email=email)
             snapshot_rpm = settings.DEFAULT_USER_RPM
@@ -123,7 +123,7 @@ class AuthService:
         user = await user_repo.get_by_email(email)
 
         if not user:
-            verify_password("", _get_dummy_hash())
+            await verify_password_async("", _get_dummy_hash())
             raise InvalidCredentialsException()
 
         if user.is_login_locked:
@@ -131,7 +131,7 @@ class AuthService:
                 detail=f"登录失败次数过多，账户已被锁定，请{int((user.login_locked_until - now()).total_seconds() / 60)}分钟后再试"
             )
 
-        if not verify_password(password, user.password_hash):
+        if not await verify_password_async(password, user.password_hash):
             user.login_fail_count = (user.login_fail_count or 0) + 1
 
             if user.login_fail_count >= settings.LOGIN_MAX_FAILURES:
@@ -175,7 +175,7 @@ class AuthService:
         if not session:
             raise SessionNotFoundException()
 
-        if not verify_password(refresh_token, session.refresh_token_hash):
+        if not await verify_password_async(refresh_token, session.refresh_token_hash):
             raise SessionNotFoundException()
 
         if session.is_revoked:
@@ -203,7 +203,7 @@ class AuthService:
         if not session:
             raise SessionNotFoundException()
 
-        if not verify_password(refresh_token, session.refresh_token_hash):
+        if not await verify_password_async(refresh_token, session.refresh_token_hash):
             raise InvalidTokenException()
 
         if session.is_revoked:
@@ -233,7 +233,7 @@ class AuthService:
 
         # 更新 session 记录中的 token_jti 和 refresh_token_hash
         session.token_jti = get_token_jti(new_refresh_token)
-        session.refresh_token_hash = hash_password(new_refresh_token)
+        session.refresh_token_hash = await hash_password_async(new_refresh_token)
         session.expires_at = now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         await db.commit()
 
@@ -268,7 +268,7 @@ class AuthService:
     @staticmethod
     async def change_password(db: AsyncSession, user: User, old_password: str, new_password: str, lang: str = "zh") -> None:
         """修改密码"""
-        if not verify_password(old_password, user.password_hash):
+        if not await verify_password_async(old_password, user.password_hash):
             raise InvalidCredentialsException(detail="旧密码错误")
 
         from utils.password import check_password_strength
@@ -276,7 +276,7 @@ class AuthService:
         if not ok:
             raise WeakPasswordException(detail=msg)
 
-        user.password_hash = hash_password(new_password)
+        user.password_hash = await hash_password_async(new_password)
         await AuthService._revoke_all_user_sessions(db, user.id)
         await db.commit()
         log_event(logger, logging.INFO, "userPasswordChanged", uid=user.uid)
@@ -305,7 +305,7 @@ class AuthService:
             session_id=session_id,
             user_id=user.id,
             token_jti=get_token_jti(refresh_token),
-            refresh_token_hash=hash_password(refresh_token),
+            refresh_token_hash=await hash_password_async(refresh_token),
             user_agent=user_agent,
             ip_address=ip_address,
             expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
@@ -378,7 +378,7 @@ class AuthService:
         if not ok:
             raise WeakPasswordException(detail=msg)
 
-        user.password_hash = hash_password(new_password)
+        user.password_hash = await hash_password_async(new_password)
         email_service.mark_code_used(code_record)
         await AuthService._revoke_all_user_sessions(db, user.id)
         await db.commit()

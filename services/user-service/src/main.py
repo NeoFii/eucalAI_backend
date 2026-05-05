@@ -11,13 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from common.cache import close_cache_redis, init_cache_redis
 from common.core.exception_handlers import register_exception_handlers
 from common.health import build_readiness_response, check_database_ready
-from common.internal import build_internal_auth_dependency
+from common.internal import build_internal_auth_dependency, close_internal_clients
 from common.internal_logs import build_internal_logs_router
 from common.observability import configure_logging_from_settings, install_observability, log_event
 from common.redis import check_redis_ready, close_redis, init_redis
 from core import db
-from core.router import api_router
 from core.config import settings
+from core.router import api_router
 
 configure_logging_from_settings(settings)
 logger = logging.getLogger(settings.SERVICE_NAME)
@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
     await init_cache_redis(settings.CACHE_REDIS_URL)
     log_event(logger, logging.INFO, "service_started", service=settings.SERVICE_NAME)
     yield
+    await close_internal_clients()
     await close_cache_redis()
     await close_redis()
     await db.close_db()
