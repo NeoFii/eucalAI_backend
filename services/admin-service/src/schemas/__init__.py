@@ -15,6 +15,8 @@ from schemas.audit_log import (
     AdminAuditCategory,
     AdminAuditLogItem,
     AdminAuditLogListResponse,
+    AdminAuditLogMetaData,
+    AdminAuditLogMetaResponse,
 )
 from schemas.auth import (
     AdminChangePasswordRequest,
@@ -103,6 +105,8 @@ __all__ = [
     "AdminAuditCategory",
     "AdminAuditLogItem",
     "AdminAuditLogListResponse",
+    "AdminAuditLogMetaData",
+    "AdminAuditLogMetaResponse",
     "AdminBaseResponse",
     "AdminChangePasswordRequest",
     "AdminChangePasswordResponse",

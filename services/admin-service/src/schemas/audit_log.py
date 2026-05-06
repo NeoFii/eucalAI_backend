@@ -12,7 +12,7 @@ from schemas.common import AdminBaseResponse, DateTimeModel
 
 AdminAuditCategory = Literal[
     "all", "governance", "auth", "user_management", "model_catalog",
-    "routing_config",
+    "routing_config", "voucher", "pool",
 ]
 
 
@@ -36,6 +36,7 @@ class AdminAuditLogItem(DateTimeModel):
     actor_admin: AdminAuditActor = Field(..., description="Actor admin")
     target_admin: Optional[AdminAuditActor] = Field(default=None, description="Target admin")
     action: str = Field(..., description="Audit action")
+    action_label: str = Field(..., description="Action display name")
     resource_type: str = Field(..., description="Resource type")
     resource_id: Optional[str] = Field(default=None, description="Resource id")
     status: str = Field(..., description="success/failed")
@@ -51,3 +52,16 @@ class AdminAuditLogListResponse(AdminBaseResponse):
     """Admin audit-log list response."""
 
     data: Optional[PaginatedResponse[AdminAuditLogItem]] = None
+
+
+class AdminAuditLogMetaData(BaseModel):
+    """Audit log filter metadata."""
+
+    categories: list[str] = Field(..., description="Available category filters")
+    action_labels: dict[str, str] = Field(..., description="Action to display name mapping")
+
+
+class AdminAuditLogMetaResponse(AdminBaseResponse):
+    """Audit log metadata response."""
+
+    data: AdminAuditLogMetaData | None = None

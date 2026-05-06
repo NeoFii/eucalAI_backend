@@ -5,13 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api import PaginatedResponse
 from core.dependencies import get_db_session
-from models import AdminAuditLog, AdminUser
 from core.policies import require_super_admin
+from models import AdminAuditLog, AdminUser
 from schemas import (
     AdminAuditActor,
     AdminAuditCategory,
     AdminAuditLogItem,
     AdminAuditLogListResponse,
+    AdminAuditLogMetaData,
+    AdminAuditLogMetaResponse,
 )
 from services.audit_service import AdminAuditService
 
@@ -34,6 +36,7 @@ def _build_item(log: AdminAuditLog) -> AdminAuditLogItem:
         actor_admin=actor_admin,
         target_admin=_build_actor(log.target_admin),
         action=log.action,
+        action_label=AdminAuditService.ACTION_LABELS.get(log.action, log.action),
         resource_type=log.resource_type,
         resource_id=log.resource_id,
         status=log.status,
@@ -43,6 +46,21 @@ def _build_item(log: AdminAuditLog) -> AdminAuditLogItem:
         before_data=log.before_data,
         after_data=log.after_data,
         created_at=log.created_at,
+    )
+
+
+@router.get("/meta", response_model=AdminAuditLogMetaResponse, summary="Audit log filter metadata")
+async def get_audit_log_meta(
+    current_admin: AdminUser = Depends(require_super_admin),
+) -> AdminAuditLogMetaResponse:
+    del current_admin
+    return AdminAuditLogMetaResponse(
+        code=200,
+        message="success",
+        data=AdminAuditLogMetaData(
+            categories=list(AdminAuditService.CATEGORY_ACTIONS.keys()),
+            action_labels=AdminAuditService.ACTION_LABELS,
+        ),
     )
 
 
