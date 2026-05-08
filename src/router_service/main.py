@@ -11,9 +11,8 @@ from fastapi import FastAPI
 
 from router_service.config import DEFAULT_SERVICE_HOST, DEFAULT_SERVICE_PORT
 from router_service.dependencies import init_globals
-from router_service.logging import setup_logging, get_app_logger
-from router_service.routers import chat, completions, meta
-
+from router_service.logging import get_app_logger, setup_logging
+from router_service.routers import chat, completions, messages, meta
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_ROUTER_ASSETS = _BACKEND_ROOT / "deploy" / "router"
@@ -84,6 +83,7 @@ def create_app(
     app.include_router(meta.router)
     app.include_router(chat.router)
     app.include_router(completions.router)
+    app.include_router(messages.router)
     return app
 
 
