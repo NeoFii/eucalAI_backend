@@ -110,7 +110,24 @@ def responses_to_openai_request(
     if request.top_p is not None:
         forward_payload["top_p"] = request.top_p
     if request.tools:
-        forward_payload["tools"] = request.tools
+        oai_tools: list[dict[str, Any]] = []
+        for tool in request.tools:
+            if tool.get("type") == "function":
+                if "function" in tool:
+                    oai_tools.append(tool)
+                else:
+                    oai_tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool.get("name", ""),
+                            "description": tool.get("description", ""),
+                            "parameters": tool.get("parameters", {}),
+                            **({"strict": tool["strict"]} if "strict" in tool else {}),
+                        },
+                    })
+            else:
+                oai_tools.append(tool)
+        forward_payload["tools"] = oai_tools
     if request.tool_choice is not None:
         forward_payload["tool_choice"] = request.tool_choice
     if request.parallel_tool_calls is not None:
@@ -216,6 +233,8 @@ class ResponsesStreamConverter:
         self._tool_calls: dict[int, dict[str, Any]] = {}
         self._tool_started: set[int] = set()
         self._finished = False
+        self._pending_finish = False
+        self._finish_reason: str | None = None
         self._usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
     def _emit_created(self) -> str:
@@ -317,6 +336,7 @@ class ResponsesStreamConverter:
         return _sse_event("response.function_call_arguments.delta", {
             "type": "response.function_call_arguments.delta",
             "item_id": tc.get("id", ""),
+            "call_id": tc.get("call_id", ""),
             "output_index": tc.get("output_index", 0),
             "delta": delta,
         })
@@ -364,16 +384,32 @@ class ResponsesStreamConverter:
                 "arguments": tc.get("arguments", ""),
                 "status": "completed",
             })
+        if not output:
+            output.append({
+                "type": "message",
+                "id": self._msg_id,
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": self._text_content, "annotations": []}],
+            })
+
+        resp_status = "completed"
+        incomplete_details = None
+        if self._finish_reason == "length":
+            resp_status = "incomplete"
+            incomplete_details = {"reason": "max_output_tokens"}
 
         resp_obj = {
             "id": self._resp_id,
             "object": "response",
             "created_at": self._created_at,
-            "status": "completed",
+            "status": resp_status,
             "model": self._model,
             "output": output,
             "usage": self._usage,
         }
+        if incomplete_details:
+            resp_obj["incomplete_details"] = incomplete_details
         return _sse_event("response.completed", {"type": "response.completed", "response": resp_obj})
 
     def convert_chunk(self, chunk_dict: dict[str, Any]) -> str:
@@ -398,7 +434,11 @@ class ResponsesStreamConverter:
 
         choices = chunk_dict.get("choices") or []
         if not choices:
-            if chunk_usage and self._started and not self._finished:
+            # Usage-only chunk after finish_reason — now emit completed with real usage
+            if self._pending_finish:
+                self._pending_finish = False
+                events += self._emit_completed()
+            elif chunk_usage and self._started and not self._finished:
                 if self._text_started:
                     events += self._emit_text_done()
                 for idx in self._tool_started:
@@ -435,12 +475,13 @@ class ResponsesStreamConverter:
                 if tc_args:
                     events += self._emit_tool_args_delta(tc_index, tc_args)
 
-        # Finish
+        # Finish — close content blocks but defer response.completed to capture usage
         if finish_reason:
+            self._finish_reason = finish_reason
             if self._text_started:
                 events += self._emit_text_done()
             for idx in sorted(self._tool_started):
                 events += self._emit_tool_done(idx)
-            events += self._emit_completed()
+            self._pending_finish = True
 
         return events

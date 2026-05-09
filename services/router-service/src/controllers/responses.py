@@ -147,6 +147,7 @@ async def responses(
             forward_payload=forward_payload,
             is_stream=is_stream,
             max_retries=max_channel_retries,
+            timeout=300.0 if is_stream else 45.0,
         )
     except UpstreamCallFailed as fail:
         target_info = fail.target_info
@@ -157,6 +158,18 @@ async def responses(
                 error_msg=sanitize_error(fail.exc)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
                 upstream_latency_ms=int(fail.upstream_latency_ms),
+            )
+        if is_stream:
+            error_converter = ResponsesStreamConverter(selected_model)
+
+            async def _error_stream():
+                yield error_converter._emit_created()
+                yield error_converter._emit_completed()
+
+            return StreamingResponse(
+                _error_stream(),
+                media_type="text/event-stream",
+                headers={"cache-control": "no-cache", "connection": "keep-alive"},
             )
         raise HTTPException(status_code=502, detail="upstream service error") from fail.exc
 
@@ -188,9 +201,12 @@ async def responses(
                     if sse_events:
                         yield sse_events
                 if not converter._finished:
-                    if converter._text_started:
-                        yield converter._emit_text_done()
-                    yield converter._emit_completed()
+                    if converter._pending_finish:
+                        yield converter._emit_completed()
+                    else:
+                        if converter._text_started:
+                            yield converter._emit_text_done()
+                        yield converter._emit_completed()
                 stream_ok = True
             except (asyncio.CancelledError, GeneratorExit):
                 abort_reason = "client_cancelled"
@@ -198,6 +214,8 @@ async def responses(
             except Exception as exc:
                 abort_reason = "stream_error"
                 stream_exc = exc
+                if not converter._finished:
+                    yield converter._emit_completed()
             finally:
                 final_latency = (time.monotonic() - t_stream_start) * 1000
                 if call_log_created:
