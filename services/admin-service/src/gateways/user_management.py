@@ -170,7 +170,7 @@ class UserManagementGateway(BaseGateway):
         self, *, page: int = 1, page_size: int = 20,
         user_id: int | None = None, model_name: str | None = None,
         start: str | None = None, end: str | None = None,
-        request_id: str | None = None,
+        request_id: str | None = None, api_key_id: int | None = None,
     ) -> dict:
         qp: dict = {"page": page, "page_size": page_size}
         if user_id is not None:
@@ -183,11 +183,14 @@ class UserManagementGateway(BaseGateway):
             qp["end"] = end
         if request_id:
             qp["request_id"] = request_id
+        if api_key_id is not None:
+            qp["api_key_id"] = api_key_id
         return await self._get("/api/v1/internal/usage/logs", query_params=qp)
 
     async def list_usage_stats(
         self, *, user_id: int | None = None, model_name: str | None = None,
         start: str | None = None, end: str | None = None,
+        api_key_id: int | None = None,
     ) -> list[dict]:
         qp: dict = {}
         if user_id is not None:
@@ -198,26 +201,43 @@ class UserManagementGateway(BaseGateway):
             qp["start"] = start
         if end:
             qp["end"] = end
+        if api_key_id is not None:
+            qp["api_key_id"] = api_key_id
         return await self._get("/api/v1/internal/usage/stats", query_params=qp)
 
     async def get_user_usage_stats(
         self, uid: str, *, start: str | None = None, end: str | None = None,
+        model_name: str | None = None, api_key_id: int | None = None,
     ) -> list[dict]:
         qp: dict = {}
         if start:
             qp["start"] = start
         if end:
             qp["end"] = end
+        if model_name:
+            qp["model_name"] = model_name
+        if api_key_id is not None:
+            qp["api_key_id"] = api_key_id
         return await self._get(
             f"/api/v1/internal/users/{uid}/usage/stats", query_params=qp,
         )
 
     async def get_user_usage_analytics(
-        self, uid: str, *, range_name: str = "24h",
+        self, uid: str, *, range_name: str | None = None,
+        start: str | None = None, end: str | None = None,
+        api_key_id: int | None = None,
     ) -> dict:
+        qp: dict = {}
+        if range_name:
+            qp["range"] = range_name
+        if start:
+            qp["start"] = start
+        if end:
+            qp["end"] = end
+        if api_key_id is not None:
+            qp["api_key_id"] = api_key_id
         return await self._get(
-            f"/api/v1/internal/users/{uid}/usage/analytics",
-            query_params={"range": range_name},
+            f"/api/v1/internal/users/{uid}/usage/analytics", query_params=qp,
         )
 
     async def generate_voucher_codes(

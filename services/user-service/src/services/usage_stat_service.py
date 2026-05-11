@@ -200,10 +200,28 @@ class UsageStatService:
         db: AsyncSession,
         *,
         user_id: int,
-        range_name: UsageAnalyticsRange,
+        range_name: UsageAnalyticsRange | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        api_key_id: int | None = None,
     ) -> UsageAnalyticsData:
-        start, end, granularity = UsageStatService._build_usage_analytics_window(range_name, now())
-        logs = await UsageStatRepository(db).list_analytics_logs(user_id=user_id, start=start, end=end)
+        if start is not None and end is not None:
+            granularity = "hour" if (end - start) <= timedelta(hours=48) else "day"
+            range_label: str | None = "custom"
+        elif range_name is not None:
+            start, end, granularity = UsageStatService._build_usage_analytics_window(
+                range_name, now(),
+            )
+            range_label = range_name
+        else:
+            start, end, granularity = UsageStatService._build_usage_analytics_window(
+                "24h", now(),
+            )
+            range_label = "24h"
+
+        logs = await UsageStatRepository(db).list_analytics_logs(
+            user_id=user_id, start=start, end=end, api_key_id=api_key_id,
+        )
 
         total_requests = len(logs)
         success_requests = sum(1 for log in logs if log.status == ApiCallLog.STATUS_SUCCESS)
@@ -254,7 +272,7 @@ class UsageStatService:
         ]
 
         return UsageAnalyticsData(
-            range=range_name,
+            range=range_label,
             granularity=granularity,
             start=start,
             end=end,

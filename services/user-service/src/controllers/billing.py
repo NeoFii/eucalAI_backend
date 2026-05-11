@@ -227,14 +227,28 @@ async def list_usage_stats(
     summary="Get usage analytics",
 )
 async def list_usage_analytics(
-    range: UsageAnalyticsRange = Query("8h"),
+    range: UsageAnalyticsRange | None = Query(None),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    api_key_id: int | None = None,
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
+    if api_key_id is not None:
+        await ApiKeyService.verify_key_ownership(db, api_key_id, int(current_user.id))
+    effective_start = start
+    effective_end = end
+    if start is not None or end is not None:
+        params = _build_list_params(start=start, end=end, time_field="created_at")
+        effective_start = params.start
+        effective_end = params.end
     analytics = await UsageStatService.get_usage_analytics(
         db,
         user_id=int(current_user.id),
-        range_name=range,
+        range_name=range if effective_start is None else None,
+        start=effective_start,
+        end=effective_end,
+        api_key_id=api_key_id,
     )
     return {
         "code": 200,

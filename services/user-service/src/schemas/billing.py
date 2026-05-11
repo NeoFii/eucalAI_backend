@@ -123,7 +123,7 @@ class UsageAnalyticsBucket(DateTimeModel):
 
 
 class UsageAnalyticsData(DateTimeModel):
-    range: UsageAnalyticsRange
+    range: Optional[str] = None
     granularity: str
     start: datetime
     end: datetime

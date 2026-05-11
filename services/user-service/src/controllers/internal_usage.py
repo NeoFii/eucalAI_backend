@@ -12,7 +12,7 @@ from common.utils.timezone import now
 from controllers.internal import verify_internal_secret
 from controllers.internal_user_mgmt import _get_user_or_404
 from core.dependencies import get_db_session
-from schemas.billing import UsageAnalyticsData, UsageAnalyticsRange
+from schemas.billing import UsageAnalyticsData
 from schemas.internal_usage import (
     InternalUsageLogItem,
     InternalUsageLogListResponse,
@@ -36,6 +36,7 @@ async def list_usage_logs(
     user_id: int | None = None,
     model_name: str | None = None,
     request_id: str | None = None,
+    api_key_id: int | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     _: None = Depends(verify_internal_secret),
@@ -48,7 +49,8 @@ async def list_usage_logs(
         params.end = end
         params.validate_time_range(default_end=now(), default_days=30)
     result = await UsageStatService.list_usage_logs(
-        db, params=params, user_id=user_id, model_name=model_name, request_id=request_id,
+        db, params=params, user_id=user_id, model_name=model_name,
+        request_id=request_id, api_key_id=api_key_id,
     )
     return InternalUsageLogListResponse(
         items=[InternalUsageLogItem.model_validate(log) for log in result.items],
@@ -62,6 +64,7 @@ async def list_usage_logs(
 async def list_usage_stats(
     user_id: int | None = None,
     model_name: str | None = None,
+    api_key_id: int | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     _: None = Depends(verify_internal_secret),
@@ -73,9 +76,15 @@ async def list_usage_stats(
         params.start = start
         params.end = end
         params.validate_time_range(default_end=now(), default_days=30)
-    items = await UsageStatService.get_all_stats(
-        db, start=params.start, end=params.end, user_id=user_id, model_name=model_name,
-    )
+    if api_key_id is not None:
+        items = await UsageStatService.get_user_stats(
+            db, user_id=user_id, start=params.start, end=params.end,
+            model_name=model_name, api_key_id=api_key_id,
+        )
+    else:
+        items = await UsageStatService.get_all_stats(
+            db, start=params.start, end=params.end, user_id=user_id, model_name=model_name,
+        )
     return [InternalUsageStatItem.model_validate(s) for s in items]
 
 
@@ -84,6 +93,8 @@ async def get_user_usage_stats(
     uid: str,
     start: datetime | None = None,
     end: datetime | None = None,
+    model_name: str | None = None,
+    api_key_id: int | None = None,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[InternalUsageStatItem]:
@@ -96,6 +107,7 @@ async def get_user_usage_stats(
     params.validate_time_range(default_end=now(), default_days=30)
     items = await UsageStatService.get_user_stats(
         db, user_id=user.id, start=params.start, end=params.end,
+        model_name=model_name, api_key_id=api_key_id,
     )
     return [InternalUsageStatItem.model_validate(s) for s in items]
 
@@ -103,11 +115,19 @@ async def get_user_usage_stats(
 @router.get("/users/{uid}/usage/analytics", summary="Get user usage analytics by uid")
 async def get_user_usage_analytics(
     uid: str,
-    range: Literal["8h", "24h", "7d", "30d"] = Query("24h", alias="range"),
+    range: Literal["8h", "24h", "7d", "30d"] | None = Query(None, alias="range"),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    api_key_id: int | None = None,
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> UsageAnalyticsData:
     user = await _get_user_or_404(db, uid)
     return await UsageStatService.get_usage_analytics(
-        db, user_id=user.id, range_name=range,
+        db,
+        user_id=user.id,
+        range_name=range,
+        start=start,
+        end=end,
+        api_key_id=api_key_id,
     )

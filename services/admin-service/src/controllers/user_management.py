@@ -347,6 +347,7 @@ async def list_usage_logs(
     user_id: int | None = None,
     model_name: str | None = None,
     request_id: str | None = None,
+    api_key_id: int | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     _current_admin: AdminUser = Depends(require_active_admin),
@@ -357,6 +358,7 @@ async def list_usage_logs(
         user_id=user_id,
         model_name=model_name,
         request_id=request_id,
+        api_key_id=api_key_id,
         start=format_iso(start),
         end=format_iso(end),
     )
@@ -374,6 +376,7 @@ async def list_usage_logs(
 async def list_usage_stats(
     user_id: int | None = None,
     model_name: str | None = None,
+    api_key_id: int | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
     _current_admin: AdminUser = Depends(require_active_admin),
@@ -381,6 +384,7 @@ async def list_usage_stats(
     items = await _gateway.list_usage_stats(
         user_id=user_id,
         model_name=model_name,
+        api_key_id=api_key_id,
         start=format_iso(start),
         end=format_iso(end),
     )
@@ -396,10 +400,13 @@ async def get_user_usage_stats(
     uid: str,
     start: datetime | None = None,
     end: datetime | None = None,
+    model_name: str | None = None,
+    api_key_id: int | None = None,
     _current_admin: AdminUser = Depends(require_active_admin),
 ) -> UserUsageStatListResponse:
     items = await _gateway.get_user_usage_stats(
         uid, start=format_iso(start), end=format_iso(end),
+        model_name=model_name, api_key_id=api_key_id,
     )
     return UserUsageStatListResponse(data=[UserUsageStatItem(**item) for item in items])
 
@@ -411,13 +418,22 @@ async def get_user_usage_stats(
 )
 async def get_user_usage_analytics(
     uid: str,
-    range: str = Query("24h", alias="range"),
+    range: str | None = Query(None, alias="range"),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    api_key_id: int | None = None,
     _current_admin: AdminUser = Depends(require_active_admin),
 ) -> UserUsageAnalyticsResponse:
-    data = await _gateway.get_user_usage_analytics(uid, range_name=range)
+    data = await _gateway.get_user_usage_analytics(
+        uid,
+        range_name=range,
+        start=format_iso(start),
+        end=format_iso(end),
+        api_key_id=api_key_id,
+    )
     return UserUsageAnalyticsResponse(
         data=UserUsageAnalyticsData(
-            range=data["range"],
+            range=data.get("range"),
             granularity=data["granularity"],
             start=data["start"],
             end=data["end"],

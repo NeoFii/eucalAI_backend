@@ -262,7 +262,7 @@ class UserUsageAnalyticsBucket(DateTimeModel):
 
 
 class UserUsageAnalyticsData(DateTimeModel):
-    range: str
+    range: Optional[str] = None
     granularity: str
     start: datetime
     end: datetime

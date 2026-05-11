@@ -144,6 +144,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         user_id: int,
         start: datetime,
         end: datetime,
+        api_key_id: int | None = None,
     ) -> list[ApiCallLog]:
         query = (
             select(ApiCallLog)
@@ -155,6 +156,8 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             )
             .order_by(ApiCallLog.created_at.asc(), ApiCallLog.id.asc())
         )
+        if api_key_id is not None:
+            query = query.where(ApiCallLog.api_key_id == api_key_id)
         return list((await self.session.execute(query)).scalars().all())
 
     async def list_logs_for_hour(self, stat_hour: datetime, next_hour: datetime) -> list[ApiCallLog]:
