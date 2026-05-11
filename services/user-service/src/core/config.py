@@ -50,6 +50,16 @@ class Settings(BaseServiceSettings):
     # see the effective limit even when `users.rpm_limit` is NULL.
     DEFAULT_USER_RPM: int = 20
 
+    # Alipay payment
+    ALIPAY_APP_ID: str = ""
+    ALIPAY_PRIVATE_KEY: str = ""
+    ALIPAY_PUBLIC_KEY: str = ""
+    ALIPAY_GATEWAY: str = "https://openapi.alipay.com/gateway.do"
+    ALIPAY_NOTIFY_URL: str = ""
+    ALIPAY_RETURN_URL: str = ""
+    ALIPAY_SELLER_ID: str = ""
+    ALIPAY_ORDER_TIMEOUT: str = "30m"
+
 
 @lru_cache
 def get_settings() -> Settings:

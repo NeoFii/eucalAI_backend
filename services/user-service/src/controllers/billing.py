@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
+from decimal import Decimal
+from urllib.parse import unquote_plus
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api import PaginatedResponse
+from common.core.exceptions import NotFoundException, ServiceException
 from common.db import ListParams
+from common.utils.log import log_event
 from common.utils.timezone import now
+from core.config import settings
 from core.dependencies import get_db_session
 from models import User
 from core.policies import require_active_user
+from repositories import TopupOrderRepository
 from schemas import (
+    AlipayCreateOrderRequest,
+    AlipayCreateOrderResponse,
+    AlipayOrderStatusResponse,
     ApiCallLogItem,
     ApiResponse,
     BalanceResponseData,
@@ -26,6 +37,7 @@ from schemas import (
     VoucherRedeemResponseData,
     VoucherRedemptionItem,
 )
+from services.alipay_service import AlipayService
 from services.api_key_service import ApiKeyService
 from services.balance_service import BalanceService
 from services.topup_order_service import TopupOrderService
@@ -33,6 +45,7 @@ from services.usage_stat_service import UsageStatService
 from services.voucher_service import VoucherService
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+logger = logging.getLogger(__name__)
 
 DEFAULT_BILLING_LOOKBACK_DAYS = 30
 MAX_BILLING_RANGE_DAYS = 90
@@ -302,4 +315,131 @@ async def list_usage_logs(
             "page": result.page,
             "page_size": result.page_size,
         },
+    }
+
+
+# --- Alipay Payment Endpoints ---
+
+
+@router.post(
+    "/alipay/create-order",
+    response_model=ApiResponse[AlipayCreateOrderResponse],
+    summary="Create Alipay payment order",
+)
+async def alipay_create_order(
+    payload: AlipayCreateOrderRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    order = await TopupOrderService.create_alipay_order(
+        db, user_id=int(current_user.id), amount=payload.amount
+    )
+    subject = f"Eucal AI 余额充值 - {order.order_no}"
+    if payload.device == "mobile":
+        form_html = AlipayService.create_wap_pay(order.order_no, payload.amount, subject)
+    else:
+        form_html = AlipayService.create_page_pay(order.order_no, payload.amount, subject)
+    return {
+        "code": 200,
+        "message": "success",
+        "data": AlipayCreateOrderResponse(order_no=order.order_no, form_html=form_html),
+    }
+
+
+@router.post("/alipay/notify", summary="Alipay async notification handler")
+async def alipay_notify(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+) -> PlainTextResponse:
+    body = await request.body()
+    params: dict[str, str] = {}
+    for pair in body.decode("utf-8").split("&"):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            params[k] = unquote_plus(v)
+
+    if not AlipayService.verify_notify(params):
+        log_event(logger, "warning", "alipayNotifyVerifyFailed")
+        return PlainTextResponse("failure")
+
+    # Validate app_id
+    if params.get("app_id") != settings.ALIPAY_APP_ID:
+        log_event(logger, "warning", "alipayNotifyAppIdMismatch")
+        return PlainTextResponse("failure")
+
+    trade_status = params.get("trade_status", "")
+    if trade_status not in ("TRADE_SUCCESS", "TRADE_FINISHED"):
+        return PlainTextResponse("success")
+
+    out_trade_no = params.get("out_trade_no", "")
+    trade_no = params.get("trade_no", "")
+    total_amount = params.get("total_amount", "")
+
+    repo = TopupOrderRepository(db)
+    order = await repo.get_by_order_no(order_no=out_trade_no, for_update=True)
+    if order is None:
+        log_event(logger, "warning", "alipayNotifyOrderNotFound", order_no=out_trade_no)
+        return PlainTextResponse("success")
+
+    # Already processed — idempotent
+    if order.status != order.STATUS_PENDING:
+        return PlainTextResponse("success")
+
+    # Verify amount matches
+    expected_yuan = str(Decimal(int(order.amount)) / Decimal(1_000_000))
+    if total_amount != expected_yuan:
+        log_event(
+            logger, "warning", "alipayNotifyAmountMismatch",
+            order_no=out_trade_no, expected=expected_yuan, got=total_amount,
+        )
+        return PlainTextResponse("failure")
+
+    await TopupOrderService.mark_paid(db, order, payment_no=trade_no, payment_raw=params)
+    return PlainTextResponse("success")
+
+
+@router.get("/alipay/return", summary="Alipay sync return redirect")
+async def alipay_return(request: Request) -> RedirectResponse:
+    order_no = request.query_params.get("out_trade_no", "")
+    return_url = settings.ALIPAY_RETURN_URL.rsplit("/api/", 1)[0]
+    redirect_target = f"{return_url}/console/payment/recharge/result?order_no={order_no}"
+    return RedirectResponse(url=redirect_target, status_code=302)
+
+
+@router.get(
+    "/alipay/order/{order_no}/status",
+    response_model=ApiResponse[AlipayOrderStatusResponse],
+    summary="Query Alipay order status",
+)
+async def alipay_order_status(
+    order_no: str,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    repo = TopupOrderRepository(db)
+    order = await repo.get_for_user_by_order_no(
+        order_no=order_no, user_id=int(current_user.id)
+    )
+    if order is None:
+        raise NotFoundException(detail="订单不存在")
+
+    # If still pending, try querying Alipay for latest status
+    if order.status == order.STATUS_PENDING:
+        trade_info = await AlipayService.query_trade(order_no)
+        if trade_info and trade_info.get("trade_status") in ("TRADE_SUCCESS", "TRADE_FINISHED"):
+            await TopupOrderService.mark_paid(
+                db, order,
+                payment_no=trade_info["trade_no"],
+                payment_raw=trade_info,
+            )
+
+    return {
+        "code": 200,
+        "message": "success",
+        "data": AlipayOrderStatusResponse(
+            order_no=order.order_no,
+            status=order.status,
+            amount=int(order.amount),
+            paid_at=order.paid_at,
+        ),
     }
