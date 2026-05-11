@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams, PaginatedResult
 from common.core.exceptions import ValidationException
-from common.utils.log import log_event
+from common.observability import log_event
 from common.utils.timezone import now
 from core.config import settings
 from models import TopupOrder
@@ -77,7 +77,7 @@ class TopupOrderService:
         TopupOrderRepository(db).add(order)
         await db.flush()
         await db.commit()
-        log_event(logger, "info", "alipayOrderCreated", order_no=order.order_no, amount=amount)
+        log_event(logger, logging.INFO, "alipayOrderCreated", order_no=order.order_no, amount=amount)
         return order
 
     @staticmethod
@@ -98,7 +98,7 @@ class TopupOrderService:
             remark="支付宝充值",
         )
         log_event(
-            logger, "info", "alipayOrderPaid",
+            logger, logging.INFO, "alipayOrderPaid",
             order_no=order.order_no, payment_no=payment_no,
         )
 

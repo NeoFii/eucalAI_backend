@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.api import PaginatedResponse
 from common.core.exceptions import NotFoundException, ServiceException
 from common.db import ListParams
-from common.utils.log import log_event
+from common.observability import log_event
 from common.utils.timezone import now
 from core.config import settings
 from core.dependencies import get_db_session
@@ -346,6 +346,30 @@ async def alipay_create_order(
     }
 
 
+@router.post(
+    "/alipay/precreate",
+    response_model=ApiResponse[dict],
+    summary="Create Alipay QR code payment",
+)
+async def alipay_precreate(
+    payload: AlipayCreateOrderRequest,
+    current_user: User = Depends(require_active_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    order = await TopupOrderService.create_alipay_order(
+        db, user_id=int(current_user.id), amount=payload.amount
+    )
+    subject = f"Eucal AI 余额充值 - {order.order_no}"
+    qr_url = await AlipayService.precreate(order.order_no, payload.amount, subject)
+    if not qr_url:
+        raise ServiceException(detail="创建支付二维码失败，请稍后重试")
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {"order_no": order.order_no, "qr_url": qr_url},
+    }
+
+
 @router.post("/alipay/notify", summary="Alipay async notification handler")
 async def alipay_notify(
     request: Request,
@@ -359,12 +383,12 @@ async def alipay_notify(
             params[k] = unquote_plus(v)
 
     if not AlipayService.verify_notify(params):
-        log_event(logger, "warning", "alipayNotifyVerifyFailed")
+        log_event(logger, logging.WARNING, "alipayNotifyVerifyFailed")
         return PlainTextResponse("failure")
 
     # Validate app_id
     if params.get("app_id") != settings.ALIPAY_APP_ID:
-        log_event(logger, "warning", "alipayNotifyAppIdMismatch")
+        log_event(logger, logging.WARNING, "alipayNotifyAppIdMismatch")
         return PlainTextResponse("failure")
 
     trade_status = params.get("trade_status", "")
@@ -378,7 +402,7 @@ async def alipay_notify(
     repo = TopupOrderRepository(db)
     order = await repo.get_by_order_no(order_no=out_trade_no, for_update=True)
     if order is None:
-        log_event(logger, "warning", "alipayNotifyOrderNotFound", order_no=out_trade_no)
+        log_event(logger, logging.WARNING, "alipayNotifyOrderNotFound", order_no=out_trade_no)
         return PlainTextResponse("success")
 
     # Already processed — idempotent
@@ -389,7 +413,7 @@ async def alipay_notify(
     expected_yuan = str(Decimal(int(order.amount)) / Decimal(1_000_000))
     if total_amount != expected_yuan:
         log_event(
-            logger, "warning", "alipayNotifyAmountMismatch",
+            logger, logging.WARNING, "alipayNotifyAmountMismatch",
             order_no=out_trade_no, expected=expected_yuan, got=total_amount,
         )
         return PlainTextResponse("failure")
