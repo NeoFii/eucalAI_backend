@@ -7,7 +7,7 @@ router-service 作为 API 网关，支持三种协议格式。所有协议最终
 | 端点 | 协议 | 适用客户端 |
 |------|------|-----------|
 | `POST /v1/chat/completions` | OpenAI Chat Completions | ChatGPT 兼容客户端、各类 SDK |
-| `POST /v1/messages` | Anthropic Messages API | Claude Code CLI、Anthropic SDK |
+| `POST /v1/anthropic/messages` | Anthropic Messages API | Claude Code CLI、Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses API | Codex CLI、OpenAI Agents SDK |
 
 ## 架构概览
@@ -40,7 +40,7 @@ router-service 作为 API 网关，支持三种协议格式。所有协议最终
 
 ---
 
-## Anthropic Messages API (`/v1/messages`)
+## Anthropic Messages API (`/v1/anthropic/messages`)
 
 ### 请求格式
 
@@ -95,7 +95,7 @@ event: message_stop
 ### 测试
 
 ```bash
-curl -X POST http://localhost:8003/v1/messages \
+curl -X POST http://localhost:8003/v1/anthropic/messages \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -H "anthropic-version: 2023-06-01" \
@@ -234,6 +234,6 @@ curl -X POST http://localhost:8003/v1/responses \
 | `schemas/responses.py` | Responses 请求 Pydantic 模型 |
 | `services/anthropic_convert.py` | Anthropic ↔ OpenAI 格式转换 + 流式状态机 |
 | `services/responses_convert.py` | Responses ↔ OpenAI 格式转换 + 流式状态机 |
-| `controllers/messages.py` | `/v1/messages` 端点处理 |
+| `controllers/messages.py` | `/v1/anthropic/messages` 端点处理 |
 | `controllers/responses.py` | `/v1/responses` 端点处理 |
 | `controllers/chat.py` | `/v1/chat/completions` 端点处理 (直通) |
