@@ -40,34 +40,3 @@ class ChatCompletionRequest(BaseModel):
         return self
 
 
-_MAX_PROMPT_CHARS = 512_000
-
-
-class CompletionRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    model: str = Field(..., min_length=1, max_length=128)
-    prompt: str | list[str]
-    stream: bool = False
-    suffix: str | None = None
-
-    # Safe litellm passthrough fields
-    temperature: float | None = None
-    top_p: float | None = None
-    max_tokens: int | None = None
-    stop: str | list[str] | None = None
-    n: int | None = None
-    seed: int | None = None
-    user: str | None = None
-    presence_penalty: float | None = None
-    frequency_penalty: float | None = None
-
-    @model_validator(mode="after")
-    def _check_prompt_size(self) -> CompletionRequest:
-        if isinstance(self.prompt, list):
-            total = sum(len(str(p)) for p in self.prompt)
-        else:
-            total = len(self.prompt)
-        if total > _MAX_PROMPT_CHARS:
-            raise ValueError("prompt exceeds 512KB limit")
-        return self
