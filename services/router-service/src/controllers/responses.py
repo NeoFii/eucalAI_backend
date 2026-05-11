@@ -32,7 +32,7 @@ from services.responses_convert import (
 )
 from services.routing import route_and_resolve
 from services.upstream import strip_think_tags
-from utils.billing import compute_cost
+from utils.billing import compute_cost, extract_cached_tokens
 from utils.logging_config import build_db_request_preview, get_app_logger, log_upstream_call
 from utils.text import compute_input_hash, stringify_message_content
 
@@ -231,7 +231,7 @@ async def responses(
                     if stream_ok and stream_usage:
                         prompt_tokens = stream_usage.get("prompt_tokens", 0)
                         completion_tokens = stream_usage.get("completion_tokens", 0)
-                        cached_tokens = stream_usage.get("cached_tokens", 0)
+                        cached_tokens = extract_cached_tokens(stream_usage)
                         total_tokens = stream_usage.get("total_tokens", 0)
                         user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
                         cost, provider_cost, cost_detail = compute_cost(
@@ -284,7 +284,7 @@ async def responses(
         usage = response_payload.get("usage") or {}
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
-        cached_tokens = usage.get("cached_tokens", 0)
+        cached_tokens = extract_cached_tokens(usage)
         total_tokens = usage.get("total_tokens", 0)
         user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
         cost, provider_cost, cost_detail = compute_cost(

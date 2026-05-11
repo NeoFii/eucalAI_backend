@@ -18,7 +18,7 @@ from schemas.requests import CompletionRequest
 from services.channel_selector import ChannelRateLimited
 from core.exceptions import RoutingError, sanitize_error
 from services.routing import route_and_resolve
-from utils.billing import compute_cost
+from utils.billing import compute_cost, extract_cached_tokens
 from utils.text import compute_input_hash
 
 router = APIRouter()
@@ -249,7 +249,7 @@ async def completions(
         usage = response_json.get("usage") or {}
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
-        cached_tokens = usage.get("cached_tokens", 0)
+        cached_tokens = extract_cached_tokens(usage)
         total_tokens = usage.get("total_tokens", 0)
         user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
         cost, provider_cost, cost_detail = compute_cost(

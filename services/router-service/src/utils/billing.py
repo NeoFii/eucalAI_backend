@@ -3,6 +3,18 @@
 from __future__ import annotations
 
 import math
+from typing import Any
+
+
+def extract_cached_tokens(usage: dict[str, Any]) -> int:
+    """Extract cached_tokens from usage dict, handling both flat and nested layouts."""
+    top_level = usage.get("cached_tokens")
+    if top_level:
+        return int(top_level)
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict):
+        return int(details.get("cached_tokens", 0))
+    return 0
 
 
 def _calc(
