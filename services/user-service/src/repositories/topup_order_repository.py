@@ -30,6 +30,17 @@ class TopupOrderRepository(BaseRepository[TopupOrder]):
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def get_by_order_no(
+        self,
+        *,
+        order_no: str,
+        for_update: bool = False,
+    ) -> TopupOrder | None:
+        statement = select(TopupOrder).where(TopupOrder.order_no == order_no)
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def list_for_user(self, *, user_id: int, params: ListParams) -> PaginatedResult[TopupOrder]:
         if params.order_by is None:
             params.order_by = "created_at"

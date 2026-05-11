@@ -164,7 +164,27 @@ class ApiCallLogItem(DateTimeModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AlipayCreateOrderRequest(BaseModel):
+    amount: int = Field(..., ge=1_000_000, le=10_000_000_000, description="Amount in micro-yuan")
+    device: Literal["pc", "mobile"] = Field(default="pc", description="Device type")
+
+
+class AlipayCreateOrderResponse(BaseModel):
+    order_no: str
+    form_html: str
+
+
+class AlipayOrderStatusResponse(DateTimeModel):
+    order_no: str
+    status: int
+    amount: int
+    paid_at: Optional[datetime] = None
+
+
 __all__ = [
+    "AlipayCreateOrderRequest",
+    "AlipayCreateOrderResponse",
+    "AlipayOrderStatusResponse",
     "ApiCallLogItem",
     "BalanceResponseData",
     "BalanceTransactionItem",
