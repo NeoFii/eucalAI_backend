@@ -1,4 +1,4 @@
-"""POST /v1/messages — Anthropic Messages API compatible endpoint."""
+"""POST /v1/anthropic/messages — Anthropic Messages API compatible endpoint."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def _anthropic_error(status_code: int, error_type: str, message: str) -> JSONRes
         content={"type": "error", "error": {"type": error_type, "message": message}},
     )
 
-@router.post("/v1/messages")
+@router.post("/v1/anthropic/messages")
 async def messages(
     request: AnthropicMessagesRequest,
     raw_request: Request,

@@ -36,12 +36,12 @@ ssh -L 8003:localhost:8003 -p <SSH端口> root@<服务器地址>
 
 ## Claude Code CLI 配置
 
-Claude Code 使用 Anthropic Messages API (`/v1/messages`)。
+Claude Code 使用 Anthropic Messages API (`/v1/anthropic/messages`)。
 
 ### 环境变量
 
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:8003
+export ANTHROPIC_BASE_URL=http://localhost:8003/v1/anthropic
 export ANTHROPIC_API_KEY=sk-your-api-key-here
 ```
 
@@ -50,7 +50,7 @@ export ANTHROPIC_API_KEY=sk-your-api-key-here
 写入 shell 配置文件（`~/.bashrc` 或 `~/.zshrc`）：
 
 ```bash
-echo 'export ANTHROPIC_BASE_URL=http://localhost:8003' >> ~/.bashrc
+echo 'export ANTHROPIC_BASE_URL=http://localhost:8003/v1/anthropic' >> ~/.bashrc
 echo 'export ANTHROPIC_API_KEY=sk-your-api-key-here' >> ~/.bashrc
 source ~/.bashrc
 ```
@@ -110,7 +110,7 @@ codex "list files in current directory"
 
 ```bash
 # Claude Code 使用 Anthropic 协议
-export ANTHROPIC_BASE_URL=http://localhost:8003
+export ANTHROPIC_BASE_URL=http://localhost:8003/v1/anthropic
 export ANTHROPIC_API_KEY=sk-your-api-key-here
 
 # Codex 使用 OpenAI 协议
@@ -131,7 +131,7 @@ export OPENAI_API_KEY=sk-your-api-key-here
 # eucalAI router-service 客户端配置
 # source ~/.eucalai-env.sh
 
-export ANTHROPIC_BASE_URL=http://localhost:8003
+export ANTHROPIC_BASE_URL=http://localhost:8003/v1/anthropic
 export ANTHROPIC_API_KEY=sk-your-api-key-here
 
 export OPENAI_BASE_URL=http://localhost:8003/v1
@@ -165,7 +165,7 @@ source ~/.eucalai-env.sh
 curl http://localhost:8003/v1/models -H "Authorization: Bearer YOUR_KEY"
 
 # 测试 Anthropic 协议
-curl -X POST http://localhost:8003/v1/messages \
+curl -X POST http://localhost:8003/v1/anthropic/messages \
   -H "Authorization: Bearer YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"auto","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'
