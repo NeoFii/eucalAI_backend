@@ -53,8 +53,11 @@ class UserGrowthResponse(AdminBaseResponse):
 class DailyUsageTrendItem(BaseModel):
     date: str
     request_count: int
+    pending_count: int = 0
     success_count: int
     error_count: int
+    refunded_count: int = 0
+    aborted_count: int = 0
     prompt_tokens: int
     completion_tokens: int
     total_revenue: int

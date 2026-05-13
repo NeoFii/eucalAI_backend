@@ -197,8 +197,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             select(
                 stat_date,
                 func.count().label("request_count"),
+                func.sum(case((ApiCallLog.status == 0, 1), else_=0)).label("pending_count"),
                 func.sum(case((ApiCallLog.status == 1, 1), else_=0)).label("success_count"),
                 func.sum(case((ApiCallLog.status == 2, 1), else_=0)).label("error_count"),
+                func.sum(case((ApiCallLog.status == 3, 1), else_=0)).label("refunded_count"),
+                func.sum(case((ApiCallLog.status == 4, 1), else_=0)).label("aborted_count"),
                 func.sum(ApiCallLog.prompt_tokens).label("prompt_tokens"),
                 func.sum(ApiCallLog.completion_tokens).label("completion_tokens"),
                 func.sum(ApiCallLog.cached_tokens).label("cached_tokens"),
@@ -219,8 +222,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             {
                 "date": str(r.stat_date),
                 "request_count": int(r.request_count or 0),
+                "pending_count": int(r.pending_count or 0),
                 "success_count": int(r.success_count or 0),
                 "error_count": int(r.error_count or 0),
+                "refunded_count": int(r.refunded_count or 0),
+                "aborted_count": int(r.aborted_count or 0),
                 "prompt_tokens": int(r.prompt_tokens or 0),
                 "completion_tokens": int(r.completion_tokens or 0),
                 "cached_tokens": int(r.cached_tokens or 0),
