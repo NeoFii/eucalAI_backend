@@ -80,6 +80,7 @@ class ModelCatalogService:
         payload = {
             "id": model.id,
             "slug": model.slug,
+            "routing_slug": model.routing_slug,
             "name": model.name,
             "summary": model.summary,
             "description": model.description,
