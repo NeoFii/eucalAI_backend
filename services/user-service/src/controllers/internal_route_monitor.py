@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.db import ListParams
 from common.utils.timezone import now
 from controllers.internal import verify_internal_secret
+from controllers.internal_user_mgmt import _get_user_or_404
 from core.dependencies import get_db_session
 from repositories.route_monitor_repository import RouteMonitorRepository
 from schemas.internal_route_monitor import (
@@ -45,6 +46,7 @@ async def list_requests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user_id: int | None = Query(None),
+    user_uid: str | None = Query(None),
     model_name: str | None = Query(None, max_length=64),
     selected_model: str | None = Query(None, max_length=64),
     provider_slug: str | None = Query(None, max_length=32),
@@ -59,6 +61,10 @@ async def list_requests(
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> RouteRequestListResponse:
+    resolved_user_id = user_id
+    if resolved_user_id is None and user_uid:
+        user = await _get_user_or_404(db, user_uid)
+        resolved_user_id = user.id
     if score_min is not None and score_max is not None and score_min > score_max:
         raise HTTPException(status_code=400, detail="score_min cannot be greater than score_max")
 
@@ -78,7 +84,7 @@ async def list_requests(
     repo = RouteMonitorRepository(db)
     result = await repo.list_requests(
         params=params,
-        user_id=user_id,
+        user_id=resolved_user_id,
         model_name=model_name,
         selected_model=selected_model,
         provider_slug=provider_slug,
@@ -123,11 +129,16 @@ async def get_aggregates(
     start: datetime | None = Query(None),
     end: datetime | None = Query(None),
     user_id: int | None = Query(None),
+    user_uid: str | None = Query(None),
     model_name: str | None = Query(None, max_length=64),
     provider_slug: str | None = Query(None, max_length=32),
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> RouteAggregateData:
+    resolved_user_id = user_id
+    if resolved_user_id is None and user_uid:
+        user = await _get_user_or_404(db, user_uid)
+        resolved_user_id = user.id
     end_eff = end or now()
     start_eff = start or end_eff - timedelta(hours=DEFAULT_AGGREGATE_LOOKBACK_HOURS)
     if start_eff >= end_eff:
@@ -141,7 +152,7 @@ async def get_aggregates(
     data = await repo.aggregate_metrics(
         start=start_eff,
         end=end_eff,
-        user_id=user_id,
+        user_id=resolved_user_id,
         model_name=model_name,
         provider_slug=provider_slug,
     )

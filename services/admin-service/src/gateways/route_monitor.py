@@ -30,6 +30,7 @@ class RouteMonitorGateway(BaseGateway):
         page: int = 1,
         page_size: int = 20,
         user_id: int | None = None,
+        user_uid: str | None = None,
         model_name: str | None = None,
         selected_model: str | None = None,
         provider_slug: str | None = None,
@@ -45,6 +46,8 @@ class RouteMonitorGateway(BaseGateway):
         qp: dict = {"page": page, "page_size": page_size}
         if user_id is not None:
             qp["user_id"] = user_id
+        if user_uid:
+            qp["user_uid"] = user_uid
         if model_name:
             qp["model_name"] = model_name
         if selected_model:
@@ -82,6 +85,7 @@ class RouteMonitorGateway(BaseGateway):
         start: str | None = None,
         end: str | None = None,
         user_id: int | None = None,
+        user_uid: str | None = None,
         model_name: str | None = None,
         provider_slug: str | None = None,
     ) -> dict:
@@ -92,6 +96,8 @@ class RouteMonitorGateway(BaseGateway):
             qp["end"] = end
         if user_id is not None:
             qp["user_id"] = user_id
+        if user_uid:
+            qp["user_uid"] = user_uid
         if model_name:
             qp["model_name"] = model_name
         if provider_slug:

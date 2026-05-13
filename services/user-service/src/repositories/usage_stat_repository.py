@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from sqlalchemy import case, cast, func, or_, select, Date
+from sqlalchemy.orm import selectinload
 
 from common.db import BaseRepository, ListParams, PaginatedResult
 from common.utils.timezone import format_iso, now
@@ -130,7 +131,9 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         items = list(
             (
                 await self.session.execute(
-                    query.offset((params.page - 1) * params.page_size).limit(params.page_size)
+                    query.options(selectinload(ApiCallLog.api_key))
+                    .offset((params.page - 1) * params.page_size)
+                    .limit(params.page_size)
                 )
             )
             .scalars()

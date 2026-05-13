@@ -34,6 +34,7 @@ async def list_usage_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user_id: int | None = None,
+    user_uid: str | None = None,
     model_name: str | None = None,
     request_id: str | None = None,
     api_key_id: int | None = None,
@@ -42,6 +43,10 @@ async def list_usage_logs(
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> InternalUsageLogListResponse:
+    resolved_user_id = user_id
+    if resolved_user_id is None and user_uid:
+        user = await _get_user_or_404(db, user_uid)
+        resolved_user_id = user.id
     params = ListParams(page=page, page_size=page_size, order_by="created_at")
     if start or end:
         params.time_field = "created_at"
@@ -49,11 +54,11 @@ async def list_usage_logs(
         params.end = end
         params.validate_time_range(default_end=now(), default_days=30)
     result = await UsageStatService.list_usage_logs(
-        db, params=params, user_id=user_id, model_name=model_name,
+        db, params=params, user_id=resolved_user_id, model_name=model_name,
         request_id=request_id, api_key_id=api_key_id,
     )
     return InternalUsageLogListResponse(
-        items=[InternalUsageLogItem.model_validate(log) for log in result.items],
+        items=[InternalUsageLogItem.from_orm_instance(log) for log in result.items],
         total=result.total,
         page=result.page,
         page_size=result.page_size,
@@ -63,6 +68,7 @@ async def list_usage_logs(
 @router.get("/usage/stats", summary="List usage stats")
 async def list_usage_stats(
     user_id: int | None = None,
+    user_uid: str | None = None,
     model_name: str | None = None,
     api_key_id: int | None = None,
     start: datetime | None = None,
@@ -70,6 +76,10 @@ async def list_usage_stats(
     _: None = Depends(verify_internal_secret),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[InternalUsageStatItem]:
+    resolved_user_id = user_id
+    if resolved_user_id is None and user_uid:
+        user = await _get_user_or_404(db, user_uid)
+        resolved_user_id = user.id
     params = ListParams(page=1, page_size=1000, order_by="stat_hour")
     if start or end:
         params.time_field = "stat_hour"
@@ -78,12 +88,12 @@ async def list_usage_stats(
         params.validate_time_range(default_end=now(), default_days=30)
     if api_key_id is not None:
         items = await UsageStatService.get_user_stats(
-            db, user_id=user_id, start=params.start, end=params.end,
+            db, user_id=resolved_user_id, start=params.start, end=params.end,
             model_name=model_name, api_key_id=api_key_id,
         )
     else:
         items = await UsageStatService.get_all_stats(
-            db, start=params.start, end=params.end, user_id=user_id, model_name=model_name,
+            db, start=params.start, end=params.end, user_id=resolved_user_id, model_name=model_name,
         )
     return [InternalUsageStatItem.model_validate(s) for s in items]
 

@@ -310,7 +310,7 @@ async def list_usage_logs(
         "code": 200,
         "message": "success",
         "data": {
-            "items": [ApiCallLogItem.model_validate(item) for item in result.items],
+            "items": [ApiCallLogItem.from_orm_instance(item) for item in result.items],
             "total": result.total,
             "page": result.page,
             "page_size": result.page_size,

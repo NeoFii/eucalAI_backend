@@ -10,6 +10,7 @@ class InternalUsageLogItem(BaseModel):
     user_id: int
     request_id: str
     api_key_id: int | None = None
+    api_key_name: str | None = None
     model_name: str
     selected_model: str | None = None
     provider_slug: str | None = None
@@ -36,6 +37,13 @@ class InternalUsageLogItem(BaseModel):
     cost_detail: dict | None = None
     created_at: datetime
     updated_at: datetime | None = None
+
+    @classmethod
+    def from_orm_instance(cls, obj: object) -> "InternalUsageLogItem":
+        data = {c.key: getattr(obj, c.key) for c in obj.__table__.columns}
+        key_rel = getattr(obj, "api_key", None)
+        data["api_key_name"] = key_rel.name if key_rel else None
+        return cls.model_validate(data)
 
     model_config = ConfigDict(from_attributes=True)
 

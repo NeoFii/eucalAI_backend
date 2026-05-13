@@ -17,7 +17,6 @@ class RouteRequestListItem(DateTimeModel):
 
     id: int
     request_id: str
-    user_id: int
     user_uid: Optional[str] = None
     api_key_id: Optional[int] = None
     model_name: str

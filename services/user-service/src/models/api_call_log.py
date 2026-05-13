@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy.orm import relationship
 
 from common.db.base import SnowflakeIdMixin
 from common.utils.timezone import now
@@ -50,6 +51,7 @@ class ApiCallLog(Base, SnowflakeIdMixin):
         nullable=True,
         comment="FK user_api_keys.id, NULL if key not used",
     )
+    api_key = relationship("UserApiKey", lazy="raise", foreign_keys=[api_key_id])
     model_name = Column(String(64), nullable=False, comment="Requested model name")
     selected_model = Column(String(64), nullable=True, comment="Routed model name")
     provider_slug = Column(String(32), nullable=True, comment="Provider identifier")

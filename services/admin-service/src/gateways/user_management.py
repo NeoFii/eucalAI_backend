@@ -168,13 +168,16 @@ class UserManagementGateway(BaseGateway):
 
     async def list_usage_logs(
         self, *, page: int = 1, page_size: int = 20,
-        user_id: int | None = None, model_name: str | None = None,
+        user_id: int | None = None, user_uid: str | None = None,
+        model_name: str | None = None,
         start: str | None = None, end: str | None = None,
         request_id: str | None = None, api_key_id: int | None = None,
     ) -> dict:
         qp: dict = {"page": page, "page_size": page_size}
         if user_id is not None:
             qp["user_id"] = user_id
+        if user_uid:
+            qp["user_uid"] = user_uid
         if model_name:
             qp["model_name"] = model_name
         if start:
@@ -188,13 +191,16 @@ class UserManagementGateway(BaseGateway):
         return await self._get("/api/v1/internal/usage/logs", query_params=qp)
 
     async def list_usage_stats(
-        self, *, user_id: int | None = None, model_name: str | None = None,
+        self, *, user_id: int | None = None, user_uid: str | None = None,
+        model_name: str | None = None,
         start: str | None = None, end: str | None = None,
         api_key_id: int | None = None,
     ) -> list[dict]:
         qp: dict = {}
         if user_id is not None:
             qp["user_id"] = user_id
+        if user_uid:
+            qp["user_uid"] = user_uid
         if model_name:
             qp["model_name"] = model_name
         if start:

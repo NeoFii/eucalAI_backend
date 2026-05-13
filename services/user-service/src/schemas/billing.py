@@ -137,6 +137,7 @@ class ApiCallLogItem(DateTimeModel):
     id: int
     request_id: str
     api_key_id: Optional[int] = None
+    api_key_name: Optional[str] = None
     model_name: str = Field(exclude=True)
     selected_model: Optional[str] = Field(default=None, exclude=True)
     provider_slug: Optional[str] = Field(default=None, exclude=True)
@@ -160,6 +161,13 @@ class ApiCallLogItem(DateTimeModel):
     @property
     def effective_model(self) -> str:
         return self.selected_model or self.model_name
+
+    @classmethod
+    def from_orm_instance(cls, obj: object) -> "ApiCallLogItem":
+        data = {c.key: getattr(obj, c.key) for c in obj.__table__.columns}
+        key_rel = getattr(obj, "api_key", None)
+        data["api_key_name"] = key_rel.name if key_rel else None
+        return cls.model_validate(data)
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -345,6 +345,7 @@ async def list_usage_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user_id: int | None = None,
+    user_uid: str | None = None,
     model_name: str | None = None,
     request_id: str | None = None,
     api_key_id: int | None = None,
@@ -356,6 +357,7 @@ async def list_usage_logs(
         page=page,
         page_size=page_size,
         user_id=user_id,
+        user_uid=user_uid,
         model_name=model_name,
         request_id=request_id,
         api_key_id=api_key_id,
@@ -375,6 +377,7 @@ async def list_usage_logs(
 @router.get("/usage/stats", response_model=UserUsageStatListResponse, summary="List usage stats")
 async def list_usage_stats(
     user_id: int | None = None,
+    user_uid: str | None = None,
     model_name: str | None = None,
     api_key_id: int | None = None,
     start: datetime | None = None,
@@ -383,6 +386,7 @@ async def list_usage_stats(
 ) -> UserUsageStatListResponse:
     items = await _gateway.list_usage_stats(
         user_id=user_id,
+        user_uid=user_uid,
         model_name=model_name,
         api_key_id=api_key_id,
         start=format_iso(start),

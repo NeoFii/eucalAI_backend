@@ -174,9 +174,9 @@ class UserTransactionListResponse(AdminBaseResponse):
 
 class UserUsageLogItem(DateTimeModel):
     id: int
-    user_id: int
     request_id: str
     api_key_id: Optional[int] = None
+    api_key_name: Optional[str] = None
     model_name: str
     selected_model: Optional[str] = None
     provider_slug: Optional[str] = None
@@ -211,7 +211,6 @@ class UserUsageLogListResponse(AdminBaseResponse):
 
 class UserUsageStatItem(DateTimeModel):
     id: int
-    user_id: int
     api_key_id: Optional[int] = None
     model_name: str
     stat_hour: datetime
