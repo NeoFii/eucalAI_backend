@@ -53,11 +53,11 @@
 | (unique) | email | 唯一 |
 
 **外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| (self-ref) | created_by_admin_id | admin_users.id | SET NULL |
-| (self-ref) | updated_by_admin_id | admin_users.id | SET NULL |
-| (self-ref) | password_changed_by_admin_id | admin_users.id | SET NULL |
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| created_by_admin_id | admin_users.id | SET NULL |
+| updated_by_admin_id | admin_users.id | SET NULL |
+| password_changed_by_admin_id | admin_users.id | SET NULL |
 
 **CHECK 约束：**
 | 约束名 | 表达式 |
@@ -67,15 +67,35 @@
 
 ---
 
-## 2. admin_audit_logs — 管理员操作审计日志
+## 2. audit_action_definitions — 审计操作码注册表
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| code | VARCHAR(100) | NO | — | 操作码（主键，如 create_admin） |
+| label | VARCHAR(120) | NO | — | 中文显示名 |
+| category | VARCHAR(32) | NO | — | 分类分组（governance/auth/user_management/model_catalog/routing_config/voucher/pool） |
+| resource_type | VARCHAR(50) | NO | — | 关联资源类型（admin_user/user/model_vendor 等） |
+| description | VARCHAR(255) | YES | NULL | 可选详细说明 |
+| is_active | BOOLEAN | NO | true | 是否允许新日志使用此 code |
+| sort_order | INT | NO | 0 | 前端展示排序 |
+| created_at | DATETIME | NO | now() | 创建时间 |
+
+**索引：**
+| 索引名 | 列 | 类型 |
+|--------|---|------|
+| PRIMARY | code | 主键（自然键） |
+
+---
+
+## 3. admin_audit_logs — 管理员操作审计日志
 
 | 列名 | 类型 | 可空 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | id | BIGINT | NO | AUTO_INCREMENT | 主键 |
 | actor_admin_id | BIGINT | NO | — | 操作者 admin id |
 | target_admin_id | BIGINT | YES | NULL | 操作目标 admin id |
-| action | VARCHAR(100) | NO | — | 操作码（如 create_admin, reset_admin_password） |
-| resource_type | VARCHAR(50) | NO | — | 资源类型（如 admin_user, pool） |
+| action | VARCHAR(100) | NO | — | 操作码（FK → audit_action_definitions.code） |
+| resource_type | VARCHAR(50) | NO | — | 资源类型（冗余，方便直接过滤） |
 | resource_id | VARCHAR(100) | YES | NULL | 资源标识 |
 | status | VARCHAR(20) | NO | — | success / failed |
 | before_data | JSON | YES | NULL | 变更前数据快照 |
@@ -89,26 +109,139 @@
 | 索引名 | 列 | 类型 |
 |--------|---|------|
 | PRIMARY | id | 主键 |
-| (index) | actor_admin_id | 普通 |
-| (index) | target_admin_id | 普通 |
-| (index) | action | 普通 |
-| (index) | resource_type | 普通 |
+| ix_admin_audit_logs_actor | actor_admin_id | 普通 |
+| ix_admin_audit_logs_target | target_admin_id | 普通 |
+| ix_admin_audit_logs_action | action | 普通 |
+| ix_admin_audit_logs_resource_type | resource_type | 普通 |
 | ix_admin_audit_logs_created_at | created_at | 普通 |
 
 **外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| — | actor_admin_id | admin_users.id | RESTRICT |
-| — | target_admin_id | admin_users.id | SET NULL |
+| 列 | 引用 | ON DELETE | ON UPDATE |
+|---|------|----------|-----------|
+| actor_admin_id | admin_users.id | RESTRICT | — |
+| target_admin_id | admin_users.id | SET NULL | — |
+| action | audit_action_definitions.code | RESTRICT | CASCADE |
 
 ---
 
-## 3. pools — 账号池
+## 4. model_vendors — 模型研发商
 
 | 列名 | 类型 | 可空 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | id | BIGINT | NO | Snowflake | 内部主键 |
-| slug | VARCHAR(64) | NO | — | 引用标识（唯一） |
+| slug | VARCHAR(80) | NO | — | 研发商标识 |
+| name | VARCHAR(120) | NO | — | 显示名称 |
+| logo_url | VARCHAR(512) | YES | NULL | Logo URL |
+| is_active | BOOLEAN | NO | true | 是否启用 |
+| sort_order | INT | NO | 0 | 排序权重 |
+| created_at | DATETIME | NO | now() | 创建时间 |
+| updated_at | DATETIME | NO | now() | 更新时间 |
+
+**索引：**
+| 索引名 | 列 | 类型 |
+|--------|---|------|
+| PRIMARY | id | 主键 |
+| (unique) | slug | 唯一 |
+
+---
+
+## 5. model_categories — 模型能力分类
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| id | BIGINT | NO | Snowflake | 内部主键 |
+| key | VARCHAR(80) | NO | — | 分类标识 |
+| name | VARCHAR(120) | NO | — | 显示名称 |
+| sort_order | INT | NO | 0 | 排序权重 |
+| is_active | BOOLEAN | NO | true | 是否启用 |
+| created_at | DATETIME | NO | now() | 创建时间 |
+| updated_at | DATETIME | NO | now() | 更新时间 |
+
+**索引：**
+| 索引名 | 列 | 类型 |
+|--------|---|------|
+| PRIMARY | id | 主键 |
+| (unique) | key | 唯一 |
+
+---
+
+## 6. supported_models — 支持的模型目录
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| id | BIGINT | NO | Snowflake | 内部主键 |
+| slug | VARCHAR(120) | NO | — | 模型标识（面向用户） |
+| routing_slug | VARCHAR(200) | YES | NULL | 路由用 slug，对应 pool_models.model_slug |
+| name | VARCHAR(160) | NO | — | 模型显示名称 |
+| vendor_id | BIGINT | NO | — | 研发商 id（FK） |
+| summary | VARCHAR(255) | YES | NULL | 模型卡片摘要 |
+| description | TEXT | YES | NULL | 模型详细描述 |
+| input_price_per_million | BIGINT | YES | NULL | 每百万输入 token 价格（微元） |
+| output_price_per_million | BIGINT | YES | NULL | 每百万输出 token 价格（微元） |
+| cached_input_price_per_million | BIGINT | YES | NULL | 缓存命中输入价格（微元） |
+| capability_tags | JSON | NO | [] | 能力标签列表 |
+| context_window | INT | YES | NULL | 上下文窗口 token 数 |
+| max_output_tokens | INT | YES | NULL | 最大输出 token 数 |
+| is_reasoning_model | BOOLEAN | NO | false | 是否为推理模型 |
+| is_active | BOOLEAN | NO | true | 是否在线（false=归档） |
+| sort_order | INT | NO | 0 | 排序权重 |
+| created_at | DATETIME | NO | now() | 创建时间 |
+| updated_at | DATETIME | NO | now() | 更新时间 |
+
+**索引：**
+| 索引名 | 列 | 类型 |
+|--------|---|------|
+| PRIMARY | id | 主键 |
+| (unique) | slug | 唯一 |
+| (unique) | routing_slug | 唯一 |
+| ix_supported_models_vendor_id | vendor_id | 普通 |
+
+**外键：**
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| vendor_id | model_vendors.id | RESTRICT |
+
+**CHECK 约束：**
+| 约束名 | 表达式 |
+|--------|--------|
+| chk_active_needs_routing_slug | is_active = 0 OR routing_slug IS NOT NULL |
+| chk_active_needs_pricing | is_active = 0 OR (input_price_per_million IS NOT NULL AND output_price_per_million IS NOT NULL) |
+
+---
+
+## 7. supported_model_category_map — 模型-分类多对多映射
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| id | BIGINT | NO | Snowflake | 内部主键 |
+| model_id | BIGINT | NO | — | 模型 id |
+| category_id | BIGINT | NO | — | 分类 id |
+| sort_order | INT | NO | 0 | 模型内分类排序 |
+| created_at | DATETIME | NO | now() | 创建时间 |
+| updated_at | DATETIME | NO | now() | 更新时间 |
+
+**索引：**
+| 索引名 | 列 | 类型 |
+|--------|---|------|
+| PRIMARY | id | 主键 |
+| uk_supported_model_category | (model_id, category_id) | 唯一 |
+| ix_model_id | model_id | 普通 |
+| ix_category_id | category_id | 普通 |
+
+**外键：**
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| model_id | supported_models.id | CASCADE |
+| category_id | model_categories.id | CASCADE |
+
+---
+
+## 8. pools — 资源池
+
+| 列名 | 类型 | 可空 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| id | BIGINT | NO | Snowflake | 内部主键 |
+| slug | VARCHAR(64) | NO | — | 引用标识 |
 | name | VARCHAR(128) | NO | — | 显示名称 |
 | base_url | VARCHAR(512) | NO | — | 平台统一请求地址 |
 | is_enabled | BOOLEAN | NO | true | 是否启用 |
@@ -128,24 +261,20 @@
 | (unique) | slug | 唯一 |
 
 **外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| fk_pools_created_by | created_by | admin_users.id | SET NULL |
-| fk_pools_updated_by | updated_by | admin_users.id | SET NULL |
-
-**级联关系：**
-- `pool_models`：CASCADE（池删除时级联删除模型配置）
-- `pool_accounts`：CASCADE（池删除时级联删除账户）
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| created_by | admin_users.id | SET NULL |
+| updated_by | admin_users.id | SET NULL |
 
 ---
 
-## 4. pool_models — 池模型配置
+## 9. pool_models — 资源池模型配置
 
 | 列名 | 类型 | 可空 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | id | BIGINT | NO | Snowflake | 内部主键 |
-| pool_id | BIGINT | NO | — | 所属池 id |
-| model_slug | VARCHAR(120) | NO | — | 系统模型标识（对应路由请求中的模型名） |
+| pool_id | BIGINT | NO | — | 所属资源池 |
+| model_slug | VARCHAR(120) | NO | — | 系统模型标识 |
 | upstream_model_id | VARCHAR(200) | NO | — | 上游实际模型 ID |
 | input_price_per_million | BIGINT | NO | 0 | 每百万输入 token 价格（微元） |
 | output_price_per_million | BIGINT | NO | 0 | 每百万输出 token 价格（微元） |
@@ -159,24 +288,24 @@
 | 索引名 | 列 | 类型 |
 |--------|---|------|
 | PRIMARY | id | 主键 |
-| uq_pool_model | (pool_id, model_slug) | 唯一约束 |
-| ix_pool_models_routing | (pool_id, is_enabled, model_slug) | 复合索引（路由热路径） |
+| uq_pool_model | (pool_id, model_slug) | 唯一 |
+| ix_pool_models_routing | (pool_id, is_enabled, model_slug) | 复合 |
 
 **外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| — | pool_id | pools.id | CASCADE |
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| pool_id | pools.id | CASCADE |
 
 ---
 
-## 5. pool_accounts — 池账户（API Key）
+## 10. pool_accounts — 资源池账号
 
 | 列名 | 类型 | 可空 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | id | BIGINT | NO | Snowflake | 内部主键 |
-| pool_id | BIGINT | NO | — | 所属池 id |
+| pool_id | BIGINT | NO | — | 所属资源池 |
 | name | VARCHAR(128) | NO | — | 备注名 |
-| api_key_enc | JSON | NO | — | AES-256-GCM 加密的 API Key（{ciphertext, iv, tag}） |
+| api_key_enc | JSON | NO | — | AES-256-GCM 加密 {ciphertext, iv, tag} |
 | mask | VARCHAR(32) | NO | — | 脱敏显示（如 sk-...xxxx） |
 | balance | BIGINT | NO | 0 | 余额（微元） |
 | status | SMALLINT | NO | 0 | 0=active 1=disabled 2=exhausted 3=error |
@@ -195,14 +324,14 @@
 | 索引名 | 列 | 类型 |
 |--------|---|------|
 | PRIMARY | id | 主键 |
-| ix_pool_accounts_routing | (pool_id, status) | 复合索引（路由热路径） |
+| ix_pool_accounts_routing | (pool_id, status) | 复合 |
 
 **外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| fk_pool_accounts_pool | pool_id | pools.id | CASCADE |
-| fk_pool_accounts_created_by | created_by | admin_users.id | SET NULL |
-| fk_pool_accounts_updated_by | updated_by | admin_users.id | SET NULL |
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| pool_id | pools.id | CASCADE |
+| created_by | admin_users.id | SET NULL |
+| updated_by | admin_users.id | SET NULL |
 
 **CHECK 约束：**
 | 约束名 | 表达式 |
@@ -211,17 +340,17 @@
 
 ---
 
-## 6. routing_settings — 路由策略配置（KV 表）
+## 11. routing_settings — 路由策略配置（KV 表）
 
 | 列名 | 类型 | 可空 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | key | VARCHAR(64) | NO | — | 配置键（主键） |
 | value | TEXT | NO | — | 配置值 |
-| value_type | VARCHAR(16) | NO | "string" | 值类型：string / float / int |
-| group_name | VARCHAR(32) | NO | — | 分组：general / weights / score_bands / tier_model_map |
+| value_type | VARCHAR(16) | NO | 'string' | 值类型：string/float/int |
+| group_name | VARCHAR(32) | NO | — | 分组：general/weights/score_bands/tier_model_map |
 | label | VARCHAR(128) | NO | — | 管理端显示名 |
-| description | VARCHAR(512) | YES | NULL | 描述 |
-| sort_order | INT | NO | 0 | 排序 |
+| description | VARCHAR(512) | YES | NULL | 配置说明 |
+| sort_order | INT | NO | 0 | 组内排序 |
 | updated_by | BIGINT | YES | NULL | 最后修改者 admin id |
 | updated_at | DATETIME | NO | now() | 更新时间 |
 | created_at | DATETIME | NO | now() | 创建时间 |
@@ -229,130 +358,21 @@
 **索引：**
 | 索引名 | 列 | 类型 |
 |--------|---|------|
-| PRIMARY | key | 主键（业务键） |
+| PRIMARY | key | 主键（自然键） |
 
 **外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| fk_routing_settings_updated_by | updated_by | admin_users.id | SET NULL |
+| 列 | 引用 | ON DELETE |
+|---|------|----------|
+| updated_by | admin_users.id | SET NULL |
 
 ---
 
-## 7. model_vendors — 模型厂商
-
-| 列名 | 类型 | 可空 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| id | BIGINT | NO | Snowflake | 内部主键 |
-| slug | VARCHAR(80) | NO | — | 厂商标识（唯一） |
-| name | VARCHAR(120) | NO | — | 厂商显示名 |
-| logo_url | VARCHAR(512) | YES | NULL | Logo URL |
-| is_active | BOOLEAN | NO | true | 是否启用 |
-| sort_order | INT | NO | 0 | 排序 |
-| created_at | DATETIME | NO | now() | 创建时间 |
-| updated_at | DATETIME | NO | now() | 更新时间 |
-
-**索引：**
-| 索引名 | 列 | 类型 |
-|--------|---|------|
-| PRIMARY | id | 主键 |
-| (unique + index) | slug | 唯一 |
-
----
-
-## 8. model_categories — 模型能力分类
-
-| 列名 | 类型 | 可空 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| id | BIGINT | NO | Snowflake | 内部主键 |
-| key | VARCHAR(80) | NO | — | 分类键（唯一） |
-| name | VARCHAR(120) | NO | — | 分类显示名 |
-| sort_order | INT | NO | 0 | 排序 |
-| is_active | BOOLEAN | NO | true | 是否启用 |
-| created_at | DATETIME | NO | now() | 创建时间 |
-| updated_at | DATETIME | NO | now() | 更新时间 |
-
-**索引：**
-| 索引名 | 列 | 类型 |
-|--------|---|------|
-| PRIMARY | id | 主键 |
-| (unique + index) | key | 唯一 |
-
----
-
-## 9. supported_models — 对外模型目录
-
-| 列名 | 类型 | 可空 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| id | BIGINT | NO | Snowflake | 内部主键 |
-| slug | VARCHAR(120) | NO | — | 模型标识（唯一，面向用户） |
-| routing_slug | VARCHAR(200) | YES | NULL | 路由用 slug，对应 pool_models.model_slug |
-| name | VARCHAR(160) | NO | — | 模型显示名 |
-| vendor_id | BIGINT | NO | — | 所属厂商 id |
-| summary | VARCHAR(255) | YES | NULL | 模型卡片摘要 |
-| description | TEXT | YES | NULL | 模型详细描述 |
-| input_price_per_million | BIGINT | YES | NULL | 每百万输入 token 价格（微元） |
-| output_price_per_million | BIGINT | YES | NULL | 每百万输出 token 价格（微元） |
-| cached_input_price_per_million | BIGINT | YES | NULL | 缓存命中输入价格（微元） |
-| capability_tags | JSON | NO | [] | 能力标签列表 |
-| context_window | INT | YES | NULL | 上下文窗口 token 数 |
-| max_output_tokens | INT | YES | NULL | 最大输出 token 数 |
-| is_reasoning_model | BOOLEAN | NO | false | 是否为推理模型 |
-| is_active | BOOLEAN | NO | true | 是否上架 |
-| sort_order | INT | NO | 0 | 排序 |
-| created_at | DATETIME | NO | now() | 创建时间 |
-| updated_at | DATETIME | NO | now() | 更新时间 |
-
-**索引：**
-| 索引名 | 列 | 类型 |
-|--------|---|------|
-| PRIMARY | id | 主键 |
-| (unique + index) | slug | 唯一 |
-| (unique + index) | routing_slug | 唯一 |
-| (index) | vendor_id | 普通 |
-
-**外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| — | vendor_id | model_vendors.id | RESTRICT |
-
-**CHECK 约束：**
-| 约束名 | 表达式 |
-|--------|--------|
-| chk_active_needs_routing_slug | NOT (is_active = 1 AND routing_slug IS NULL) |
-| chk_active_needs_pricing | NOT (is_active = 1 AND (input_price_per_million IS NULL OR output_price_per_million IS NULL)) |
-
----
-
-## 10. supported_model_category_map — 模型-分类多对多映射
-
-| 列名 | 类型 | 可空 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| id | BIGINT | NO | Snowflake | 内部主键 |
-| model_id | BIGINT | NO | — | 模型 id |
-| category_id | BIGINT | NO | — | 分类 id |
-| sort_order | INT | NO | 0 | 模型内分类排序 |
-| created_at | DATETIME | NO | now() | 创建时间 |
-| updated_at | DATETIME | NO | now() | 更新时间 |
-
-**索引：**
-| 索引名 | 列 | 类型 |
-|--------|---|------|
-| PRIMARY | id | 主键 |
-| uk_supported_model_category | (model_id, category_id) | 唯一约束 |
-| (index) | model_id | 普通 |
-| (index) | category_id | 普通 |
-
-**外键：**
-| 约束名 | 列 | 引用 | ON DELETE |
-|--------|---|------|----------|
-| — | model_id | supported_models.id | CASCADE |
-| — | category_id | model_categories.id | CASCADE |
-
----
-
-## 表关系总览
+## 外键关系总览
 
 ```
+audit_action_definitions
+    └── admin_audit_logs.action (RESTRICT / CASCADE on UPDATE)
+
 admin_users (self-ref: created_by, updated_by, password_changed_by)
     ├── admin_audit_logs.actor_admin_id (RESTRICT)
     ├── admin_audit_logs.target_admin_id (SET NULL)
@@ -382,12 +402,29 @@ supported_models
 
 | Mixin | 提供的列 |
 |-------|---------|
-| SnowflakeIdMixin | `id BIGINT PRIMARY KEY AUTO_INCREMENT` |
-| TimestampMixin | `created_at DATETIME NOT NULL`, `updated_at DATETIME NOT NULL` |
-| SoftDeleteMixin | `deleted_at DATETIME NULL`（当前未使用） |
+| SnowflakeIdMixin | `id BIGINT PRIMARY KEY` (Snowflake 生成) |
+| TimestampMixin | `created_at DATETIME NOT NULL`, `updated_at DATETIME NOT NULL` (自动维护) |
 
 ---
 
 ## 价格存储约定
 
-所有价格字段使用 **BIGINT 微元**（1 元 = 1,000,000 微元），避免浮点精度问题。字段命名统一为 `*_price_per_million`，表示每百万 token 的价格。
+所有价格字段使用 **BIGINT 微元**（1 元 = 1,000,000 微元），避免浮点精度问题。字段命名统一为 `*_price_per_million`，表示每百万 token 的价格（微元）。
+
+---
+
+## 表清单（共 11 张）
+
+| # | 表名 | 主键类型 | 说明 |
+|---|------|---------|------|
+| 1 | admin_users | Snowflake | 管理员账户 |
+| 2 | audit_action_definitions | 自然键 (code) | 审计操作码注册表 |
+| 3 | admin_audit_logs | AUTO_INCREMENT | 管理员操作审计日志 |
+| 4 | model_vendors | Snowflake | 模型研发商 |
+| 5 | model_categories | Snowflake | 模型能力分类 |
+| 6 | supported_models | Snowflake | 支持的模型目录 |
+| 7 | supported_model_category_map | Snowflake | 模型-分类多对多映射 |
+| 8 | pools | Snowflake | 资源池 |
+| 9 | pool_models | Snowflake | 资源池模型配置 |
+| 10 | pool_accounts | Snowflake | 资源池账号 |
+| 11 | routing_settings | 自然键 (key) | 路由策略配置 KV 表 |

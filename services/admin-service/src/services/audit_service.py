@@ -84,7 +84,7 @@ class AdminAuditService:
     async def record(
         db: AsyncSession,
         *,
-        actor_admin_id: int,
+        actor_admin_id: int | None,
         target_admin_id: int | None,
         action: str,
         resource_type: str,
@@ -118,7 +118,7 @@ class AdminAuditService:
     async def record_auto(
         db: AsyncSession,
         *,
-        actor_admin_id: int,
+        actor_admin_id: int | None,
         target_admin_id: int | None = None,
         action: str,
         resource_type: str,

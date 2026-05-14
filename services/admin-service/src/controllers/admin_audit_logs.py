@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.api import PaginatedResponse
 from common.core.exceptions import NotFoundException
 from core.dependencies import get_db_session
+from core.enums import AdminRole
 from core.policies import require_super_admin
 from models import AdminAuditLog, AdminUser
 from schemas import (
@@ -22,10 +23,18 @@ from services.audit_service import AdminAuditService
 router = APIRouter(prefix="/admin-audit-logs", tags=["admin-audit-logs"])
 
 
+_ROLE_NAMES = {AdminRole.ADMIN: "admin", AdminRole.SUPER_ADMIN: "super_admin"}
+
+
 def _build_actor(admin: AdminUser | None) -> AdminAuditActor | None:
     if admin is None:
         return None
-    return AdminAuditActor(uid=str(admin.uid), email=admin.email, name=admin.name, role=admin.role)
+    return AdminAuditActor(
+        uid=str(admin.uid),
+        email=admin.email,
+        name=admin.name,
+        role=_ROLE_NAMES.get(admin.role, "admin"),
+    )
 
 
 def _build_item(log: AdminAuditLog, action_labels: dict[str, str]) -> AdminAuditLogItem:

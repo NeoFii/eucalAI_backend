@@ -42,9 +42,9 @@ logger = logging.getLogger(__name__)
 def _pool_model_item(m: PoolModel) -> PoolModelItem:
     return PoolModelItem(
         id=m.id, model_slug=m.model_slug, upstream_model_id=m.upstream_model_id,
-        input_price_per_million=m.input_price_per_million,
-        output_price_per_million=m.output_price_per_million,
-        cached_input_price_per_million=m.cached_input_price_per_million,
+        cost_input_per_million=m.cost_input_per_million,
+        cost_output_per_million=m.cost_output_per_million,
+        cost_cached_input_per_million=m.cost_cached_input_per_million,
         context_length=m.context_length, is_enabled=m.is_enabled,
     )
 
@@ -234,9 +234,9 @@ class PoolService:
         pm = PoolModel(
             pool_id=pool.id, model_slug=payload.model_slug,
             upstream_model_id=payload.upstream_model_id,
-            input_price_per_million=payload.input_price_per_million,
-            output_price_per_million=payload.output_price_per_million,
-            cached_input_price_per_million=payload.cached_input_price_per_million,
+            cost_input_per_million=payload.cost_input_per_million,
+            cost_output_per_million=payload.cost_output_per_million,
+            cost_cached_input_per_million=payload.cost_cached_input_per_million,
             context_length=payload.context_length,
         )
         repo.add(pm)
@@ -435,9 +435,9 @@ class PoolService:
                 "upstream_model": pool_model.upstream_model_id,
                 "priority": pool.priority,
                 "weight": account.weight,
-                "input_price_per_million": pool_model.input_price_per_million,
-                "output_price_per_million": pool_model.output_price_per_million,
-                "cached_input_price_per_million": pool_model.cached_input_price_per_million or 0,
+                "cost_input_per_million": pool_model.cost_input_per_million,
+                "cost_output_per_million": pool_model.cost_output_per_million,
+                "cost_cached_input_per_million": pool_model.cost_cached_input_per_million or 0,
                 "pool_account_id": int(account.id),
                 "rpm_limit": account.rpm_limit,
                 "tpm_limit": account.tpm_limit,
@@ -490,11 +490,11 @@ class PoolService:
                 existing.append(model_id)
                 pm = existing_map[model_id]
                 input_price, output_price = _extract_model_pricing(item)
-                if pm.input_price_per_million == 0 and input_price > 0:
-                    pm.input_price_per_million = input_price
+                if pm.cost_input_per_million == 0 and input_price > 0:
+                    pm.cost_input_per_million = input_price
                     updated.append(model_id)
-                if pm.output_price_per_million == 0 and output_price > 0:
-                    pm.output_price_per_million = output_price
+                if pm.cost_output_per_million == 0 and output_price > 0:
+                    pm.cost_output_per_million = output_price
                     if model_id not in updated:
                         updated.append(model_id)
             else:
@@ -502,8 +502,8 @@ class PoolService:
                 pm = PoolModel(
                     pool_id=pool.id, model_slug=model_id,
                     upstream_model_id=model_id,
-                    input_price_per_million=input_price,
-                    output_price_per_million=output_price,
+                    cost_input_per_million=input_price,
+                    cost_output_per_million=output_price,
                 )
                 model_repo.add(pm)
                 added.append(model_id)

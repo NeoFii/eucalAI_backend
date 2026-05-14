@@ -84,10 +84,28 @@ class VoucherRedemptionCodeRepository(BaseRepository[VoucherRedemptionCode]):
     ) -> PaginatedResult[VoucherRedemptionCode]:
         if params.order_by is None:
             params.order_by = "redeemed_at"
-        return await self.get_list(
-            params,
-            extra_filters=(
+
+        statement = (
+            select(VoucherRedemptionCode)
+            .options(selectinload(VoucherRedemptionCode.redeemed_user))
+            .where(
                 VoucherRedemptionCode.redeemed_user_id == user_id,
                 VoucherRedemptionCode.status == VoucherRedemptionCode.STATUS_REDEEMED,
-            ),
+            )
+        )
+
+        order_column = getattr(VoucherRedemptionCode, params.order_by)
+        order_fn = asc if params.order_dir.lower() == "asc" else desc
+        statement = statement.order_by(order_fn(order_column))
+
+        count_statement = select(func.count()).select_from(statement.order_by(None).subquery())
+        total = int((await self.session.execute(count_statement)).scalar() or 0)
+
+        offset = (params.page - 1) * params.page_size
+        rows = await self.session.execute(statement.offset(offset).limit(params.page_size))
+        return PaginatedResult(
+            items=list(rows.scalars().all()),
+            total=total,
+            page=params.page,
+            page_size=params.page_size,
         )

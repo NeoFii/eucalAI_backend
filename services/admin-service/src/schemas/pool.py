@@ -18,17 +18,17 @@ from common.api import PaginatedResponse
 class PoolModelCreate(BaseModel):
     model_slug: str = Field(..., min_length=1, max_length=120)
     upstream_model_id: str = Field(..., min_length=1, max_length=200)
-    input_price_per_million: int = Field(default=0, ge=0)
-    output_price_per_million: int = Field(default=0, ge=0)
-    cached_input_price_per_million: int | None = Field(default=None, ge=0)
+    cost_input_per_million: int = Field(default=0, ge=0)
+    cost_output_per_million: int = Field(default=0, ge=0)
+    cost_cached_input_per_million: int | None = Field(default=None, ge=0)
     context_length: int | None = Field(default=None, ge=1)
 
 
 class PoolModelUpdate(BaseModel):
     upstream_model_id: str | None = Field(default=None, min_length=1, max_length=200)
-    input_price_per_million: int | None = Field(default=None, ge=0)
-    output_price_per_million: int | None = Field(default=None, ge=0)
-    cached_input_price_per_million: int | None = Field(default=None, ge=0)
+    cost_input_per_million: int | None = Field(default=None, ge=0)
+    cost_output_per_million: int | None = Field(default=None, ge=0)
+    cost_cached_input_per_million: int | None = Field(default=None, ge=0)
     context_length: int | None = Field(default=None, ge=1)
     is_enabled: bool | None = None
 
@@ -37,9 +37,9 @@ class PoolModelItem(BaseModel):
     id: int
     model_slug: str
     upstream_model_id: str
-    input_price_per_million: int
-    output_price_per_million: int
-    cached_input_price_per_million: int | None
+    cost_input_per_million: int
+    cost_output_per_million: int
+    cost_cached_input_per_million: int | None
     context_length: int | None
     is_enabled: bool
 

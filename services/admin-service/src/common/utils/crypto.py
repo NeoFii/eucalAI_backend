@@ -30,12 +30,12 @@ def validate_master_key(master_key_hex: str) -> bytes:
         )
 
 
-def encrypt_api_key(plaintext: str, master_key_hex: str) -> dict:
+def encrypt_api_key(plaintext: str, master_key_hex: str, *, key_version: int = 1) -> dict:
     """
     加密明文 API Key。
 
     Returns:
-        {"ciphertext": str, "iv": str, "tag": str}  —— 均为 Base64 编码
+        {"ciphertext": str, "iv": str, "tag": str, "key_version": int}  —— 均为 Base64 编码
     """
     key = validate_master_key(master_key_hex)
     iv = os.urandom(12)  # 96-bit nonce
@@ -48,6 +48,7 @@ def encrypt_api_key(plaintext: str, master_key_hex: str) -> dict:
         "ciphertext": base64.b64encode(ct).decode("ascii"),
         "iv": base64.b64encode(iv).decode("ascii"),
         "tag": base64.b64encode(tag).decode("ascii"),
+        "key_version": key_version,
     }
 
 

@@ -225,9 +225,9 @@ async def _resolve_target_with_affinity(
                             "api_key": str(ch["api_key"]).strip(),
                             "api_base": api_base,
                             "upstream_model": str(ch["upstream_model"]).strip(),
-                            "input_price_per_million": ch.get("input_price_per_million", 0),
-                            "output_price_per_million": ch.get("output_price_per_million", 0),
-                            "cached_input_price_per_million": ch.get("cached_input_price_per_million", 0),
+                            "input_price_per_million": ch.get("cost_input_per_million", 0),
+                            "output_price_per_million": ch.get("cost_output_per_million", 0),
+                            "cached_input_price_per_million": ch.get("cost_cached_input_per_million", 0),
                             "pool_account_id": ch.get("pool_account_id"),
                             "rpm_limit": ch.get("rpm_limit"),
                         }

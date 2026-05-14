@@ -58,10 +58,10 @@ class ModelCategory(Base, SnowflakeIdMixin, TimestampMixin):
 class SupportedModel(Base, SnowflakeIdMixin, TimestampMixin):
     """Model exposed in the public catalog."""
 
-    __tablename__ = "supported_models"
+    __tablename__ = "model_catalog"
 
     slug = Column(String(120), unique=True, nullable=False, index=True, comment="Model slug")
-    routing_slug = Column(String(200), unique=True, nullable=True, index=True, comment="路由用 slug，对应 pool_models.model_slug")
+    routing_slug = Column(String(200), unique=True, nullable=True, index=True, comment="路由用 slug，对应 pool_model_configs.model_slug")
     name = Column(String(160), nullable=False, comment="Model display name")
     vendor_id = Column(
         BigInteger,
@@ -72,9 +72,9 @@ class SupportedModel(Base, SnowflakeIdMixin, TimestampMixin):
     )
     summary = Column(String(255), nullable=True, comment="Model card summary")
     description = Column(Text, nullable=True, comment="Model detail description")
-    input_price_per_million = Column(BigInteger, nullable=True, comment="Input price per million tokens (micro-yuan)")
-    output_price_per_million = Column(BigInteger, nullable=True, comment="Output price per million tokens (micro-yuan)")
-    cached_input_price_per_million = Column(BigInteger, nullable=True, comment="Cached input price per million tokens (micro-yuan)")
+    sale_input_per_million = Column(BigInteger, nullable=True, comment="用户售价（微元/百万token）")
+    sale_output_per_million = Column(BigInteger, nullable=True, comment="用户售价（微元/百万token）")
+    sale_cached_input_per_million = Column(BigInteger, nullable=True, comment="用户售价，缓存命中（微元/百万token）")
     capability_tags = Column(JSON, nullable=False, default=list, comment="Capability tag list")
     context_window = Column(Integer, nullable=True, comment="Context window tokens")
     max_output_tokens = Column(Integer, nullable=True, comment="Max output tokens")
@@ -100,14 +100,14 @@ class SupportedModel(Base, SnowflakeIdMixin, TimestampMixin):
 class SupportedModelCategoryMap(Base, SnowflakeIdMixin, TimestampMixin):
     """Many-to-many model/category mapping with model-local ordering."""
 
-    __tablename__ = "supported_model_category_map"
+    __tablename__ = "model_catalog_category_map"
     __table_args__ = (
         UniqueConstraint("model_id", "category_id", name="uk_supported_model_category"),
     )
 
     model_id = Column(
         BigInteger,
-        ForeignKey("supported_models.id", ondelete="CASCADE"),
+        ForeignKey("model_catalog.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
         comment="Supported model id",
