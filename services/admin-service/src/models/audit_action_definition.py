@@ -1,6 +1,6 @@
 """Audit action definition model."""
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String
 
 from core.db import Base
 from common.utils.timezone import now
@@ -19,3 +19,10 @@ class AuditActionDefinition(Base):
     is_active = Column(Boolean, nullable=False, default=True, comment="Whether new logs can use this code")
     sort_order = Column(Integer, nullable=False, default=0, comment="Display sort order")
     created_at = Column(DateTime, default=now, nullable=False, comment="Created at")
+    updated_at = Column(DateTime, default=now, onupdate=now, nullable=False, comment="Updated at")
+    updated_by = Column(
+        BigInteger,
+        ForeignKey("admin_users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Last updater admin id",
+    )

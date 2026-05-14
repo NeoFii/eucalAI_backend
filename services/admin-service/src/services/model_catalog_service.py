@@ -84,9 +84,9 @@ class ModelCatalogService:
             "name": model.name,
             "summary": model.summary,
             "description": model.description,
-            "input_price_per_million": model.input_price_per_million,
-            "output_price_per_million": model.output_price_per_million,
-            "cached_input_price_per_million": model.cached_input_price_per_million,
+            "sale_input_per_million": model.sale_input_per_million,
+            "sale_output_per_million": model.sale_output_per_million,
+            "sale_cached_input_per_million": model.sale_cached_input_per_million,
             "capability_tags": list(model.capability_tags or []),
             "context_window": model.context_window,
             "max_output_tokens": model.max_output_tokens,
@@ -375,7 +375,7 @@ class ModelCatalogService:
         if payload.is_active:
             if not payload.routing_slug or not payload.routing_slug.strip():
                 raise ValidationException("活跃模型必须设置路由标识（routing_slug）")
-            if payload.input_price_per_million is None or payload.output_price_per_million is None:
+            if payload.sale_input_per_million is None or payload.sale_output_per_million is None:
                 raise ValidationException("活跃模型必须设置输入和输出定价")
 
         vendor = await ModelCatalogService._resolve_vendor(db, payload.vendor_slug)
@@ -387,9 +387,9 @@ class ModelCatalogService:
             vendor=vendor,
             summary=payload.summary,
             description=payload.description,
-            input_price_per_million=payload.input_price_per_million,
-            output_price_per_million=payload.output_price_per_million,
-            cached_input_price_per_million=payload.cached_input_price_per_million,
+            sale_input_per_million=payload.sale_input_per_million,
+            sale_output_per_million=payload.sale_output_per_million,
+            sale_cached_input_per_million=payload.sale_cached_input_per_million,
             capability_tags=payload.capability_tags,
             context_window=payload.context_window,
             max_output_tokens=payload.max_output_tokens,
@@ -514,9 +514,9 @@ class ModelCatalogService:
         rows = await db.execute(
             select(
                 SupportedModel.routing_slug,
-                SupportedModel.input_price_per_million,
-                SupportedModel.output_price_per_million,
-                SupportedModel.cached_input_price_per_million,
+                SupportedModel.sale_input_per_million,
+                SupportedModel.sale_output_per_million,
+                SupportedModel.sale_cached_input_per_million,
             ).where(
                 SupportedModel.routing_slug.in_(slugs),
                 SupportedModel.routing_slug.isnot(None),

@@ -41,6 +41,8 @@ from utils.email import normalize_email
 
 logger = logging.getLogger(__name__)
 
+MAX_ACTIVE_SESSIONS = 10
+
 _DUMMY_HASH: str | None = None
 
 
@@ -288,6 +290,12 @@ class AuthService:
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
     ) -> tuple[str, str]:
+        session_repo = SessionRepository(db)
+        active_sessions = await session_repo.list_active_for_user(user.id)
+        if len(active_sessions) >= MAX_ACTIVE_SESSIONS:
+            oldest = min(active_sessions, key=lambda s: s.created_at)
+            session_repo.revoke(oldest)
+
         access_token = create_access_token(
             data={"uid": user.uid, "sub": user.uid},
             secret_key=settings.JWT_SECRET_KEY,
@@ -310,7 +318,7 @@ class AuthService:
             ip_address=ip_address,
             expires_at=now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
         )
-        SessionRepository(db).add(session)
+        session_repo.add(session)
         user.last_login_at = now()
         user.last_login_ip = ip_address
         return access_token, refresh_token

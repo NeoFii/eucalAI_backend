@@ -18,10 +18,10 @@ class AdminAuditLog(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True, comment="Internal primary key")
     actor_admin_id = Column(
         BigInteger,
-        ForeignKey("admin_users.id", ondelete="RESTRICT"),
-        nullable=False,
+        ForeignKey("admin_users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
-        comment="Actor admin id",
+        comment="Actor admin id (NULL if admin deleted)",
     )
     target_admin_id = Column(
         BigInteger,

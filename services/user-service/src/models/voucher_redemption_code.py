@@ -41,10 +41,14 @@ class VoucherRedemptionCode(Base, SnowflakeIdMixin, TimestampMixin):
     created_by_admin_uid = Column(String(20), nullable=True, index=True, comment="Creator admin uid (NanoID)")
     remark = Column(String(255), nullable=True, comment="Admin note")
 
-    redeemed_user = relationship("User", lazy="selectin")
+    redeemed_user = relationship("User", lazy="raise")
 
     @property
     def redeemed_user_uid(self) -> str | None:
-        if self.redeemed_user is None:
+        if self.redeemed_user_id is None:
             return None
-        return self.redeemed_user.uid
+        try:
+            user = self.redeemed_user
+        except Exception:
+            return None
+        return user.uid if user else None

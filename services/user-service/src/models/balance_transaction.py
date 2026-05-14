@@ -41,3 +41,11 @@ class BalanceTransaction(Base, SnowflakeIdMixin):
     remark = Column(String(255), nullable=True, comment="admin/system note")
     operator_id = Column(String(20), nullable=True, comment="admin NanoID uid when type=ADMIN_ADJUST")
     created_at = Column(DateTime, default=now, nullable=False, comment="Created at")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.ref_type is None or self.ref_id is None:
+            raise ValueError(
+                f"BalanceTransaction requires ref_type and ref_id for idempotency "
+                f"(type={self.type}, ref_type={self.ref_type}, ref_id={self.ref_id})"
+            )

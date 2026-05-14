@@ -47,7 +47,7 @@ class Pool(SnowflakeIdMixin, TimestampMixin, Base):
 
 
 class PoolModel(SnowflakeIdMixin, TimestampMixin, Base):
-    __tablename__ = "pool_models"
+    __tablename__ = "pool_model_configs"
     __table_args__ = (
         UniqueConstraint("pool_id", "model_slug", name="uq_pool_model"),
         Index("ix_pool_models_routing", "pool_id", "is_enabled", "model_slug"),
@@ -58,9 +58,9 @@ class PoolModel(SnowflakeIdMixin, TimestampMixin, Base):
     )
     model_slug = Column(String(120), nullable=False, comment="系统模型标识")
     upstream_model_id = Column(String(200), nullable=False, comment="上游实际模型 ID")
-    input_price_per_million = Column(BigInteger, nullable=False, default=0, comment="每百万输入 token 价格（微元）")
-    output_price_per_million = Column(BigInteger, nullable=False, default=0, comment="每百万输出 token 价格（微元）")
-    cached_input_price_per_million = Column(BigInteger, nullable=True, comment="缓存命中输入价格（微元）")
+    cost_input_per_million = Column(BigInteger, nullable=False, default=0, comment="采购成本价（微元/百万token）")
+    cost_output_per_million = Column(BigInteger, nullable=False, default=0, comment="采购成本价（微元/百万token）")
+    cost_cached_input_per_million = Column(BigInteger, nullable=True, comment="采购成本价，缓存命中（微元/百万token）")
     context_length = Column(Integer, nullable=True, comment="该平台对此模型的最大上下文长度")
     is_enabled = Column(Boolean, nullable=False, default=True)
 

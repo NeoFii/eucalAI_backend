@@ -8,8 +8,9 @@ from urllib.parse import urlparse
 
 from arq.connections import RedisSettings
 from arq.cron import cron
-from sqlalchemy import select
+from sqlalchemy import select, text
 
+from common.observability import log_event
 from common.utils.timezone import now
 from core.config import settings
 from core.db import close_db, create_engine, get_db_context, init_session_factory
@@ -85,15 +86,56 @@ async def cleanup_expired_verification_codes(ctx: dict) -> None:
         await db.commit()
 
 
+async def cleanup_expired_sessions(ctx: dict) -> None:
+    """Remove sessions expired more than 7 days ago."""
+    del ctx
+    cutoff = now() - timedelta(days=7)
+    async with get_db_context() as db:
+        await db.execute(
+            text("DELETE FROM user_sessions WHERE expires_at < :cutoff"),
+            {"cutoff": cutoff},
+        )
+        await db.commit()
+    logger.info("Cleaned up expired sessions older than %s", cutoff)
+
+
+async def reconcile_balance_ledger(ctx: dict) -> None:
+    """Daily reconciliation: detect drift between users.balance and ledger sum."""
+    del ctx
+    async with get_db_context() as db:
+        result = await db.execute(text("""
+            SELECT u.id, u.uid, u.balance, COALESCE(SUM(bt.amount), 0) AS tx_sum
+            FROM users u
+            LEFT JOIN balance_transactions bt ON bt.user_id = u.id
+            GROUP BY u.id, u.uid, u.balance
+            HAVING u.balance != COALESCE(SUM(bt.amount), 0)
+        """))
+        drifted = result.all()
+        if drifted:
+            for row in drifted:
+                log_event(
+                    logger, "ERROR", "balanceDrift",
+                    user_id=row.id, uid=row.uid,
+                    balance=row.balance, tx_sum=row.tx_sum,
+                    delta=row.balance - row.tx_sum,
+                )
+        else:
+            logger.info("Balance reconciliation passed: no drift detected")
+
+
 def get_worker_settings_kwargs() -> dict:
     return {
         "functions": [
             aggregate_usage_stats,
             cleanup_expired_verification_codes,
+            cleanup_expired_sessions,
+            reconcile_balance_ledger,
         ],
         "cron_jobs": [
             cron(aggregate_usage_stats, minute=0),
             cron(cleanup_expired_verification_codes, hour=3, minute=0),
+            cron(cleanup_expired_sessions, hour=3, minute=30),
+            cron(reconcile_balance_ledger, hour=4, minute=30),
         ],
         "redis_settings": build_redis_settings(),
         "max_jobs": settings.USER_WORKER_CONCURRENCY,
