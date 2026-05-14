@@ -30,6 +30,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --chown=appuser:appuser migrations/ /app/migrations/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
+COPY --chown=appuser:appuser entrypoint.sh /app/entrypoint.sh
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
@@ -38,4 +39,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
 USER appuser
 EXPOSE 8000
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

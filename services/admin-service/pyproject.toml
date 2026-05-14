@@ -31,7 +31,6 @@ dependencies = [
 
 [project.scripts]
 bootstrap-super-admin = "core.bootstrap_superadmin:main"
-seed-routing-config = "scripts.seed_routing_config:main"
 check-env = "scripts.check_env:main"
 
 [build-system]
