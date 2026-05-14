@@ -44,7 +44,7 @@ async def list_requests(
     selected_model: str | None = Query(None, max_length=64),
     provider_slug: str | None = Query(None, max_length=32),
     routing_tier: int | None = Query(None, ge=1, le=5),
-    status: int | None = Query(None, ge=0, le=4),
+    status: int | None = Query(None, ge=200, le=599),
     score_min: float | None = Query(None, ge=0.0, le=10.0),
     score_max: float | None = Query(None, ge=0.0, le=10.0),
     request_id: str | None = Query(None, max_length=64),

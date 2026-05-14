@@ -47,8 +47,8 @@ class UsageStatService:
 
         stat_hour = log.created_at.replace(minute=0, second=0, microsecond=0)
         model_name = log.model_name or "unknown"
-        is_success = log.status == ApiCallLog.STATUS_SUCCESS
-        is_error = log.status == ApiCallLog.STATUS_ERROR
+        is_success = ApiCallLog.is_success(log.status)
+        is_error = ApiCallLog.is_error(log.status)
 
         repo = UsageStatRepository(db)
         for api_key_id in (log.api_key_id, None):
@@ -224,7 +224,7 @@ class UsageStatService:
         )
 
         total_requests = len(logs)
-        success_requests = sum(1 for log in logs if log.status == ApiCallLog.STATUS_SUCCESS)
+        success_requests = sum(1 for log in logs if ApiCallLog.is_success(log.status))
         total_cost = sum(int(log.cost) for log in logs)
 
         per_model: dict[str, dict[str, int]] = defaultdict(
@@ -290,8 +290,8 @@ class UsageStatService:
     @staticmethod
     def _accumulate_bucket(bucket: dict[str, int], log: ApiCallLog) -> None:
         bucket["request_count"] += 1
-        bucket["success_count"] += 1 if log.status == ApiCallLog.STATUS_SUCCESS else 0
-        bucket["error_count"] += 1 if log.status == ApiCallLog.STATUS_ERROR else 0
+        bucket["success_count"] += 1 if ApiCallLog.is_success(log.status) else 0
+        bucket["error_count"] += 1 if ApiCallLog.is_error(log.status) else 0
         bucket["prompt_tokens"] += int(log.prompt_tokens)
         bucket["completion_tokens"] += int(log.completion_tokens)
         bucket["cached_tokens"] += int(log.cached_tokens)

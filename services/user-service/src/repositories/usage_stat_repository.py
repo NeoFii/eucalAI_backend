@@ -35,11 +35,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
     async def get_user_tpm_last_minute(self, user_id: int) -> int:
         """Sum total_tokens for the user over the last 60 seconds.
 
-        Used to surface a real-time TPM gauge (tokens/min currently being
-        consumed) to user / admin UIs. PENDING + SUCCESS rows are both
-        counted: PENDING covers in-flight streamed responses that haven't
-        finalized yet; ERROR / REFUNDED / ABORTED are excluded because they
-        don't represent successful token throughput.
+        Only counts successfully completed requests (status=200).
         """
         cutoff = now() - timedelta(seconds=60)
         result = await self.session.execute(
@@ -47,10 +43,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             .where(
                 ApiCallLog.user_id == user_id,
                 ApiCallLog.created_at >= cutoff,
-                ApiCallLog.status.in_([
-                    ApiCallLog.STATUS_PENDING,
-                    ApiCallLog.STATUS_SUCCESS,
-                ]),
+                ApiCallLog.status == 200,
             )
         )
         return int(result.scalar() or 0)
@@ -200,11 +193,9 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             select(
                 stat_date,
                 func.count().label("request_count"),
-                func.sum(case((ApiCallLog.status == 0, 1), else_=0)).label("pending_count"),
-                func.sum(case((ApiCallLog.status == 1, 1), else_=0)).label("success_count"),
-                func.sum(case((ApiCallLog.status == 2, 1), else_=0)).label("error_count"),
-                func.sum(case((ApiCallLog.status == 3, 1), else_=0)).label("refunded_count"),
-                func.sum(case((ApiCallLog.status == 4, 1), else_=0)).label("aborted_count"),
+                func.sum(case((ApiCallLog.status == 200, 1), else_=0)).label("success_count"),
+                func.sum(case((ApiCallLog.status >= 400, 1), else_=0)).label("error_count"),
+                func.sum(case((ApiCallLog.status == 499, 1), else_=0)).label("aborted_count"),
                 func.sum(ApiCallLog.prompt_tokens).label("prompt_tokens"),
                 func.sum(ApiCallLog.completion_tokens).label("completion_tokens"),
                 func.sum(ApiCallLog.cached_tokens).label("cached_tokens"),
@@ -225,10 +216,8 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             {
                 "date": str(r.stat_date),
                 "request_count": int(r.request_count or 0),
-                "pending_count": int(r.pending_count or 0),
                 "success_count": int(r.success_count or 0),
                 "error_count": int(r.error_count or 0),
-                "refunded_count": int(r.refunded_count or 0),
                 "aborted_count": int(r.aborted_count or 0),
                 "prompt_tokens": int(r.prompt_tokens or 0),
                 "completion_tokens": int(r.completion_tokens or 0),

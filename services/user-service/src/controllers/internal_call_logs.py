@@ -122,7 +122,7 @@ async def update_call_log(
 
     cost = updates.get("cost", 0) or 0
     final_status = updates.get("status")
-    if cost > 0 and final_status == 1:
+    if cost > 0 and final_status == 200:
         total_tokens = updates.get("total_tokens", 0) or 0
         await BalanceService.consume_for_call_log(
             db,
@@ -135,7 +135,7 @@ async def update_call_log(
         await db.commit()
 
     final_status = updates.get("status")
-    if final_status in (1, 2):
+    if final_status is not None and final_status >= 200:
         await UsageStatService.upsert_from_log(db, log)
         await db.commit()
 
@@ -200,13 +200,13 @@ async def batch_call_logs(
         updated += 1
 
         entry_status = entry.get("status")
-        if entry_status in (1, 2):
+        if entry_status is not None and entry_status >= 200:
             finalized_logs.append(existing)
 
         if action == "complete":
             cost = entry.get("cost", 0) or 0
             final_status = entry.get("status")
-            if cost > 0 and final_status == 1:
+            if cost > 0 and final_status == 200:
                 total_tokens = entry.get("total_tokens", 0) or 0
                 success = await BalanceService.consume_for_call_log(
                     db,

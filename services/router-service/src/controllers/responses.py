@@ -75,14 +75,13 @@ async def responses(
         is_stream=is_stream,
         ip=extract_client_ip(raw_request),
         input_hash=input_hash,
-        status=0,
     )
     call_log_created = create_result is not None
 
     if principal.balance <= 0:
         if call_log_created:
             await calllog.update_call_log(
-                request_id=request_id, status=2,
+                request_id=request_id, status=402,
                 error_code="insufficient_balance", error_msg="余额不足",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
@@ -103,7 +102,7 @@ async def responses(
     except RoutingError as exc:
         if call_log_created:
             await calllog.update_call_log(
-                request_id=request_id, status=2,
+                request_id=request_id, status=exc.status_code,
                 error_code=exc.error_code, error_msg=str(exc.detail)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
@@ -111,7 +110,7 @@ async def responses(
     except ChannelRateLimited:
         if call_log_created:
             await calllog.update_call_log(
-                request_id=request_id, status=2,
+                request_id=request_id, status=429,
                 error_code="channel_rate_limited",
                 error_msg="all channels rate-limited",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
@@ -153,7 +152,7 @@ async def responses(
         target_info = fail.target_info
         if call_log_created:
             await calllog.update_call_log(
-                request_id=request_id, status=2,
+                request_id=request_id, status=502,
                 error_code="upstream_error",
                 error_msg=sanitize_error(fail.exc)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
@@ -221,7 +220,7 @@ async def responses(
                 if call_log_created:
                     update_kwargs: dict = {
                         "request_id": request_id,
-                        "status": 1 if stream_ok else 4,
+                        "status": 200 if stream_ok else (502 if abort_reason == "stream_error" else 499),
                         "duration_ms": int((time.monotonic() - t_start) * 1000),
                         "upstream_latency_ms": int(final_latency),
                         "error_code": None if stream_ok else (
@@ -297,7 +296,7 @@ async def responses(
             provider_cached_price=target_info.get("cached_input_price_per_million", 0),
         )
         await calllog.update_call_log(
-            request_id=request_id, status=1,
+            request_id=request_id, status=200,
             duration_ms=int((time.monotonic() - t_start) * 1000),
             upstream_latency_ms=int(upstream_latency_ms),
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,

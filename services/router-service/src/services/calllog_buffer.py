@@ -67,7 +67,7 @@ class CallLogBuffer:
             entry.fields.update(fields)
             cost = fields.get("cost", entry.fields.get("cost", 0))
             status = fields.get("status", entry.fields.get("status"))
-            if cost and cost > 0 and status == 1:
+            if cost and cost > 0 and status == 200:
                 entry.has_billing = True
 
     async def start(self) -> None:
@@ -107,7 +107,7 @@ class CallLogBuffer:
             action = "complete" if entry.has_billing else "create"
             if "status" not in entry.fields:
                 action = "create"
-            elif entry.fields.get("status") in (1, 2, 4) and not entry.has_billing:
+            elif entry.fields.get("status") is not None and entry.fields.get("status") >= 200 and not entry.has_billing:
                 action = "update"
             entries_list.append({
                 "request_id": entry.request_id,

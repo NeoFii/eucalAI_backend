@@ -24,7 +24,7 @@ class InternalCreateCallLogRequest(BaseModel):
     router_trace_id: str | None = Field(None, max_length=64)
     inference_error_code: str | None = Field(None, max_length=32)
     input_hash: str | None = Field(None, max_length=32)
-    status: int = 0
+    status: int | None = None
 
 
 class InternalUpdateCallLogRequest(BaseModel):

@@ -82,7 +82,6 @@ async def messages(
         is_stream=is_stream,
         ip=extract_client_ip(raw_request),
         input_hash=input_hash,
-        status=0,
     )
     call_log_created = create_result is not None
 
@@ -90,7 +89,7 @@ async def messages(
         if call_log_created:
             await calllog.update_call_log(
                 request_id=request_id,
-                status=2,
+                status=402,
                 error_code="insufficient_balance",
                 error_msg="余额不足",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
@@ -113,7 +112,7 @@ async def messages(
         if call_log_created:
             await calllog.update_call_log(
                 request_id=request_id,
-                status=2,
+                status=exc.status_code,
                 error_code=exc.error_code,
                 error_msg=str(exc.detail)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
@@ -123,7 +122,7 @@ async def messages(
         if call_log_created:
             await calllog.update_call_log(
                 request_id=request_id,
-                status=2,
+                status=429,
                 error_code="channel_rate_limited",
                 error_msg="all channels rate-limited",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
@@ -200,7 +199,7 @@ async def messages(
         if call_log_created:
             await calllog.update_call_log(
                 request_id=request_id,
-                status=2,
+                status=502,
                 error_code="upstream_error",
                 error_msg=sanitize_error(fail.exc)[:512],
                 duration_ms=int((time.monotonic() - t_start) * 1000),
@@ -263,7 +262,7 @@ async def messages(
                     router_trace_id=router_trace_id,
                 )
                 if call_log_created:
-                    final_status = 1 if stream_ok else 4
+                    final_status = 200 if stream_ok else (502 if abort_reason == "stream_error" else 499)
                     update_kwargs: dict = {
                         "request_id": request_id,
                         "status": final_status,
@@ -363,7 +362,7 @@ async def messages(
         )
         await calllog.update_call_log(
             request_id=request_id,
-            status=1,
+            status=200,
             duration_ms=int((time.monotonic() - t_start) * 1000),
             upstream_latency_ms=int(upstream_latency_ms),
             prompt_tokens=prompt_tokens,

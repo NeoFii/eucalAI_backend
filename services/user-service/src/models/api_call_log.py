@@ -27,11 +27,15 @@ class ApiCallLog(Base, SnowflakeIdMixin):
 
     __tablename__ = "api_call_logs"
 
-    STATUS_PENDING = 0
-    STATUS_SUCCESS = 1
-    STATUS_ERROR = 2
-    STATUS_REFUNDED = 3
-    STATUS_ABORTED = 4
+    STATUS_SUCCESS = 200
+
+    @staticmethod
+    def is_success(status: int | None) -> bool:
+        return status == 200
+
+    @staticmethod
+    def is_error(status: int | None) -> bool:
+        return status is not None and status >= 400
 
     request_id = Column(
         String(64),
@@ -78,9 +82,9 @@ class ApiCallLog(Base, SnowflakeIdMixin):
     cost_detail = Column(JSON, nullable=True, comment="Admin-only unit price breakdown")
     status = Column(
         SmallInteger,
-        default=0,
-        nullable=False,
-        comment="0=pending 1=success 2=error 3=refunded 4=aborted",
+        default=None,
+        nullable=True,
+        comment="HTTP status code: NULL=in-flight, 200=success, 4xx/5xx=error",
     )
     duration_ms = Column(Integer, nullable=True, comment="Request latency (ms)")
     upstream_latency_ms = Column(
@@ -95,8 +99,8 @@ class ApiCallLog(Base, SnowflakeIdMixin):
         comment="Number of messages in the request",
     )
     ip = Column(String(45), nullable=True, comment="Caller IP; gated by user record_ip setting")
-    error_code = Column(String(32), nullable=True, comment="status=2 payload")
-    error_msg = Column(String(512), nullable=True, comment="status=2 message")
+    error_code = Column(String(32), nullable=True, comment="Machine-readable error identifier")
+    error_msg = Column(String(512), nullable=True, comment="Human-readable error message")
     routing_detail = Column(
         JSON,
         nullable=True,

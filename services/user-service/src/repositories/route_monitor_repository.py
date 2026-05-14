@@ -215,8 +215,8 @@ class RouteMonitorRepository:
         # 1. totals
         totals_q = select(
             func.count().label("cnt"),
-            func.sum(case((ApiCallLog.status == 1, 1), else_=0)).label("ok"),
-            func.sum(case((ApiCallLog.status == 2, 1), else_=0)).label("err"),
+            func.sum(case((ApiCallLog.status == 200, 1), else_=0)).label("ok"),
+            func.sum(case((ApiCallLog.status >= 400, 1), else_=0)).label("err"),
         ).where(*common_filters)
         totals_row = (await self.session.execute(totals_q)).one()
 
@@ -225,8 +225,8 @@ class RouteMonitorRepository:
             select(
                 ApiCallLog.routing_tier.label("tier"),
                 func.count().label("cnt"),
-                func.sum(case((ApiCallLog.status == 1, 1), else_=0)).label("ok"),
-                func.sum(case((ApiCallLog.status == 2, 1), else_=0)).label("err"),
+                func.sum(case((ApiCallLog.status == 200, 1), else_=0)).label("ok"),
+                func.sum(case((ApiCallLog.status >= 400, 1), else_=0)).label("err"),
             )
             .where(*common_filters, ApiCallLog.routing_tier.is_not(None))
             .group_by(ApiCallLog.routing_tier)

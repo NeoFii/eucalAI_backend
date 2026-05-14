@@ -54,7 +54,7 @@ def main():
         FROM api_call_logs
         WHERE user_id = %s
           AND COALESCE(selected_model, model_name) = %s
-          AND status = 1
+          AND status = 200
           AND cost = 0
           AND created_at >= %s AND created_at < %s
         ORDER BY created_at
