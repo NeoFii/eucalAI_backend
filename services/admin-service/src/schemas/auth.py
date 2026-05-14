@@ -5,10 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
+from core.enums import AdminRole
 from schemas.common import AdminBaseResponse, DateTimeModel
 from utils.password import check_password_strength
+
+_ROLE_INT_TO_STR = {AdminRole.ADMIN: "admin", AdminRole.SUPER_ADMIN: "super_admin"}
 
 
 class AdminLoginRequest(BaseModel):
@@ -26,6 +29,10 @@ class AdminUserData(BaseModel):
     name: str = Field(..., description="姓名")
     role: int = Field(..., description="角色: 0=admin 1=super_admin")
     is_root: bool = Field(default=False, description="根管理员标记")
+
+    @field_serializer("role")
+    def serialize_role(self, value: int) -> str:
+        return _ROLE_INT_TO_STR.get(value, "admin")
 
 
 class AdminLoginResponseData(BaseModel):
@@ -53,6 +60,10 @@ class AdminInfoResponseData(DateTimeModel):
     status: int = Field(..., description="状态：0=禁用 1=正常")
     last_login_at: Optional[datetime] = Field(default=None, description="最近登录时间")
     created_at: datetime = Field(..., description="创建时间")
+
+    @field_serializer("role")
+    def serialize_role(self, value: int) -> str:
+        return _ROLE_INT_TO_STR.get(value, "admin")
 
 
 class AdminInfoResponse(AdminBaseResponse):

@@ -7,10 +7,13 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
-from core.enums import AdminRole
 from common.api import PaginatedResponse
+from core.enums import AdminRole
 from schemas.common import AdminBaseResponse, DateTimeModel
 from utils.password import check_password_strength
+
+_ROLE_INT_TO_STR = {AdminRole.ADMIN: "admin", AdminRole.SUPER_ADMIN: "super_admin"}
+_ROLE_STR_TO_INT = {"admin": AdminRole.ADMIN, "super_admin": AdminRole.SUPER_ADMIN}
 
 
 class AdminListItem(DateTimeModel):
@@ -30,6 +33,10 @@ class AdminListItem(DateTimeModel):
     def serialize_uid(self, value: str) -> str:
         return str(value)
 
+    @field_serializer("role")
+    def serialize_role(self, value: int) -> str:
+        return _ROLE_INT_TO_STR.get(value, "admin")
+
 
 class AdminListResponse(AdminBaseResponse):
     """Admin list response."""
@@ -43,7 +50,7 @@ class CreateAdminRequest(BaseModel):
     email: EmailStr = Field(..., description="Admin email")
     name: str = Field(..., min_length=1, max_length=100, description="Admin name")
     password: str = Field(..., min_length=8, max_length=128, description="Admin password")
-    role: int = Field(default=AdminRole.ADMIN, description="Admin role: 0=admin 1=super_admin")
+    role: int | str = Field(default=AdminRole.ADMIN, description="Admin role: 0/1 or 'admin'/'super_admin'")
 
     @field_validator("password")
     @classmethod
@@ -53,9 +60,13 @@ class CreateAdminRequest(BaseModel):
             raise ValueError(message)
         return value
 
-    @field_validator("role")
+    @field_validator("role", mode="before")
     @classmethod
-    def validate_role(cls, value: int) -> int:
+    def validate_role(cls, value: int | str) -> int:
+        if isinstance(value, str):
+            if value not in _ROLE_STR_TO_INT:
+                raise ValueError("role must be 'admin' or 'super_admin'")
+            return _ROLE_STR_TO_INT[value]
         if value not in {AdminRole.ADMIN, AdminRole.SUPER_ADMIN}:
             raise ValueError("role must be 0 (admin) or 1 (super_admin)")
         return value
@@ -75,6 +86,10 @@ class CreateAdminResponseData(DateTimeModel):
     @field_serializer("uid")
     def serialize_uid(self, value: str) -> str:
         return str(value)
+
+    @field_serializer("role")
+    def serialize_role(self, value: int) -> str:
+        return _ROLE_INT_TO_STR.get(value, "admin")
 
 
 class CreateAdminResponse(AdminBaseResponse):
@@ -113,11 +128,15 @@ class ResetAdminPasswordRequest(BaseModel):
 class UpdateAdminRoleRequest(BaseModel):
     """Update admin role request."""
 
-    role: int = Field(..., description="Target role: 0=admin 1=super_admin")
+    role: int | str = Field(..., description="Target role: 0/1 or 'admin'/'super_admin'")
 
-    @field_validator("role")
+    @field_validator("role", mode="before")
     @classmethod
-    def validate_role(cls, value: int) -> int:
+    def validate_role(cls, value: int | str) -> int:
+        if isinstance(value, str):
+            if value not in _ROLE_STR_TO_INT:
+                raise ValueError("role must be 'admin' or 'super_admin'")
+            return _ROLE_STR_TO_INT[value]
         if value not in {AdminRole.ADMIN, AdminRole.SUPER_ADMIN}:
             raise ValueError("role must be 0 (admin) or 1 (super_admin)")
         return value
