@@ -56,12 +56,13 @@ class AdminAuditService:
         return _action_labels_cache or {}
 
     @staticmethod
-    async def get_meta(db: AsyncSession) -> tuple[list[str], dict[str, str]]:
-        """Return (categories, action_labels) for the /meta endpoint."""
+    async def get_meta(db: AsyncSession) -> tuple[list[str], dict[str, str], dict[str, list[str]]]:
+        """Return (categories, action_labels, category_actions) for the /meta endpoint."""
         await AdminAuditService._ensure_cache(db)
         categories = list((_category_actions_cache or {}).keys())
         labels = _action_labels_cache or {}
-        return categories, labels
+        category_actions = {k: list(v) for k, v in (_category_actions_cache or {}).items()}
+        return categories, labels, category_actions
 
     @staticmethod
     async def update_action_label(db: AsyncSession, code: str, label: str) -> AuditActionDefinition | None:

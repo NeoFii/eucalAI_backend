@@ -66,13 +66,14 @@ async def get_audit_log_meta(
     db: AsyncSession = Depends(get_db_session),
 ) -> AdminAuditLogMetaResponse:
     del current_admin
-    categories, action_labels = await AdminAuditService.get_meta(db)
+    categories, action_labels, category_actions = await AdminAuditService.get_meta(db)
     return AdminAuditLogMetaResponse(
         code=200,
         message="success",
         data=AdminAuditLogMetaData(
             categories=categories,
             action_labels=action_labels,
+            category_actions=category_actions,
         ),
     )
 

@@ -59,6 +59,7 @@ class AdminAuditLogMetaData(BaseModel):
 
     categories: list[str] = Field(..., description="Available category filters")
     action_labels: dict[str, str] = Field(..., description="Action to display name mapping")
+    category_actions: dict[str, list[str]] = Field(..., description="Category to action codes mapping")
 
 
 class AdminAuditLogMetaResponse(AdminBaseResponse):
