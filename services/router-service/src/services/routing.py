@@ -157,6 +157,19 @@ async def route_and_resolve(
                         detail="cannot resolve alias and no fallback available",
                     )
 
+    model_prices = config.get("model_prices", {})
+    if selected_model not in model_prices:
+        logger.error(
+            "model %r has no user-facing prices in model_prices config — "
+            "check supported_models.routing_slug; request rejected",
+            selected_model,
+        )
+        raise RoutingError(
+            status_code=428,
+            error_code="pricing_not_configured",
+            detail="The requested model is temporarily unavailable. Please try again later.",
+        )
+
     target_info = await _resolve_target_with_affinity(selected_model, config, affinity_key)
     return selected_model, target_info, route_result, route_meta
 

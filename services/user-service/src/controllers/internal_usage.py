@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams
-from common.utils.timezone import now
+from common.utils.timezone import now, to_shanghai_naive
 from controllers.internal import verify_internal_secret
 from controllers.internal_user_mgmt import _get_user_or_404
 from core.dependencies import get_db_session
@@ -137,7 +137,7 @@ async def get_user_usage_analytics(
         db,
         user_id=user.id,
         range_name=range,
-        start=start,
-        end=end,
+        start=to_shanghai_naive(start),
+        end=to_shanghai_naive(end),
         api_key_id=api_key_id,
     )
