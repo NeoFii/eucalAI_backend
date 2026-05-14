@@ -12,10 +12,6 @@ from repositories.pool_repository import (
     PoolModelRepository,
     PoolRepository,
 )
-from repositories.routing_config_repository import (
-    ProviderCredentialRepository,
-    RoutingConfigRepository,
-)
 from repositories.routing_setting_repository import RoutingSettingRepository
 
 __all__ = [
@@ -26,8 +22,6 @@ __all__ = [
     "PoolAccountRepository",
     "PoolModelRepository",
     "PoolRepository",
-    "ProviderCredentialRepository",
-    "RoutingConfigRepository",
     "RoutingSettingRepository",
     "SupportedModelRepository",
 ]

@@ -2,6 +2,7 @@
 
 from models.admin_audit_log import AdminAuditLog
 from models.admin_user import AdminUser
+from models.audit_action_definition import AuditActionDefinition
 from models.model_catalog import (
     ModelCategory,
     ModelVendor,
@@ -9,19 +10,17 @@ from models.model_catalog import (
     SupportedModelCategoryMap,
 )
 from models.pool import Pool, PoolAccount, PoolModel
-from models.routing_config import ProviderCredential, RoutingConfig
 from models.routing_setting import RoutingSetting
 
 SERVICE_MODELS = [
     AdminAuditLog,
     AdminUser,
+    AuditActionDefinition,
     ModelCategory,
     ModelVendor,
     Pool,
     PoolAccount,
     PoolModel,
-    ProviderCredential,
-    RoutingConfig,
     RoutingSetting,
     SupportedModel,
     SupportedModelCategoryMap,
@@ -30,13 +29,12 @@ SERVICE_MODELS = [
 __all__ = [
     "AdminAuditLog",
     "AdminUser",
+    "AuditActionDefinition",
     "ModelCategory",
     "ModelVendor",
     "Pool",
     "PoolAccount",
     "PoolModel",
-    "ProviderCredential",
-    "RoutingConfig",
     "RoutingSetting",
     "SERVICE_MODELS",
     "SupportedModel",

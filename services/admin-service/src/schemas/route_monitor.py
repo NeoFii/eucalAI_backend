@@ -33,8 +33,10 @@ class RouteRequestListItem(DateTimeModel):
     is_stream: bool
     status: int
     error_code: Optional[str] = None
+    error_msg: Optional[str] = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cached_tokens: int = 0
     total_tokens: int = 0
     cost: int = 0
     input_hash: Optional[str] = None
@@ -46,13 +48,11 @@ class RouteRequestDetail(RouteRequestListItem):
     """Full detail view including the (potentially large) request_preview blob."""
 
     request_preview: Optional[dict[str, Any]] = None
-    error_msg: Optional[str] = None
     config_version: Optional[int] = None
     config_source: Optional[str] = None
     inference_config_version: Optional[int] = None
     inference_config_source: Optional[str] = None
     router_trace_id: Optional[str] = None
-    cached_tokens: int = 0
     provider_cost: int = 0
     cost_detail: Optional[dict[str, Any]] = None
     ip: Optional[str] = None

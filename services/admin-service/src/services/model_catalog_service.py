@@ -84,9 +84,9 @@ class ModelCatalogService:
             "name": model.name,
             "summary": model.summary,
             "description": model.description,
-            "price_input_per_m_fen": model.price_input_per_m_fen,
-            "price_output_per_m_fen": model.price_output_per_m_fen,
-            "price_cached_input_per_m_fen": model.price_cached_input_per_m_fen,
+            "input_price_per_million": model.input_price_per_million,
+            "output_price_per_million": model.output_price_per_million,
+            "cached_input_price_per_million": model.cached_input_price_per_million,
             "capability_tags": list(model.capability_tags or []),
             "context_window": model.context_window,
             "max_output_tokens": model.max_output_tokens,
@@ -372,6 +372,12 @@ class ModelCatalogService:
         if await model_repo.get_by_slug(payload.slug, active_only=False):
             raise ValidationException("model slug already exists")
 
+        if payload.is_active:
+            if not payload.routing_slug or not payload.routing_slug.strip():
+                raise ValidationException("活跃模型必须设置路由标识（routing_slug）")
+            if payload.input_price_per_million is None or payload.output_price_per_million is None:
+                raise ValidationException("活跃模型必须设置输入和输出定价")
+
         vendor = await ModelCatalogService._resolve_vendor(db, payload.vendor_slug)
         categories = await ModelCatalogService._resolve_categories(db, payload.category_keys)
         model = SupportedModel(
@@ -381,9 +387,9 @@ class ModelCatalogService:
             vendor=vendor,
             summary=payload.summary,
             description=payload.description,
-            price_input_per_m_fen=payload.price_input_per_m_fen,
-            price_output_per_m_fen=payload.price_output_per_m_fen,
-            price_cached_input_per_m_fen=payload.price_cached_input_per_m_fen,
+            input_price_per_million=payload.input_price_per_million,
+            output_price_per_million=payload.output_price_per_million,
+            cached_input_price_per_million=payload.cached_input_price_per_million,
             capability_tags=payload.capability_tags,
             context_window=payload.context_window,
             max_output_tokens=payload.max_output_tokens,
@@ -425,6 +431,21 @@ class ModelCatalogService:
             raise NotFoundException("model not found")
 
         data = payload.model_dump(exclude_unset=True)
+        if "routing_slug" in data:
+            new_routing_slug = data["routing_slug"]
+            old_routing_slug = model.routing_slug
+            if old_routing_slug and (not new_routing_slug or not str(new_routing_slug).strip()):
+                from repositories.routing_setting_repository import RoutingSettingRepository
+                referencing_tiers = await RoutingSettingRepository(db).get_tier_keys_by_model_slug(
+                    old_routing_slug
+                )
+                if referencing_tiers:
+                    tier_list = ", ".join(referencing_tiers)
+                    raise ValidationException(
+                        f"无法清空路由标识：当前值 '{old_routing_slug}' "
+                        f"正被路由配置 [{tier_list}] 引用，"
+                        f"请先在路由设置中更换对应层级的模型"
+                    )
         if "vendor_slug" in data:
             model.vendor = await ModelCatalogService._resolve_vendor(db, data.pop("vendor_slug"))
         if "category_keys" in data:
@@ -493,9 +514,9 @@ class ModelCatalogService:
         rows = await db.execute(
             select(
                 SupportedModel.routing_slug,
-                SupportedModel.price_input_per_m_fen,
-                SupportedModel.price_output_per_m_fen,
-                SupportedModel.price_cached_input_per_m_fen,
+                SupportedModel.input_price_per_million,
+                SupportedModel.output_price_per_million,
+                SupportedModel.cached_input_price_per_million,
             ).where(
                 SupportedModel.routing_slug.in_(slugs),
                 SupportedModel.routing_slug.isnot(None),

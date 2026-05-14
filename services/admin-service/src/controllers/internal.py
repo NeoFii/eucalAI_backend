@@ -18,9 +18,6 @@ from schemas.model_catalog import (
     SupportedModelListResponse,
     SupportedModelResponse,
 )
-from schemas.routing_config import (
-    InternalRoutingConfigInference,
-)
 from services.pool_service import PoolService
 from services.routing_setting_service import RoutingSettingService
 from services.model_catalog_service import ModelCatalogService
@@ -93,6 +90,17 @@ class InternalRoutingConfigFull(BaseModel):
     model_prices: dict[str, Any]
     default_user_rpm: int = 20
     system_rpm_cap: int = 1000
+
+
+class InternalRoutingConfigInference(BaseModel):
+    """Response for /internal/routing-config/active/inference (inference-service)."""
+
+    version: int
+    status: str
+    route_order: list[str]
+    weights: dict[str, float]
+    score_bands: str
+    tier_model_map: dict[str, str]
 
 
 class InternalRateLimitsResponse(BaseModel):

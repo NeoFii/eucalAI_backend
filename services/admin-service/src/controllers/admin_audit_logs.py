@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api import PaginatedResponse
+from common.core.exceptions import NotFoundException
 from core.dependencies import get_db_session
 from core.policies import require_super_admin
 from models import AdminAuditLog, AdminUser
@@ -15,6 +16,7 @@ from schemas import (
     AdminAuditLogMetaData,
     AdminAuditLogMetaResponse,
 )
+from schemas.audit_log import UpdateActionLabelRequest, UpdateActionLabelResponse
 from services.audit_service import AdminAuditService
 
 router = APIRouter(prefix="/admin-audit-logs", tags=["admin-audit-logs"])
@@ -26,7 +28,7 @@ def _build_actor(admin: AdminUser | None) -> AdminAuditActor | None:
     return AdminAuditActor(uid=str(admin.uid), email=admin.email, name=admin.name, role=admin.role)
 
 
-def _build_item(log: AdminAuditLog) -> AdminAuditLogItem:
+def _build_item(log: AdminAuditLog, action_labels: dict[str, str]) -> AdminAuditLogItem:
     actor_admin = _build_actor(log.actor_admin)
     if actor_admin is None:
         raise ValueError("Audit log actor_admin must not be null")
@@ -36,7 +38,7 @@ def _build_item(log: AdminAuditLog) -> AdminAuditLogItem:
         actor_admin=actor_admin,
         target_admin=_build_actor(log.target_admin),
         action=log.action,
-        action_label=AdminAuditService.ACTION_LABELS.get(log.action, log.action),
+        action_label=action_labels.get(log.action, log.action),
         resource_type=log.resource_type,
         resource_id=log.resource_id,
         status=log.status,
@@ -52,14 +54,16 @@ def _build_item(log: AdminAuditLog) -> AdminAuditLogItem:
 @router.get("/meta", response_model=AdminAuditLogMetaResponse, summary="Audit log filter metadata")
 async def get_audit_log_meta(
     current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
 ) -> AdminAuditLogMetaResponse:
     del current_admin
+    categories, action_labels = await AdminAuditService.get_meta(db)
     return AdminAuditLogMetaResponse(
         code=200,
         message="success",
         data=AdminAuditLogMetaData(
-            categories=list(AdminAuditService.CATEGORY_ACTIONS.keys()),
-            action_labels=AdminAuditService.ACTION_LABELS,
+            categories=categories,
+            action_labels=action_labels,
         ),
     )
 
@@ -85,13 +89,36 @@ async def list_admin_audit_logs(
         actor_uid=actor_uid,
         target_uid=target_uid,
     )
+    action_labels = await AdminAuditService.get_action_labels(db)
     return AdminAuditLogListResponse(
         code=200,
         message="success",
         data=PaginatedResponse[AdminAuditLogItem](
-            items=[_build_item(log) for log in logs],
+            items=[_build_item(log, action_labels) for log in logs],
             total=total,
             page=page,
             page_size=page_size,
         ),
+    )
+
+
+@router.patch(
+    "/action-definitions/{code}",
+    response_model=UpdateActionLabelResponse,
+    summary="Update action definition label",
+)
+async def update_action_label(
+    code: str,
+    body: UpdateActionLabelRequest,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> UpdateActionLabelResponse:
+    del current_admin
+    action_def = await AdminAuditService.update_action_label(db, code, body.label)
+    if action_def is None:
+        raise NotFoundException(f"Action definition '{code}' not found")
+    return UpdateActionLabelResponse(
+        code=200,
+        message="success",
+        data={"code": action_def.code, "label": action_def.label},
     )

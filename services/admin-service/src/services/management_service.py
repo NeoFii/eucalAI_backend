@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.enums import AdminRole, AdminStatus
 from core.exceptions import AdminConflictException, AdminPermissionDeniedException
 from models import AdminUser
 from repositories import AdminUserRepository
@@ -41,7 +42,7 @@ class AdminManagementService:
         email: str,
         name: str,
         password: str,
-        role: str = "admin",
+        role: int = AdminRole.ADMIN,
     ) -> AdminUser:
         user_repo = AdminUserRepository(db)
         if await user_repo.get_by_email(email):
@@ -57,7 +58,7 @@ class AdminManagementService:
             password_hash=await hash_password_async(password),
             name=name,
             role=role,
-            status=1,
+            status=AdminStatus.ACTIVE,
             created_by_admin_id=actor_admin.id,
             updated_by_admin_id=actor_admin.id,
         )
@@ -153,7 +154,7 @@ class AdminManagementService:
         *,
         actor_admin: AdminUser,
         target_uid: str,
-        role: str,
+        role: int,
     ) -> AdminUser:
         if not getattr(actor_admin, "is_root", False):
             raise AdminPermissionDeniedException("Only root admin can change roles")

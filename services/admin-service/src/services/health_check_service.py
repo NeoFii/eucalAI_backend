@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.enums import PoolAccountStatus
 from common.internal import get_internal_client
 from models.pool import Pool, PoolAccount, PoolModel
 from repositories.pool_repository import PoolRepository
@@ -37,7 +38,7 @@ class HealthCheckService:
         for pool in pools:
             if not pool.is_enabled:
                 continue
-            accounts = [a for a in (pool.accounts or []) if a.status in ("active", "error")]
+            accounts = [a for a in (pool.accounts or []) if a.status in (PoolAccountStatus.ACTIVE, PoolAccountStatus.ERROR)]
             for account in accounts:
                 tasks.append(
                     asyncio.create_task(
@@ -67,7 +68,7 @@ class HealthCheckService:
             api_key = decrypt_api_key(enc["ciphertext"], enc["iv"], enc["tag"], master_key)
         except Exception:
             logger.warning("failed to decrypt key for %s/%s", pool.slug, account.name)
-            account.status = "error"
+            account.status = PoolAccountStatus.ERROR
             account.last_checked_at = datetime.now(UTC)
             return False
 
@@ -94,13 +95,13 @@ class HealthCheckService:
             )
             resp.raise_for_status()
             account.balance = _extract_balance(resp.json())
-            if account.status == "error":
-                account.status = "active"
+            if account.status == PoolAccountStatus.ERROR:
+                account.status = PoolAccountStatus.ACTIVE
                 logger.info("account %s/%s recovered via balance check", pool.slug, account.name)
             return True
         except Exception as exc:
             logger.warning("balance check failed for %s/%s: %s", pool.slug, account.name, exc)
-            account.status = "error"
+            account.status = PoolAccountStatus.ERROR
             account.last_health_check_error = str(exc)[:500]
             return False
 
@@ -132,8 +133,8 @@ class HealthCheckService:
                     channel_slug, model.model_slug,
                     status="healthy", latency_ms=latency_ms, error=None,
                 )
-                if account.status == "error":
-                    account.status = "active"
+                if account.status == PoolAccountStatus.ERROR:
+                    account.status = PoolAccountStatus.ACTIVE
                     account.last_health_check_error = None
                     logger.info("channel %s re-enabled after successful probe", channel_slug)
             else:
@@ -143,7 +144,7 @@ class HealthCheckService:
                     status="unhealthy", latency_ms=latency_ms, error=error_msg,
                 )
                 if resp.status_code in (401, 403):
-                    account.status = "error"
+                    account.status = PoolAccountStatus.ERROR
                     account.last_health_check_error = error_msg
         except Exception as exc:
             latency_ms = int((asyncio.get_event_loop().time() - t_start) * 1000)

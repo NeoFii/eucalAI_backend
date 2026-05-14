@@ -65,3 +65,15 @@ class AdminAuditLogMetaResponse(AdminBaseResponse):
     """Audit log metadata response."""
 
     data: AdminAuditLogMetaData | None = None
+
+
+class UpdateActionLabelRequest(BaseModel):
+    """Request body for updating an action definition label."""
+
+    label: str = Field(..., min_length=1, max_length=120, description="New display label")
+
+
+class UpdateActionLabelResponse(AdminBaseResponse):
+    """Response for action label update."""
+
+    data: dict | None = None

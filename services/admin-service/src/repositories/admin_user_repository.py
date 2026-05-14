@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import func, select, text
 
+from core.enums import AdminRole, AdminStatus
 from models import AdminUser
 from common.db import BaseRepository
 from common.db.query import ListParams
@@ -24,8 +25,8 @@ class AdminUserRepository(BaseRepository[AdminUser]):
     async def get_active_super_admin_by_email(self, email: str) -> AdminUser | None:
         return await self.find_one(
             AdminUser.email == email,
-            AdminUser.role == "super_admin",
-            AdminUser.status == 1,
+            AdminUser.role == AdminRole.SUPER_ADMIN,
+            AdminUser.status == AdminStatus.ACTIVE,
         )
 
     async def get_id_by_uid(self, uid: str) -> int | None:
@@ -35,8 +36,8 @@ class AdminUserRepository(BaseRepository[AdminUser]):
     async def count_active_super_admins(self) -> int:
         result = await self.session.execute(
             select(func.count()).select_from(AdminUser).where(
-                AdminUser.role == "super_admin",
-                AdminUser.status == 1,
+                AdminUser.role == AdminRole.SUPER_ADMIN,
+                AdminUser.status == AdminStatus.ACTIVE,
             )
         )
         return int(result.scalar() or 0)
