@@ -73,6 +73,26 @@ class PoolRepository(BaseRepository[Pool]):
         rows = await self.session.execute(stmt)
         return [(row[0], row[1]) for row in rows.all()]
 
+    async def get_model_cost(self, model_slug: str) -> list[tuple[str, int, int, int | None]]:
+        """Return (pool_name, cost_input, cost_output, cost_cached) for a model_slug."""
+        stmt = (
+            select(
+                Pool.name,
+                PoolModel.cost_input_per_million,
+                PoolModel.cost_output_per_million,
+                PoolModel.cost_cached_input_per_million,
+            )
+            .join(Pool, Pool.id == PoolModel.pool_id)
+            .where(
+                PoolModel.model_slug == model_slug,
+                PoolModel.is_enabled.is_(True),
+                Pool.is_enabled.is_(True),
+            )
+            .order_by(Pool.priority.desc())
+        )
+        rows = await self.session.execute(stmt)
+        return [(row[0], row[1], row[2], row[3]) for row in rows.all()]
+
 
 class PoolModelRepository(BaseRepository[PoolModel]):
     def __init__(self, session: AsyncSession) -> None:

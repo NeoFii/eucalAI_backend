@@ -13,6 +13,7 @@ from schemas.common import AdminBaseResponse
 from schemas.pool import (
     AvailableModelSlugsResponse,
     CheckBalancesResponse,
+    ModelCostResponse,
     PoolAccountCreate,
     PoolAccountResponse,
     PoolAccountUpdate,
@@ -73,6 +74,20 @@ async def list_available_model_slugs(
 ) -> AvailableModelSlugsResponse:
     items = await PoolService.get_available_model_slugs(db)
     return AvailableModelSlugsResponse(data=items)
+
+
+@router.get(
+    "/model-cost/{model_slug:path}",
+    response_model=ModelCostResponse,
+    summary="Get cost pricing for a model slug across pools",
+)
+async def get_model_cost(
+    model_slug: str = Path(..., max_length=120),
+    _current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ModelCostResponse:
+    info = await PoolService.get_model_cost(db, model_slug)
+    return ModelCostResponse(data=info)
 
 
 @router.get("/{slug}", response_model=PoolDetailResponse, summary="Pool detail")

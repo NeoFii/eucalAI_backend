@@ -229,6 +229,57 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             for r in rows
         ]
 
+    async def get_bucketed_platform_stats(
+        self, *, start: datetime, end: datetime, bucket_seconds: int,
+    ) -> list[dict]:
+        if bucket_seconds >= 86400:
+            return await self.get_daily_platform_stats(start=start, end=end)
+
+        bucket_expr = func.from_unixtime(
+            func.floor(func.unix_timestamp(ApiCallLog.created_at) / bucket_seconds)
+            * bucket_seconds
+        ).label("bucket_start")
+
+        query = (
+            select(
+                bucket_expr,
+                func.count().label("request_count"),
+                func.sum(case((ApiCallLog.status == 200, 1), else_=0)).label("success_count"),
+                func.sum(case((ApiCallLog.status >= 400, 1), else_=0)).label("error_count"),
+                func.sum(case((ApiCallLog.status == 499, 1), else_=0)).label("aborted_count"),
+                func.sum(ApiCallLog.prompt_tokens).label("prompt_tokens"),
+                func.sum(ApiCallLog.completion_tokens).label("completion_tokens"),
+                func.sum(ApiCallLog.cached_tokens).label("cached_tokens"),
+                func.sum(ApiCallLog.total_tokens).label("total_tokens"),
+                func.sum(ApiCallLog.cost).label("total_revenue"),
+                func.sum(ApiCallLog.provider_cost).label("total_provider_cost"),
+            )
+            .where(
+                ApiCallLog.created_at >= start,
+                ApiCallLog.created_at < end,
+                _exclude_invalid_model(),
+            )
+            .group_by(bucket_expr)
+            .order_by(bucket_expr.asc())
+        )
+        rows = (await self.session.execute(query)).all()
+        return [
+            {
+                "date": format_iso(r.bucket_start),
+                "request_count": int(r.request_count or 0),
+                "success_count": int(r.success_count or 0),
+                "error_count": int(r.error_count or 0),
+                "aborted_count": int(r.aborted_count or 0),
+                "prompt_tokens": int(r.prompt_tokens or 0),
+                "completion_tokens": int(r.completion_tokens or 0),
+                "cached_tokens": int(r.cached_tokens or 0),
+                "total_tokens": int(r.total_tokens or 0),
+                "total_revenue": int(r.total_revenue or 0),
+                "total_provider_cost": int(r.total_provider_cost or 0),
+            }
+            for r in rows
+        ]
+
     async def get_model_call_stats(
         self, *, start: datetime, end: datetime,
     ) -> list[dict]:

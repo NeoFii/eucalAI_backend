@@ -204,3 +204,26 @@ class AvailableModelSlugItem(BaseModel):
 
 class AvailableModelSlugsResponse(AdminBaseResponse):
     data: list[AvailableModelSlugItem] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Model cost info (for profit margin display)
+# ---------------------------------------------------------------------------
+
+class ModelCostPoolItem(BaseModel):
+    pool_name: str
+    cost_input_per_million: int
+    cost_output_per_million: int
+    cost_cached_input_per_million: int | None
+
+
+class ModelCostInfo(BaseModel):
+    model_slug: str
+    min_cost_input_per_million: int
+    min_cost_output_per_million: int
+    min_cost_cached_input_per_million: int | None
+    pools: list[ModelCostPoolItem]
+
+
+class ModelCostResponse(AdminBaseResponse):
+    data: ModelCostInfo | None = None

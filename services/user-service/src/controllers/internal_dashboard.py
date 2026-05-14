@@ -113,11 +113,22 @@ async def get_usage_trends(
     if start is None:
         start = end - timedelta(days=30)
 
+    range_seconds = int((end - start).total_seconds())
+    if range_seconds <= 86400:
+        bucket_seconds = 3600
+    elif range_seconds <= 259200:
+        bucket_seconds = 7200
+    else:
+        bucket_seconds = 86400
+
     stat_repo = UsageStatRepository(db)
-    daily = await stat_repo.get_daily_platform_stats(start=start, end=end)
+    daily = await stat_repo.get_bucketed_platform_stats(
+        start=start, end=end, bucket_seconds=bucket_seconds,
+    )
     by_model = await stat_repo.get_model_call_stats(start=start, end=end)
 
     return UsageTrendsResponse(
+        bucket_seconds=bucket_seconds,
         daily=[DailyUsageTrendItem(**d) for d in daily],
         by_model=[ModelCallStatItem(**m) for m in by_model],
     )

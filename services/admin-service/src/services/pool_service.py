@@ -400,6 +400,34 @@ class PoolService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    async def get_model_cost(
+        db: AsyncSession, model_slug: str,
+    ) -> dict[str, Any]:
+        """Return cost pricing info for a model_slug across all active pools."""
+        rows = await PoolRepository(db).get_model_cost(model_slug)
+        if not rows:
+            raise NotFoundException(f"no active pool provides model '{model_slug}'")
+        pools = []
+        for pool_name, cost_in, cost_out, cost_cached in rows:
+            pools.append({
+                "pool_name": pool_name,
+                "cost_input_per_million": cost_in,
+                "cost_output_per_million": cost_out,
+                "cost_cached_input_per_million": cost_cached,
+            })
+        min_input = min(r[1] for r in rows)
+        min_output = min(r[2] for r in rows)
+        cached_values = [r[3] for r in rows if r[3] is not None]
+        min_cached = min(cached_values) if cached_values else None
+        return {
+            "model_slug": model_slug,
+            "min_cost_input_per_million": min_input,
+            "min_cost_output_per_million": min_output,
+            "min_cost_cached_input_per_million": min_cached,
+            "pools": pools,
+        }
+
+    @staticmethod
     async def get_available_model_slugs(
         db: AsyncSession,
     ) -> list[dict[str, Any]]:

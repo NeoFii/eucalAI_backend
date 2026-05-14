@@ -74,6 +74,7 @@ class ModelCallStatItem(BaseModel):
 
 
 class UsageTrendsData(BaseModel):
+    bucket_seconds: int = 86400
     daily: list[DailyUsageTrendItem]
     by_model: list[ModelCallStatItem]
 
