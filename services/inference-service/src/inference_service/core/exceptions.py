@@ -108,6 +108,12 @@ def install_inference_error_handlers(app: FastAPI) -> None:
         _log_inference_error(request, 504, "timeout", exc)
         return _build_error_response(504, "timeout", exc.detail)
 
+    @app.exception_handler(APIException)
+    async def _api_exception_fallback(request: Request, exc: APIException) -> JSONResponse:
+        error_code = getattr(exc, "code", "error")
+        _log_inference_error(request, exc.status_code, error_code, exc)
+        return _build_error_response(exc.status_code, error_code, exc.detail)
+
     @app.exception_handler(Exception)
     async def _catchall_error(request: Request, exc: Exception) -> JSONResponse:
         _log_inference_error(request, 500, "model_runtime", exc)

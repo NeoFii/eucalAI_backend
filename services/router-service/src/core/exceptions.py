@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import re
 
-from fastapi import HTTPException
+from common.core.exceptions import APIException
 
 
-class RoutingError(HTTPException):
-    """HTTPException subclass carrying a stable error_code for call-log recording."""
+class RoutingError(APIException):
+    """APIException subclass carrying a stable error_code for call-log recording."""
 
     def __init__(self, status_code: int, *, error_code: str, detail: str):
-        super().__init__(status_code=status_code, detail=detail)
+        super().__init__(status_code=status_code, detail=detail, code=error_code)
         self.error_code = error_code
 
 

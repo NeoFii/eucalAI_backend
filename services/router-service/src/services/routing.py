@@ -55,7 +55,7 @@ async def route_and_resolve(
         raise RoutingError(
             status_code=400,
             error_code="invalid_model",
-            detail=f"model '{requested_model}' is not allowed; please use one of: {allowed}",
+            detail=f"Model '{requested_model}' is not allowed, use one of: {allowed}",
         )
 
     if requested_model == config["router_alias"]:
@@ -98,7 +98,7 @@ async def route_and_resolve(
                 raise RoutingError(
                     status_code=_DIRECT_ERROR_CODES[error_code],
                     error_code=f"inference_{error_code}",
-                    detail=classify_result.error_message or f"inference error: {error_code}",
+                    detail=classify_result.error_message or "Inference service unavailable",
                 )
 
             tier3_model = config["tier_model_map"].get(3)
@@ -124,7 +124,7 @@ async def route_and_resolve(
                 raise RoutingError(
                     status_code=503,
                     error_code="no_fallback",
-                    detail="inference service unavailable and no fallback model available",
+                    detail="Inference service unavailable, no fallback model",
                 )
 
     else:
@@ -154,7 +154,7 @@ async def route_and_resolve(
                     raise RoutingError(
                         status_code=503,
                         error_code="no_fallback",
-                        detail="cannot resolve alias and no fallback available",
+                        detail="Cannot resolve model alias, no fallback available",
                     )
 
     model_prices = config.get("model_prices", {})
@@ -167,7 +167,7 @@ async def route_and_resolve(
         raise RoutingError(
             status_code=428,
             error_code="pricing_not_configured",
-            detail="The requested model is temporarily unavailable. Please try again later.",
+            detail="Model temporarily unavailable",
         )
 
     target_info = await _resolve_target_with_affinity(selected_model, config, affinity_key)

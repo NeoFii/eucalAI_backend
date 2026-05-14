@@ -43,6 +43,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "code": exc.status_code,
                 "message": exc.detail,
+                "data": "",
             },
             headers=_request_id_headers(),
         )
@@ -66,8 +67,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=VALIDATION_STATUS,
             content={
                 "code": VALIDATION_STATUS,
-                "message": "Validation error",
-                "details": exc.errors(),
+                "message": "Validation failed",
+                "data": exc.errors(),
             },
             headers=_request_id_headers(),
         )
@@ -91,7 +92,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "message": "Internal Server Error",
+                "message": "Internal server error",
+                "data": "",
             },
             headers=_request_id_headers(),
         )

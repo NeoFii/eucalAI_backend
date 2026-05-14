@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from common.core.exceptions import APIException
 
 if TYPE_CHECKING:
     from services.rate_limiter import RateLimiter
@@ -15,9 +17,11 @@ _logger = logging.getLogger("router_service")
 _DEFAULT_COOLDOWN_SECONDS = 30.0
 
 
-class ChannelRateLimited(Exception):
+class ChannelRateLimited(APIException):
     """All channels for a model are rate-limited."""
-    pass
+
+    def __init__(self, detail: str = "All upstream channels are rate-limited"):
+        super().__init__(status_code=429, detail=detail, code="channel_rate_limited")
 
 
 class ChannelSelector:

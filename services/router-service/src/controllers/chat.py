@@ -133,17 +133,7 @@ async def chat_completions(
             errorDetail="all channels for this model are rate-limited",
             totalLatencyMs=int((time.monotonic() - t_start) * 1000),
         )
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "error": {
-                    "message": "All upstream channels for this model are currently rate-limited. Please retry later.",
-                    "type": "rate_limit_error",
-                    "code": "channel_rate_limited",
-                }
-            },
-            headers={"Retry-After": "5"},
-        )
+        raise
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
 

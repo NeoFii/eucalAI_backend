@@ -116,7 +116,7 @@ async def responses(
                 error_msg="all channels rate-limited",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
-        raise HTTPException(status_code=429, detail="All upstream channels are currently rate-limited.")
+        raise
 
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
