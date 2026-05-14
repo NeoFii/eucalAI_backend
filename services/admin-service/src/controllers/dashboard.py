@@ -165,3 +165,33 @@ async def get_rpm_trend(
         format_iso(start), format_iso(end), bucket_seconds,
     )
     return RpmTrendResponse(code=200, message="success", data=RpmTrendData(**raw))
+
+
+class TpmTrendPointData(BaseModel):
+    bucket_start: str
+    total_tokens: int
+    tpm: float
+
+
+class TpmTrendData(BaseModel):
+    bucket_seconds: int
+    points: list[TpmTrendPointData]
+
+
+class TpmTrendResponse(AdminBaseResponse):
+    data: Optional[TpmTrendData] = None
+
+
+@router.get("/tpm-trend", response_model=TpmTrendResponse)
+async def get_tpm_trend(
+    start: datetime,
+    end: datetime,
+    bucket_seconds: int = Query(60, ge=10, le=86400),
+    _admin: AdminUser = Depends(require_active_admin),
+) -> TpmTrendResponse:
+    """Return per-bucket TPM samples over [start, end)."""
+    gw = _stats_gateway
+    raw = await gw.fetch_tpm_trend(
+        format_iso(start), format_iso(end), bucket_seconds,
+    )
+    return TpmTrendResponse(code=200, message="success", data=TpmTrendData(**raw))

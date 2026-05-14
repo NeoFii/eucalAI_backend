@@ -17,6 +17,8 @@ from schemas.internal_dashboard import (
     ModelCallStatItem,
     RpmTrendPoint,
     RpmTrendResponse,
+    TpmTrendPoint,
+    TpmTrendResponse,
     UsageTrendsResponse,
     UserGrowthPointResponse,
 )
@@ -148,4 +150,28 @@ async def get_rpm_trend(
     return RpmTrendResponse(
         bucket_seconds=bucket_seconds,
         points=[RpmTrendPoint(**p) for p in points],
+    )
+
+
+@router.get(
+    "/dashboard/tpm-trend",
+    response_model=TpmTrendResponse,
+    summary="Platform TPM time-bucketed trend",
+)
+async def get_tpm_trend(
+    start: datetime,
+    end: datetime,
+    bucket_seconds: int = Query(60, ge=10, le=86400),
+    _: None = Depends(verify_internal_secret),
+    db: AsyncSession = Depends(get_db_session),
+) -> TpmTrendResponse:
+    """Return per-bucket token counts and TPM over [start, end)."""
+    if end <= start:
+        return TpmTrendResponse(bucket_seconds=bucket_seconds, points=[])
+    points = await UsageStatRepository(db).get_tpm_trend(
+        start=start, end=end, bucket_seconds=bucket_seconds,
+    )
+    return TpmTrendResponse(
+        bucket_seconds=bucket_seconds,
+        points=[TpmTrendPoint(**p) for p in points],
     )

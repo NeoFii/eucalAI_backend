@@ -79,6 +79,14 @@ class UserStatsGateway(BaseGateway, UserStatsGatewayInterface):
             query_params={"start": start, "end": end, "bucket_seconds": bucket_seconds},
         )
 
+    async def fetch_tpm_trend(
+        self, start: str, end: str, bucket_seconds: int,
+    ) -> dict:
+        return await self._get(
+            "/api/v1/internal/dashboard/tpm-trend",
+            query_params={"start": start, "end": end, "bucket_seconds": bucket_seconds},
+        )
+
 
 class UserManagementGateway(BaseGateway):
     """HTTP gateway for user management operations via user-service internal API."""

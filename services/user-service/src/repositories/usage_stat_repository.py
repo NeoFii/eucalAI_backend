@@ -345,17 +345,11 @@ class UsageStatRepository(BaseRepository[UsageStat]):
         end: datetime,
         bucket_seconds: int,
     ) -> list[dict]:
-        """Aggregate api_call_logs request counts into fixed-width time buckets.
+        """Aggregate successful request counts into fixed-width time buckets.
 
-        Used to render the platform RPM trend chart. Buckets that contain no
-        rows are filled with 0 by the caller / Python side to keep the time
-        axis continuous (this method only returns buckets with > 0 rows).
-
-        Excludes ``error_code='invalid_model'`` rows for parity with other
-        chart-facing aggregations (cost / request-share / ranking views).
+        Only counts status=200 requests (consistent with new-api-main).
+        Buckets with no rows are not returned; the frontend fills gaps.
         """
-        # MySQL: align created_at to bucket boundary using
-        #   FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(t) / N) * N)
         bucket_expr = func.from_unixtime(
             func.floor(func.unix_timestamp(ApiCallLog.created_at) / bucket_seconds)
             * bucket_seconds
@@ -369,6 +363,7 @@ class UsageStatRepository(BaseRepository[UsageStat]):
             .where(
                 ApiCallLog.created_at >= start,
                 ApiCallLog.created_at < end,
+                ApiCallLog.status == 200,
                 _exclude_invalid_model(),
             )
             .group_by(bucket_expr)
@@ -382,6 +377,51 @@ class UsageStatRepository(BaseRepository[UsageStat]):
                 "bucket_start": format_iso(r.bucket_start),
                 "request_count": int(r.request_count or 0),
                 "rpm": round((r.request_count or 0) / bucket_minutes, 3),
+            }
+            for r in rows
+        ]
+
+    async def get_tpm_trend(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        bucket_seconds: int,
+    ) -> list[dict]:
+        """Aggregate token usage into fixed-width time buckets.
+
+        Only counts status=200 requests. TPM = total_tokens / bucket_minutes.
+        """
+        bucket_expr = func.from_unixtime(
+            func.floor(func.unix_timestamp(ApiCallLog.created_at) / bucket_seconds)
+            * bucket_seconds
+        ).label("bucket_start")
+
+        query = (
+            select(
+                bucket_expr,
+                func.coalesce(
+                    func.sum(ApiCallLog.prompt_tokens) + func.sum(ApiCallLog.completion_tokens),
+                    0,
+                ).label("total_tokens"),
+            )
+            .where(
+                ApiCallLog.created_at >= start,
+                ApiCallLog.created_at < end,
+                ApiCallLog.status == 200,
+                _exclude_invalid_model(),
+            )
+            .group_by(bucket_expr)
+            .order_by(bucket_expr.asc())
+        )
+        rows = (await self.session.execute(query)).all()
+
+        bucket_minutes = bucket_seconds / 60.0
+        return [
+            {
+                "bucket_start": format_iso(r.bucket_start),
+                "total_tokens": int(r.total_tokens or 0),
+                "tpm": round(int(r.total_tokens or 0) / bucket_minutes, 3),
             }
             for r in rows
         ]

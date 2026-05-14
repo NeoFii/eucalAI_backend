@@ -66,3 +66,14 @@ class RpmTrendPoint(BaseModel):
 class RpmTrendResponse(BaseModel):
     bucket_seconds: int
     points: list[RpmTrendPoint]
+
+
+class TpmTrendPoint(BaseModel):
+    bucket_start: str
+    total_tokens: int
+    tpm: float
+
+
+class TpmTrendResponse(BaseModel):
+    bucket_seconds: int
+    points: list[TpmTrendPoint]
