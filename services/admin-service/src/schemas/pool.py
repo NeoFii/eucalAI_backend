@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from core.enums import PoolAccountStatus
 from schemas.common import AdminBaseResponse, DateTimeModel
 from common.api import PaginatedResponse
 
@@ -60,7 +61,7 @@ class PoolAccountUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     api_key: str | None = Field(default=None, min_length=1)
     balance: int | None = Field(default=None, ge=0)
-    status: str | None = Field(default=None, pattern=r"^(active|disabled|exhausted|error)$")
+    status: int | None = Field(default=None, ge=0, le=3)
     rpm_limit: int | None = Field(default=None, ge=1)
     tpm_limit: int | None = Field(default=None, ge=1)
     weight: int | None = Field(default=None, ge=1)
@@ -72,7 +73,7 @@ class PoolAccountItem(DateTimeModel):
     name: str
     mask: str
     balance: int
-    status: str
+    status: int
     rpm_limit: int | None
     tpm_limit: int | None
     weight: int
@@ -176,7 +177,7 @@ class AccountBalanceResult(BaseModel):
     account_id: int
     name: str
     balance: int
-    status: str
+    status: int
     error: str | None = None
 
 

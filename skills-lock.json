@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "alipay-payment-integration": {
+      "source": "modelscope.cn",
+      "sourceType": "well-known",
+      "computedHash": "b27bf98952e3167a122bb35333a5e6cefc1262d5430381f518cedd0c29789c09"
+    }
+  }
+}

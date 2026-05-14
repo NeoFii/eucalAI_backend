@@ -6,6 +6,7 @@ from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Intege
 from sqlalchemy.orm import relationship
 
 from core.db import Base
+from core.enums import AdminRole, AdminStatus
 from common.db.base import SnowflakeIdMixin, TimestampMixin
 
 
@@ -18,8 +19,8 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
     email = Column(String(255), unique=True, nullable=False, index=True, comment="Login email")
     password_hash = Column(String(255), nullable=False, comment="Password hash")
     name = Column(String(100), nullable=False, comment="Admin display name")
-    status = Column(SmallInteger, default=1, nullable=False, comment="0=disabled 1=active")
-    role = Column(String(20), default="admin", nullable=False, comment="admin/super_admin")
+    status = Column(SmallInteger, default=AdminStatus.ACTIVE, nullable=False, comment="0=disabled 1=active")
+    role = Column(SmallInteger, default=AdminRole.ADMIN, nullable=False, comment="0=admin 1=super_admin")
     is_root = Column(Boolean, default=False, nullable=False, server_default="0", comment="Root admin flag, only bootstrap super admin is root")
     created_by_admin_id = Column(
         BigInteger,
@@ -49,19 +50,19 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
         "AdminUser",
         foreign_keys=[created_by_admin_id],
         remote_side="AdminUser.id",
-        lazy="selectin",
+        lazy="noload",
     )
     updated_by_admin = relationship(
         "AdminUser",
         foreign_keys=[updated_by_admin_id],
         remote_side="AdminUser.id",
-        lazy="selectin",
+        lazy="noload",
     )
     password_changed_by_admin = relationship(
         "AdminUser",
         foreign_keys=[password_changed_by_admin_id],
         remote_side="AdminUser.id",
-        lazy="selectin",
+        lazy="noload",
     )
 
     audit_logs = relationship(
@@ -78,8 +79,6 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
     )
 
     def __init__(self, **kwargs):
-        if kwargs.get("role") == "super":
-            kwargs["role"] = "super_admin"
         super().__init__(**kwargs)
 
     def __repr__(self) -> str:
@@ -87,11 +86,11 @@ class AdminUser(Base, SnowflakeIdMixin, TimestampMixin):
 
     @property
     def is_active(self) -> bool:
-        return self.status == 1
+        return self.status == AdminStatus.ACTIVE
 
     @property
     def is_super_admin(self) -> bool:
-        return self.role == "super_admin"
+        return self.role == AdminRole.SUPER_ADMIN
 
     @property
     def is_login_locked(self) -> bool:

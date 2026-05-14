@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.enums import PoolAccountStatus
 from common.internal import get_internal_client
 from models.pool import Pool, PoolAccount, PoolModel
 from repositories.pool_repository import (
@@ -279,6 +280,24 @@ class PoolService:
         actor_admin_id: int,
     ) -> None:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
+
+        from repositories.routing_setting_repository import RoutingSettingRepository
+        referencing_tiers = await RoutingSettingRepository(db).get_tier_keys_by_model_slug(
+            model_slug
+        )
+        if referencing_tiers:
+            available = await PoolRepository(db).get_available_model_slugs()
+            other_pools = [
+                name for slug, name in available
+                if slug == model_slug and name != pool.name
+            ]
+            if not other_pools:
+                tier_list = ", ".join(referencing_tiers)
+                raise ValidationException(
+                    f"无法移除模型 '{model_slug}'：它正被路由配置 [{tier_list}] 引用，"
+                    f"且没有其他号池提供该模型的通道"
+                )
+
         removed = await PoolModelRepository(db).remove(pool.id, model_slug)
         if not removed:
             raise NotFoundException(f"model '{model_slug}' not found on pool '{pool_slug}'")
@@ -361,16 +380,16 @@ class PoolService:
         account = await PoolAccountRepository(db).get_by_id_and_pool(account_id, pool.id)
         if account is None:
             raise NotFoundException("pool account not found")
-        if account.status == "disabled":
+        if account.status == PoolAccountStatus.DISABLED:
             return _pool_account_item(account)
 
-        account.status = "disabled"
+        account.status = PoolAccountStatus.DISABLED
         account.updated_by = actor_admin_id
         await AdminAuditService.record_auto(
             db, actor_admin_id=actor_admin_id, target_admin_id=None,
             action="disable_pool_account", resource_type="pool_account",
             resource_id=f"{pool_slug}/{account_id}", status="success",
-            after_data={"pool_slug": pool_slug, "account_id": account_id, "status": "disabled"},
+            after_data={"pool_slug": pool_slug, "account_id": account_id, "status": PoolAccountStatus.DISABLED},
         )
         await db.commit()
         await db.refresh(account)
@@ -437,7 +456,7 @@ class PoolService:
     ) -> SyncModelsResult:
         pool = await PoolService._get_pool_or_raise(db, pool_slug)
 
-        active_accounts = [a for a in (pool.accounts or []) if a.status == "active"]
+        active_accounts = [a for a in (pool.accounts or []) if a.status == PoolAccountStatus.ACTIVE]
         if not active_accounts:
             raise ValidationException("pool has no active accounts to authenticate with upstream")
 
@@ -508,7 +527,7 @@ class PoolService:
             raise ValidationException("pool has no health_check_endpoint configured")
 
         master_key = settings.PROVIDER_SECRET_MASTER_KEY
-        active_accounts = [a for a in (pool.accounts or []) if a.status in ("active", "error")]
+        active_accounts = [a for a in (pool.accounts or []) if a.status in (PoolAccountStatus.ACTIVE, PoolAccountStatus.ERROR)]
         results: list[AccountBalanceResult] = []
 
         client = get_internal_client(pool.health_check_endpoint, timeout=30)
@@ -527,19 +546,19 @@ class PoolService:
                 balance_fen = _extract_balance(body)
                 account.balance = balance_fen
                 account.last_checked_at = datetime.now(UTC)
-                if account.status == "error":
-                    account.status = "active"
+                if account.status == PoolAccountStatus.ERROR:
+                    account.status = PoolAccountStatus.ACTIVE
 
                 results.append(AccountBalanceResult(
                     account_id=account.id, name=account.name,
                     balance=balance_fen, status=account.status, error=None,
                 ))
             except Exception as exc:
-                account.status = "error"
+                account.status = PoolAccountStatus.ERROR
                 account.last_checked_at = datetime.now(UTC)
                 results.append(AccountBalanceResult(
                     account_id=account.id, name=account.name,
-                    balance=account.balance, status="error", error=str(exc),
+                    balance=account.balance, status=PoolAccountStatus.ERROR, error=str(exc),
                 ))
 
         await AdminAuditService.record_auto(

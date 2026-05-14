@@ -168,6 +168,20 @@ class RoutingSettingService:
         if missing:
             raise ValidationException("；".join(missing))
 
+        from repositories.model_catalog_repository import SupportedModelRepository
+        slugs_to_check = list({v for _, v in tier_models})
+        existing_routing = await SupportedModelRepository(db).get_routing_slugs_existing(slugs_to_check)
+        catalog_missing = []
+        for key, slug in tier_models:
+            if slug not in existing_routing:
+                tier_num = key.replace("tier_", "").replace("_model", "")
+                catalog_missing.append(
+                    f"tier {tier_num} 模型 '{slug}' 在模型目录中无对应 routing_slug，"
+                    f"请先在模型管理中创建该模型并设置路由标识"
+                )
+        if catalog_missing:
+            raise ValidationException("；".join(catalog_missing))
+
     @staticmethod
     async def resolve_for_internal(db: AsyncSession) -> dict[str, Any]:
         """Assemble routing settings into the dict format expected by router/inference services."""

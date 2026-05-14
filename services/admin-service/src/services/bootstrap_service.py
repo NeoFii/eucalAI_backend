@@ -6,6 +6,7 @@ import logging
 
 from core.config import settings
 from core.db import get_db_context
+from core.enums import AdminRole, AdminStatus
 from models import AdminUser
 from repositories.admin_user_repository import AdminUserRepository
 from services.audit_service import AdminAuditService
@@ -123,9 +124,9 @@ class AdminBootstrapService:
     async def _upsert_bootstrap_super_admin(cls, db) -> tuple[AdminUser, bool]:
         existing = await AdminUserRepository(db).get_by_email(settings.BOOTSTRAP_SUPERADMIN_EMAIL)
         if existing is not None:
-            if existing.role != "super_admin":
+            if existing.role != AdminRole.SUPER_ADMIN:
                 raise RuntimeError("Bootstrap email conflicts with a non-super admin account")
-            if existing.status != 1:
+            if existing.status != AdminStatus.ACTIVE:
                 raise RuntimeError("Bootstrap super_admin exists but is not active")
             if (
                 settings.BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS
@@ -147,9 +148,9 @@ class AdminBootstrapService:
             email=settings.BOOTSTRAP_SUPERADMIN_EMAIL,
             password_hash=await hash_password_async(settings.BOOTSTRAP_SUPERADMIN_PASSWORD),
             name=settings.BOOTSTRAP_SUPERADMIN_NAME,
-            role="super_admin",
+            role=AdminRole.SUPER_ADMIN,
             is_root=True,
-            status=1,
+            status=AdminStatus.ACTIVE,
             password_changed_at=now(),
         )
         db.add(admin)

@@ -49,3 +49,14 @@ class RoutingSettingRepository:
                 .where(RoutingSetting.key == key)
                 .values(value=value, updated_by=updated_by)
             )
+
+    _TIER_KEYS = [f"tier_{i}_model" for i in range(1, 6)]
+
+    async def get_tier_keys_by_model_slug(self, model_slug: str) -> list[str]:
+        result = await self.session.execute(
+            select(RoutingSetting.key).where(
+                RoutingSetting.key.in_(self._TIER_KEYS),
+                RoutingSetting.value == model_slug,
+            )
+        )
+        return [row[0] for row in result.all()]

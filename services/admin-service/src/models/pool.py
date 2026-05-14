@@ -6,14 +6,17 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
+    SmallInteger,
     String,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
 from core.db import Base
+from core.enums import PoolAccountStatus
 from common.db.base import SnowflakeIdMixin, TimestampMixin
 
 
@@ -29,7 +32,7 @@ class Pool(SnowflakeIdMixin, TimestampMixin, Base):
     health_check_endpoint = Column(String(512), nullable=True, comment="余额/状态检查接口")
     remark = Column(String(256), nullable=True)
     created_by = Column(
-        BigInteger, ForeignKey("admin_users.id", ondelete="RESTRICT"), nullable=False,
+        BigInteger, ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True,
     )
     updated_by = Column(
         BigInteger, ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True,
@@ -47,6 +50,7 @@ class PoolModel(SnowflakeIdMixin, TimestampMixin, Base):
     __tablename__ = "pool_models"
     __table_args__ = (
         UniqueConstraint("pool_id", "model_slug", name="uq_pool_model"),
+        Index("ix_pool_models_routing", "pool_id", "is_enabled", "model_slug"),
     )
 
     pool_id = Column(
@@ -65,6 +69,9 @@ class PoolModel(SnowflakeIdMixin, TimestampMixin, Base):
 
 class PoolAccount(SnowflakeIdMixin, TimestampMixin, Base):
     __tablename__ = "pool_accounts"
+    __table_args__ = (
+        Index("ix_pool_accounts_routing", "pool_id", "status"),
+    )
 
     pool_id = Column(
         BigInteger, ForeignKey("pools.id", ondelete="CASCADE"), nullable=False,
@@ -73,7 +80,7 @@ class PoolAccount(SnowflakeIdMixin, TimestampMixin, Base):
     api_key_enc = Column(JSON, nullable=False, comment="AES-256-GCM encrypted {ciphertext,iv,tag}")
     mask = Column(String(32), nullable=False, comment="脱敏显示")
     balance = Column(BigInteger, nullable=False, default=0, comment="余额（微元）")
-    status = Column(String(16), nullable=False, default="active", comment="active/disabled/exhausted/error")
+    status = Column(SmallInteger, nullable=False, default=PoolAccountStatus.ACTIVE, comment="0=active 1=disabled 2=exhausted 3=error")
     rpm_limit = Column(Integer, nullable=True, comment="每分钟请求上限")
     tpm_limit = Column(Integer, nullable=True, comment="每分钟 token 上限")
     weight = Column(Integer, nullable=False, default=1, comment="轮转权重")
@@ -81,7 +88,7 @@ class PoolAccount(SnowflakeIdMixin, TimestampMixin, Base):
     last_health_check_error = Column(String(512), nullable=True, comment="上次健康检查错误信息")
     remark = Column(String(256), nullable=True)
     created_by = Column(
-        BigInteger, ForeignKey("admin_users.id", ondelete="RESTRICT"), nullable=False,
+        BigInteger, ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True,
     )
     updated_by = Column(
         BigInteger, ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True,

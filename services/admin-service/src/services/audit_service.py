@@ -4,136 +4,81 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import AdminAuditLog
+from models.audit_action_definition import AuditActionDefinition
 from repositories import AdminAuditLogRepository, AdminUserRepository
 from schemas.audit_log import AdminAuditCategory
+
+# Module-level cache for action definitions (loaded once, refreshed on demand)
+_action_defs_cache: dict[str, AuditActionDefinition] | None = None
+_category_actions_cache: dict[str, tuple[str, ...]] | None = None
+_action_labels_cache: dict[str, str] | None = None
 
 
 class AdminAuditService:
     """Write and query admin audit log records."""
 
-    GOVERNANCE_ACTIONS = (
-        "bootstrap_super_admin",
-        "create_admin",
-        "enable_admin",
-        "disable_admin",
-        "reset_admin_password",
-        "update_admin_role",
-    )
-    AUTH_ACTIONS = (
-        "admin_login_success",
-        "admin_login_failed",
-        "admin_login_locked",
-        "admin_login_unlocked",
-        "admin_change_password",
-    )
-    CATEGORY_ACTIONS: dict[str, tuple[str, ...]] = {
-        "governance": GOVERNANCE_ACTIONS,
-        "auth": AUTH_ACTIONS,
-        "user_management": (
-            "enable_user",
-            "disable_user",
-            "reset_user_password",
-            "topup_user",
-            "adjust_user_balance",
-            "disable_user_api_key",
-            "enable_user_api_key",
-            "update_user_rpm",
-        ),
-        "model_catalog": (
-            "create_model_vendor",
-            "update_model_vendor",
-            "create_model_category",
-            "update_model_category",
-            "create_supported_model",
-            "update_supported_model",
-            "archive_supported_model",
-        ),
-        "routing_config": (
-            "create_routing_config",
-            "update_routing_config",
-            "publish_routing_config",
-            "rollback_routing_config",
-            "create_provider_credential",
-            "update_provider_credential",
-            "disable_provider_credential",
-            "force_disable_provider_credential",
-            "update_routing_setting",
-            "batch_update_routing_settings",
-        ),
-        "voucher": (
-            "generate_voucher_codes",
-            "disable_voucher_code",
-        ),
-        "pool": (
-            "create_pool",
-            "update_pool",
-            "disable_pool",
-            "add_pool_model",
-            "update_pool_model",
-            "remove_pool_model",
-            "add_pool_account",
-            "update_pool_account",
-            "disable_pool_account",
-            "sync_pool_models",
-            "check_pool_balances",
-        ),
-    }
+    @staticmethod
+    async def _ensure_cache(db: AsyncSession) -> None:
+        global _action_defs_cache, _category_actions_cache, _action_labels_cache
+        if _action_defs_cache is not None:
+            return
+        result = await db.execute(
+            select(AuditActionDefinition).where(AuditActionDefinition.is_active == True)  # noqa: E712
+        )
+        defs = result.scalars().all()
+        _action_defs_cache = {d.code: d for d in defs}
+        _action_labels_cache = {d.code: d.label for d in defs}
+        # Build category -> action codes mapping
+        cat_map: dict[str, list[str]] = {}
+        for d in defs:
+            cat_map.setdefault(d.category, []).append(d.code)
+        _category_actions_cache = {k: tuple(v) for k, v in cat_map.items()}
 
-    ACTION_LABELS: dict[str, str] = {
-        "bootstrap_super_admin": "初始化超级管理员",
-        "create_admin": "创建管理员",
-        "enable_admin": "启用管理员",
-        "disable_admin": "禁用管理员",
-        "reset_admin_password": "重置管理员密码",
-        "update_admin_role": "更新管理员角色",
-        "admin_login_success": "管理员登录成功",
-        "admin_login_failed": "管理员登录失败",
-        "admin_login_locked": "管理员账号锁定",
-        "admin_login_unlocked": "管理员账号解锁",
-        "admin_change_password": "管理员修改密码",
-        "enable_user": "启用用户",
-        "disable_user": "禁用用户",
-        "reset_user_password": "重置用户密码",
-        "topup_user": "用户充值",
-        "adjust_user_balance": "调整用户余额",
-        "disable_user_api_key": "禁用用户API密钥",
-        "enable_user_api_key": "启用用户API密钥",
-        "update_user_rpm": "更新用户速率限制",
-        "create_model_vendor": "创建模型厂商",
-        "update_model_vendor": "更新模型厂商",
-        "create_model_category": "创建模型分类",
-        "update_model_category": "更新模型分类",
-        "create_supported_model": "创建支持模型",
-        "update_supported_model": "更新支持模型",
-        "archive_supported_model": "归档支持模型",
-        "disable_supported_model": "归档支持模型",
-        "create_routing_config": "创建路由配置",
-        "update_routing_config": "更新路由配置",
-        "publish_routing_config": "发布路由配置",
-        "rollback_routing_config": "回滚路由配置",
-        "create_provider_credential": "创建供应商凭证",
-        "update_provider_credential": "更新供应商凭证",
-        "disable_provider_credential": "禁用供应商凭证",
-        "force_disable_provider_credential": "强制禁用供应商凭证",
-        "update_routing_setting": "更新路由设置",
-        "batch_update_routing_settings": "批量更新路由设置",
-        "generate_voucher_codes": "生成兑换码",
-        "disable_voucher_code": "禁用兑换码",
-        "create_pool": "创建资源池",
-        "update_pool": "更新资源池",
-        "disable_pool": "禁用资源池",
-        "add_pool_model": "添加池模型",
-        "update_pool_model": "更新池模型",
-        "remove_pool_model": "移除池模型",
-        "add_pool_account": "添加池账号",
-        "update_pool_account": "更新池账号",
-        "disable_pool_account": "禁用池账号",
-        "sync_pool_models": "同步池模型",
-        "check_pool_balances": "检查池余额",
-    }
+    @staticmethod
+    async def refresh_cache(db: AsyncSession) -> None:
+        """Force reload action definitions from DB."""
+        global _action_defs_cache
+        _action_defs_cache = None
+        await AdminAuditService._ensure_cache(db)
+
+    @staticmethod
+    async def get_category_actions(db: AsyncSession) -> dict[str, tuple[str, ...]]:
+        await AdminAuditService._ensure_cache(db)
+        return _category_actions_cache or {}
+
+    @staticmethod
+    async def get_action_labels(db: AsyncSession) -> dict[str, str]:
+        await AdminAuditService._ensure_cache(db)
+        return _action_labels_cache or {}
+
+    @staticmethod
+    async def get_meta(db: AsyncSession) -> tuple[list[str], dict[str, str]]:
+        """Return (categories, action_labels) for the /meta endpoint."""
+        await AdminAuditService._ensure_cache(db)
+        categories = list((_category_actions_cache or {}).keys())
+        labels = _action_labels_cache or {}
+        return categories, labels
+
+    @staticmethod
+    async def update_action_label(db: AsyncSession, code: str, label: str) -> AuditActionDefinition | None:
+        """Update the display label for an action code."""
+        result = await db.execute(
+            select(AuditActionDefinition).where(AuditActionDefinition.code == code)
+        )
+        action_def = result.scalar_one_or_none()
+        if action_def is None:
+            return None
+        action_def.label = label
+        await db.flush()
+        await db.commit()
+        # Invalidate cache
+        global _action_defs_cache
+        _action_defs_cache = None
+        return action_def
 
     @staticmethod
     async def record(
@@ -164,7 +109,8 @@ class AdminAuditService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        AdminAuditLogRepository(db).add(audit_log)
+        repo = AdminAuditLogRepository(db)
+        repo.add(audit_log)
         await db.flush()
         return audit_log
 
@@ -184,7 +130,6 @@ class AdminAuditService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> AdminAuditLog:
-        """Record with ip/user_agent auto-filled from request context if not provided."""
         from common.request_context import get_request_ip, get_request_user_agent
 
         return await AdminAuditService.record(
@@ -227,7 +172,8 @@ class AdminAuditService:
 
         category_actions = None
         if category != "all":
-            category_actions = AdminAuditService.CATEGORY_ACTIONS[category]
+            cat_map = await AdminAuditService.get_category_actions(db)
+            category_actions = cat_map.get(category)
 
         return await AdminAuditLogRepository(db).list_logs(
             page=page,

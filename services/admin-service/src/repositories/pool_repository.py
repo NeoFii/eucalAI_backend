@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from core.enums import PoolAccountStatus
 from models.pool import Pool, PoolAccount, PoolModel
 from common.db.query import ListParams
 from common.db.repository import BaseRepository
@@ -49,7 +50,7 @@ class PoolRepository(BaseRepository[Pool]):
                 Pool.is_enabled.is_(True),
                 PoolModel.is_enabled.is_(True),
                 PoolModel.model_slug.in_(model_slugs),
-                PoolAccount.status == "active",
+                PoolAccount.status == PoolAccountStatus.ACTIVE,
             )
             .order_by(Pool.priority.desc(), PoolAccount.weight.desc())
         )
@@ -64,7 +65,7 @@ class PoolRepository(BaseRepository[Pool]):
             .where(
                 Pool.is_enabled.is_(True),
                 PoolModel.is_enabled.is_(True),
-                PoolAccount.status == "active",
+                PoolAccount.status == PoolAccountStatus.ACTIVE,
             )
             .group_by(PoolModel.model_slug, Pool.id, Pool.name)
             .order_by(PoolModel.model_slug, Pool.priority.desc())

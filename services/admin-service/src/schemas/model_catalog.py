@@ -51,9 +51,9 @@ class SupportedModelItem(DateTimeModel):
     name: str
     summary: str | None = None
     description: str | None = None
-    price_input_per_m_fen: int | None = None
-    price_output_per_m_fen: int | None = None
-    price_cached_input_per_m_fen: int | None = None
+    input_price_per_million: int | None = None
+    output_price_per_million: int | None = None
+    cached_input_price_per_million: int | None = None
     capability_tags: list[str] = Field(default_factory=list)
     context_window: int | None = None
     max_output_tokens: int | None = None
@@ -103,9 +103,9 @@ class SupportedModelCreate(BaseModel):
     vendor_slug: str = Field(..., min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     summary: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=5000)
-    price_input_per_m_fen: int | None = Field(default=None, ge=0)
-    price_output_per_m_fen: int | None = Field(default=None, ge=0)
-    price_cached_input_per_m_fen: int | None = Field(default=None, ge=0)
+    input_price_per_million: int | None = Field(default=None, ge=0)
+    output_price_per_million: int | None = Field(default=None, ge=0)
+    cached_input_price_per_million: int | None = Field(default=None, ge=0)
     capability_tags: list[str] = Field(default_factory=list, max_length=20)
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)
@@ -146,9 +146,9 @@ class SupportedModelUpdate(BaseModel):
     vendor_slug: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
     summary: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, max_length=5000)
-    price_input_per_m_fen: int | None = Field(default=None, ge=0)
-    price_output_per_m_fen: int | None = Field(default=None, ge=0)
-    price_cached_input_per_m_fen: int | None = Field(default=None, ge=0)
+    input_price_per_million: int | None = Field(default=None, ge=0)
+    output_price_per_million: int | None = Field(default=None, ge=0)
+    cached_input_price_per_million: int | None = Field(default=None, ge=0)
     capability_tags: list[str] | None = None
     context_window: int | None = Field(default=None, gt=0)
     max_output_tokens: int | None = Field(default=None, gt=0)

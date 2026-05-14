@@ -1,6 +1,6 @@
 """Admin audit log model."""
 
-from sqlalchemy import JSON, BigInteger, Column, DateTime, ForeignKey, String
+from sqlalchemy import JSON, BigInteger, Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import relationship
 
 from core.db import Base
@@ -11,6 +11,9 @@ class AdminAuditLog(Base):
     """Audit trail for admin operations."""
 
     __tablename__ = "admin_audit_logs"
+    __table_args__ = (
+        Index("ix_admin_audit_logs_created_at", "created_at"),
+    )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True, comment="Internal primary key")
     actor_admin_id = Column(
@@ -27,7 +30,13 @@ class AdminAuditLog(Base):
         index=True,
         comment="Target admin id",
     )
-    action = Column(String(100), nullable=False, index=True, comment="Operation code")
+    action = Column(
+        String(100),
+        ForeignKey("audit_action_definitions.code", ondelete="RESTRICT", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Operation code",
+    )
     resource_type = Column(String(50), nullable=False, index=True, comment="Resource type")
     resource_id = Column(String(100), nullable=True, comment="Resource identifier")
     status = Column(String(20), nullable=False, comment="success/failed")
@@ -42,11 +51,16 @@ class AdminAuditLog(Base):
         "AdminUser",
         foreign_keys=[actor_admin_id],
         back_populates="audit_logs",
-        lazy="selectin",
+        lazy="noload",
     )
     target_admin = relationship(
         "AdminUser",
         foreign_keys=[target_admin_id],
         back_populates="targeted_audit_logs",
-        lazy="selectin",
+        lazy="noload",
+    )
+    action_def = relationship(
+        "AuditActionDefinition",
+        foreign_keys=[action],
+        lazy="noload",
     )

@@ -157,3 +157,14 @@ class SupportedModelRepository(BaseRepository[SupportedModel]):
             .limit(page_size)
         )
         return list(rows.scalars().unique().all()), total
+
+    async def get_routing_slugs_existing(self, slugs: list[str]) -> set[str]:
+        if not slugs:
+            return set()
+        result = await self.session.execute(
+            select(SupportedModel.routing_slug).where(
+                SupportedModel.routing_slug.in_(slugs),
+                SupportedModel.is_active.is_(True),
+            )
+        )
+        return {row[0] for row in result.all()}

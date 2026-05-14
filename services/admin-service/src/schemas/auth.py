@@ -24,7 +24,7 @@ class AdminUserData(BaseModel):
     uid: str = Field(..., description="管理员唯一ID")
     email: str = Field(..., description="邮箱")
     name: str = Field(..., description="姓名")
-    role: str = Field(..., description="角色")
+    role: int = Field(..., description="角色: 0=admin 1=super_admin")
     is_root: bool = Field(default=False, description="根管理员标记")
 
 
@@ -48,7 +48,7 @@ class AdminInfoResponseData(DateTimeModel):
     uid: str = Field(..., description="管理员唯一ID")
     email: str = Field(..., description="邮箱")
     name: str = Field(..., description="姓名")
-    role: str = Field(..., description="角色")
+    role: int = Field(..., description="角色: 0=admin 1=super_admin")
     is_root: bool = Field(default=False, description="根管理员标记")
     status: int = Field(..., description="状态：0=禁用 1=正常")
     last_login_at: Optional[datetime] = Field(default=None, description="最近登录时间")
