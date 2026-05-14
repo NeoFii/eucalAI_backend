@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db import ListParams, PaginatedResult
@@ -193,46 +193,70 @@ class RouteMonitorRepository:
 
         Performs 5 queries:
           1. totals (count + success + error)
-          2. by routing_tier (count + success + error per tier)
+          2. success/error rate time-series
           3. by selected_model (top 20 by count)
           4. by score bucket (0-1, 1-2, ..., 9-10)
           5. by provider: pull (provider_slug, upstream_latency_ms) rows and
              compute p50/p95/p99 in Python; bounded by the time-range filter so
              N stays manageable.
         """
-        common_filters = [
+        base_filters = [
             ApiCallLog.created_at >= start,
             ApiCallLog.created_at < end,
-            _exclude_invalid_model(),
         ]
         if user_id is not None:
-            common_filters.append(ApiCallLog.user_id == user_id)
+            base_filters.append(ApiCallLog.user_id == user_id)
         if model_name is not None:
-            common_filters.append(ApiCallLog.model_name == model_name)
+            base_filters.append(ApiCallLog.model_name == model_name)
         if provider_slug is not None:
-            common_filters.append(ApiCallLog.provider_slug == provider_slug)
+            base_filters.append(ApiCallLog.provider_slug == provider_slug)
 
-        # 1. totals
+        chart_filters = [*base_filters, _exclude_invalid_model()]
+
+        # 1. totals — uses base_filters (includes invalid_model errors)
         totals_q = select(
             func.count().label("cnt"),
             func.sum(case((ApiCallLog.status == 200, 1), else_=0)).label("ok"),
-            func.sum(case((ApiCallLog.status >= 400, 1), else_=0)).label("err"),
-        ).where(*common_filters)
+            func.sum(case(
+                (and_(ApiCallLog.status.isnot(None), ApiCallLog.status != 200), 1),
+                else_=0,
+            )).label("err"),
+        ).where(*base_filters)
         totals_row = (await self.session.execute(totals_q)).one()
 
-        # 2. by tier
-        tier_q = (
+        # 2. success/error rate time-series
+        range_seconds = int((end - start).total_seconds())
+        if range_seconds <= 1800:
+            bucket_seconds = 60
+        elif range_seconds <= 3600:
+            bucket_seconds = 300
+        elif range_seconds <= 21600:
+            bucket_seconds = 900
+        elif range_seconds <= 86400:
+            bucket_seconds = 1800
+        elif range_seconds <= 259200:
+            bucket_seconds = 3600
+        else:
+            bucket_seconds = 86400
+
+        bucket_expr = func.floor(
+            func.unix_timestamp(ApiCallLog.created_at) / bucket_seconds
+        ).label("bucket")
+        ts_q = (
             select(
-                ApiCallLog.routing_tier.label("tier"),
+                bucket_expr,
                 func.count().label("cnt"),
                 func.sum(case((ApiCallLog.status == 200, 1), else_=0)).label("ok"),
-                func.sum(case((ApiCallLog.status >= 400, 1), else_=0)).label("err"),
+                func.sum(case(
+                    (and_(ApiCallLog.status.isnot(None), ApiCallLog.status != 200), 1),
+                    else_=0,
+                )).label("err"),
             )
-            .where(*common_filters, ApiCallLog.routing_tier.is_not(None))
-            .group_by(ApiCallLog.routing_tier)
-            .order_by(ApiCallLog.routing_tier.asc())
+            .where(*base_filters)
+            .group_by(bucket_expr)
+            .order_by(bucket_expr.asc())
         )
-        tier_rows = (await self.session.execute(tier_q)).all()
+        ts_rows = (await self.session.execute(ts_q)).all()
 
         # 3. by selected_model (top 20)
         model_q = (
@@ -240,7 +264,7 @@ class RouteMonitorRepository:
                 ApiCallLog.selected_model.label("model"),
                 func.count().label("cnt"),
             )
-            .where(*common_filters, ApiCallLog.selected_model.is_not(None))
+            .where(*chart_filters, ApiCallLog.selected_model.is_not(None))
             .group_by(ApiCallLog.selected_model)
             .order_by(func.count().desc())
             .limit(20)
@@ -254,7 +278,7 @@ class RouteMonitorRepository:
                 score_floor,
                 func.count().label("cnt"),
             )
-            .where(*common_filters, ApiCallLog.total_score_0_10.is_not(None))
+            .where(*chart_filters, ApiCallLog.total_score_0_10.is_not(None))
             .group_by(score_floor)
             .order_by(score_floor.asc())
         )
@@ -265,7 +289,7 @@ class RouteMonitorRepository:
             ApiCallLog.provider_slug,
             ApiCallLog.upstream_latency_ms,
         ).where(
-            *common_filters,
+            *chart_filters,
             ApiCallLog.provider_slug.is_not(None),
             ApiCallLog.upstream_latency_ms.is_not(None),
         )
@@ -297,14 +321,14 @@ class RouteMonitorRepository:
             "total": int(totals_row.cnt or 0),
             "success_total": int(totals_row.ok or 0),
             "error_total": int(totals_row.err or 0),
-            "by_tier": [
+            "by_time": [
                 {
-                    "routing_tier": int(r.tier),
-                    "count": int(r.cnt or 0),
-                    "success_count": int(r.ok or 0),
-                    "error_count": int(r.err or 0),
+                    "timestamp": int(r.bucket * bucket_seconds),
+                    "total": int(r.cnt or 0),
+                    "success": int(r.ok or 0),
+                    "error": int(r.err or 0),
                 }
-                for r in tier_rows
+                for r in ts_rows
             ],
             "by_model": [
                 {"selected_model": str(r.model), "count": int(r.cnt or 0)}

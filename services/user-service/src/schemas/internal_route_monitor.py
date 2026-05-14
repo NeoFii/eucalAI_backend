@@ -98,11 +98,11 @@ class RouteCompareResponse(BaseModel):
     siblings: list[RouteCompareItem]
 
 
-class TierBucket(BaseModel):
-    routing_tier: int
-    count: int
-    success_count: int
-    error_count: int
+class TimeBucket(BaseModel):
+    timestamp: int
+    total: int
+    success: int
+    error: int
 
 
 class ModelBucket(BaseModel):
@@ -131,7 +131,7 @@ class RouteAggregateData(BaseModel):
     total: int
     success_total: int
     error_total: int
-    by_tier: list[TierBucket]
+    by_time: list[TimeBucket]
     by_model: list[ModelBucket]
     by_score: list[ScoreBucket]
     by_provider_latency: list[ProviderLatency]
