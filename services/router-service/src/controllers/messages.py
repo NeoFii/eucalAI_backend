@@ -348,8 +348,7 @@ async def messages(
 
     # Detect native Anthropic pass-through (response is already in Anthropic format)
     is_native_passthrough = (
-        settings.USE_DIRECT_SDK
-        and target_info.get("provider_slug") in settings.ANTHROPIC_NATIVE_SLUGS
+        target_info.get("provider_slug") in settings.ANTHROPIC_NATIVE_SLUGS
     )
 
     # --- Streaming response ---
