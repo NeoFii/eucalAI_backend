@@ -15,7 +15,7 @@ logger = logging.getLogger("common.exceptions")
 VALIDATION_STATUS = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 _OPENAI_PATHS = frozenset(("/v1/chat/completions", "/v1/responses", "/v1/models"))
-_ANTHROPIC_PATHS = frozenset(("/v1/anthropic/messages",))
+_ANTHROPIC_PATHS = frozenset(("/v1/anthropic/messages", "/v1/anthropic/v1/messages"))
 
 
 def _is_openai_path(request: Request) -> bool:

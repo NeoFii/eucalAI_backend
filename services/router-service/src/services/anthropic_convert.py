@@ -176,9 +176,9 @@ def anthropic_to_openai_request(
                 "function": {"name": request.tool_choice.get("name", "")},
             }
 
-    # Extended thinking
-    if request.thinking:
-        forward_payload["thinking"] = request.thinking
+    # Extended thinking — accepted but not forwarded to OpenAI-compatible upstreams
+    # (would cause upstream rejection). Thinking blocks in responses are handled
+    # via <think> tag detection in the response converter.
 
     return openai_messages, forward_payload
 

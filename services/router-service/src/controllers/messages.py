@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
-import logging
 import time
 import uuid
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from common.observability import get_request_id, log_event
+from common.observability import get_request_id
 from core.dependencies import (
     extract_client_ip,
     get_calllog_gateway,
@@ -45,6 +43,32 @@ def _anthropic_error(status_code: int, error_type: str, message: str) -> JSONRes
         content={"type": "error", "error": {"type": error_type, "message": message}},
     )
 
+
+@router.get("/v1/anthropic/v1/models")
+@router.get("/v1/anthropic/models")
+async def list_anthropic_models(
+    raw_request: Request,
+    principal: ValidatedApiKey = Depends(require_api_key),
+):
+    config = get_config_manager().load()
+    aliases = config.get("user_facing_aliases") or [config["router_alias"]]
+    seen: list[str] = []
+    for item in aliases:
+        if item not in seen:
+            seen.append(item)
+    return JSONResponse(content={
+        "data": [
+            {
+                "id": item,
+                "type": "model",
+                "display_name": item,
+                "created_at": "2024-01-01T00:00:00Z",
+            }
+            for item in seen
+        ],
+    })
+
+@router.post("/v1/anthropic/v1/messages")
 @router.post("/v1/anthropic/messages")
 async def messages(
     request: AnthropicMessagesRequest,
