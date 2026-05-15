@@ -211,6 +211,7 @@ async def chat_completions(
             forward_payload=forward_payload,
             is_stream=is_stream,
             max_retries=max_channel_retries,
+            incoming_protocol="openai",
         )
     except UpstreamCallFailed as fail:
         target_info = fail.target_info

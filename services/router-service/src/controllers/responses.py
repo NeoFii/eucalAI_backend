@@ -171,6 +171,7 @@ async def responses(
             is_stream=is_stream,
             max_retries=max_channel_retries,
             timeout=300.0 if is_stream else 45.0,
+            incoming_protocol="openai",
         )
     except UpstreamCallFailed as fail:
         target_info = fail.target_info

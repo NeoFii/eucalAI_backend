@@ -184,6 +184,37 @@ def anthropic_to_openai_request(
 
 
 # ---------------------------------------------------------------------------
+# Native params builder (for Anthropic pass-through path)
+# ---------------------------------------------------------------------------
+
+def build_anthropic_native_params(request: AnthropicMessagesRequest) -> dict[str, Any]:
+    """Extract all Anthropic-native fields for direct SDK pass-through."""
+    params: dict[str, Any] = {
+        "messages": request.messages,
+        "max_tokens": request.max_tokens,
+    }
+    if request.system is not None:
+        params["system"] = request.system
+    if request.temperature is not None:
+        params["temperature"] = request.temperature
+    if request.top_p is not None:
+        params["top_p"] = request.top_p
+    if request.top_k is not None:
+        params["top_k"] = request.top_k
+    if request.stop_sequences:
+        params["stop_sequences"] = request.stop_sequences
+    if request.tools:
+        params["tools"] = request.tools
+    if request.tool_choice:
+        params["tool_choice"] = request.tool_choice
+    if request.metadata:
+        params["metadata"] = request.metadata
+    if request.thinking:
+        params["thinking"] = request.thinking
+    return params
+
+
+# ---------------------------------------------------------------------------
 # Response conversion: OpenAI -> Anthropic (non-streaming)
 # ---------------------------------------------------------------------------
 

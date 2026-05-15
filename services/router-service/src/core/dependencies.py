@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from services.config_manager import ConfigManager
     from services.inference_client import InferenceClient
     from services.rate_limiter import RateLimiter
+    from services.sdk_clients import SdkClientPool
     from core.config import RouterSettings
 
 # Global singletons — initialized in lifespan
@@ -38,6 +39,7 @@ _redis: Optional["aioredis.Redis"] = None
 _calllog_buffer: Optional["CallLogBuffer"] = None
 _rate_limiter: Optional["RateLimiter"] = None
 _affinity_store: Optional["ChannelAffinityStore"] = None
+_sdk_client_pool: Optional["SdkClientPool"] = None
 
 # Gateway instances
 _user_identity_gateway: Optional["UserIdentityGateway"] = None
@@ -62,10 +64,12 @@ def init_globals(
     calllog_buffer: "CallLogBuffer | None" = None,
     rate_limiter: "RateLimiter | None" = None,
     affinity_store: "ChannelAffinityStore | None" = None,
+    sdk_client_pool: "SdkClientPool | None" = None,
 ) -> None:
     global _inference_client, _config_manager, _settings, _channel_selector
     global _redis, _calllog_buffer, _rate_limiter, _affinity_store
     global _user_identity_gateway, _admin_config_gateway, _calllog_gateway, _batch_calllog_gateway
+    global _sdk_client_pool
 
     _settings = settings
     _inference_client = inference_client
@@ -75,6 +79,7 @@ def init_globals(
     _calllog_buffer = calllog_buffer
     _rate_limiter = rate_limiter
     _affinity_store = affinity_store
+    _sdk_client_pool = sdk_client_pool
 
     from gateways.admin_config import AdminConfigGateway
     from gateways.calllog import CallLogGateway
@@ -125,6 +130,12 @@ def get_rate_limiter() -> "RateLimiter | None":
 
 def get_affinity_store() -> "ChannelAffinityStore | None":
     return _affinity_store
+
+
+def get_sdk_client_pool() -> "SdkClientPool":
+    if _sdk_client_pool is None:
+        raise RuntimeError("sdk client pool not initialized")
+    return _sdk_client_pool
 
 
 def get_user_identity_gateway() -> "UserIdentityGateway":
