@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import Any, AsyncGenerator
 
 from schemas.anthropic import AnthropicMessagesRequest
+
+_THINK_TAG_RE = re.compile(r"<think>([\s\S]*?)</think>\s*", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +110,8 @@ def anthropic_to_openai_request(
                     tool_content = "\n".join(parts)
                 elif not isinstance(tool_content, str):
                     tool_content = str(tool_content) if tool_content else ""
+                if block.get("is_error"):
+                    tool_content = f"[TOOL_ERROR] {tool_content}"
                 tool_results.append({
                     "role": "tool",
                     "tool_call_id": block.get("tool_use_id", ""),
@@ -137,6 +142,8 @@ def anthropic_to_openai_request(
         forward_payload["temperature"] = request.temperature
     if request.top_p is not None:
         forward_payload["top_p"] = request.top_p
+    if request.top_k is not None:
+        forward_payload["top_k"] = request.top_k
     if request.stop_sequences:
         forward_payload["stop"] = request.stop_sequences
     if request.metadata and request.metadata.get("user_id"):
@@ -169,6 +176,10 @@ def anthropic_to_openai_request(
                 "function": {"name": request.tool_choice.get("name", "")},
             }
 
+    # Extended thinking
+    if request.thinking:
+        forward_payload["thinking"] = request.thinking
+
     return openai_messages, forward_payload
 
 
@@ -194,7 +205,16 @@ def openai_to_anthropic_response(
 
         text_content = message.get("content")
         if text_content:
-            content_blocks.append({"type": "text", "text": text_content})
+            think_match = _THINK_TAG_RE.search(text_content)
+            if think_match:
+                thinking_text = think_match.group(1).strip()
+                if thinking_text:
+                    content_blocks.append({"type": "thinking", "thinking": thinking_text})
+                clean_text = _THINK_TAG_RE.sub("", text_content).strip()
+                if clean_text:
+                    content_blocks.append({"type": "text", "text": clean_text})
+            else:
+                content_blocks.append({"type": "text", "text": text_content})
 
         tool_calls = message.get("tool_calls")
         if tool_calls:
@@ -218,6 +238,8 @@ def openai_to_anthropic_response(
     anthropic_usage = {
         "input_tokens": usage.get("prompt_tokens", 0),
         "output_tokens": usage.get("completion_tokens", 0),
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
     }
 
     return {
@@ -253,6 +275,8 @@ class AnthropicStreamConverter:
         self._started = False
         self._finished = False
         self._usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+        self._think_state: str = "idle"  # idle | buffering | thinking | done
+        self._think_buffer: str = ""
 
     def _emit_message_start(self, usage_hint: dict | None = None) -> str:
         self._started = True
@@ -270,9 +294,14 @@ class AnthropicStreamConverter:
                 "content": [],
                 "stop_reason": None,
                 "stop_sequence": None,
-                "usage": {"input_tokens": input_tokens, "output_tokens": 0},
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
             },
-        })
+        }) + _sse_event("ping", {"type": "ping"})
 
     def _emit_block_start_text(self) -> str:
         event = _sse_event("content_block_start", {
@@ -283,6 +312,23 @@ class AnthropicStreamConverter:
         self._block_open = True
         self._block_type = "text"
         return event
+
+    def _emit_block_start_thinking(self) -> str:
+        event = _sse_event("content_block_start", {
+            "type": "content_block_start",
+            "index": self._content_index,
+            "content_block": {"type": "thinking", "thinking": ""},
+        })
+        self._block_open = True
+        self._block_type = "thinking"
+        return event
+
+    def _emit_thinking_delta(self, text: str) -> str:
+        return _sse_event("content_block_delta", {
+            "type": "content_block_delta",
+            "index": self._content_index,
+            "delta": {"type": "thinking_delta", "thinking": text},
+        })
 
     def _emit_block_start_tool(self, tool_id: str, name: str) -> str:
         event = _sse_event("content_block_start", {
@@ -321,6 +367,7 @@ class AnthropicStreamConverter:
 
     def _emit_finish(self, stop_reason: str) -> str:
         events = ""
+        events += self.flush_think_buffer()
         if self._block_open:
             events += self._emit_block_stop()
         events += _sse_event("message_delta", {
@@ -331,6 +378,73 @@ class AnthropicStreamConverter:
         events += _sse_event("message_stop", {"type": "message_stop"})
         self._finished = True
         return events
+
+    def _process_text(self, text: str) -> str:
+        """Route text through think-tag state machine."""
+        events = ""
+        remaining = text
+
+        while remaining:
+            if self._think_state == "idle":
+                # Check if text starts with or contains <think>
+                self._think_buffer += remaining
+                remaining = ""
+                if "<think>" in self._think_buffer:
+                    before, _, after = self._think_buffer.partition("<think>")
+                    if before.strip():
+                        events += self._emit_plain_text(before)
+                    self._think_state = "thinking"
+                    events += self._start_thinking_block()
+                    self._think_buffer = ""
+                    remaining = after
+                elif len(self._think_buffer) >= 7:
+                    # Can't be a partial <think> tag, flush safe portion
+                    safe = self._think_buffer[:-6]
+                    self._think_buffer = self._think_buffer[-6:]
+                    if safe:
+                        events += self._emit_plain_text(safe)
+                # else: keep buffering (could be partial "<thi...")
+
+            elif self._think_state == "thinking":
+                if "</think>" in remaining:
+                    before, _, after = remaining.partition("</think>")
+                    if before:
+                        events += self._emit_thinking_delta(before)
+                    events += self._emit_block_stop()
+                    self._think_state = "done"
+                    remaining = after
+                else:
+                    events += self._emit_thinking_delta(remaining)
+                    remaining = ""
+
+            elif self._think_state == "done":
+                # After thinking, all remaining text is normal content
+                events += self._emit_plain_text(remaining)
+                remaining = ""
+
+        return events
+
+    def _start_thinking_block(self) -> str:
+        if self._block_open:
+            return self._emit_block_stop() + self._emit_block_start_thinking()
+        return self._emit_block_start_thinking()
+
+    def _emit_plain_text(self, text: str) -> str:
+        events = ""
+        if not self._block_open or self._block_type != "text":
+            if self._block_open:
+                events += self._emit_block_stop()
+            events += self._emit_block_start_text()
+        events += self._emit_text_delta(text)
+        return events
+
+    def flush_think_buffer(self) -> str:
+        """Flush any remaining buffered text (call at stream end)."""
+        if self._think_buffer and self._think_state == "idle":
+            events = self._emit_plain_text(self._think_buffer)
+            self._think_buffer = ""
+            return events
+        return ""
 
     def convert_chunk(self, chunk_dict: dict[str, Any]) -> str:
         """Convert a single OpenAI streaming chunk to Anthropic SSE event string(s)."""
@@ -364,11 +478,7 @@ class AnthropicStreamConverter:
         # Text content
         text = delta.get("content")
         if text:
-            if not self._block_open or self._block_type != "text":
-                if self._block_open:
-                    events += self._emit_block_stop()
-                events += self._emit_block_start_text()
-            events += self._emit_text_delta(text)
+            events += self._process_text(text)
 
         # Tool calls
         tool_calls = delta.get("tool_calls")

@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from common.observability import get_request_id, log_event
@@ -31,7 +31,6 @@ from services.anthropic_convert import (
 )
 from services.channel_selector import ChannelRateLimited
 from services.routing import route_and_resolve
-from services.upstream import strip_think_tags
 from utils.billing import compute_cost, extract_cached_tokens
 from utils.logging_config import build_db_request_preview, get_app_logger, log_upstream_call
 from utils.text import compute_input_hash, stringify_message_content
@@ -317,16 +316,6 @@ async def messages(
     response_payload = litellm_response.model_dump(exclude_none=True)
     response_payload["model"] = selected_model
 
-    choices = response_payload.get("choices") or []
-    for choice in choices:
-        if not isinstance(choice, dict):
-            continue
-        message = choice.get("message")
-        if isinstance(message, dict):
-            content = message.get("content")
-            if isinstance(content, str) and "<think>" in content:
-                message["content"] = strip_think_tags(content)
-
     log_upstream_call(
         request_id=request_id,
         selected_model=selected_model,
@@ -336,7 +325,7 @@ async def messages(
         status_code=200, ok=True,
         latency_ms=upstream_latency_ms,
         is_stream=False,
-        response_preview=str((choices[0].get("message") or {}).get("content", ""))[:300] if choices else "",
+        response_preview=str((response_payload.get("choices") or [{}])[0].get("message", {}).get("content", ""))[:300],
         config_version=config_version,
         config_source=config_source,
         router_trace_id=router_trace_id,

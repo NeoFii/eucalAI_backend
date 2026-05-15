@@ -30,6 +30,7 @@ class AnthropicMessagesRequest(BaseModel):
     tools: list[dict[str, Any]] | None = None
     tool_choice: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
+    thinking: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def _check_total_content_size(self) -> AnthropicMessagesRequest:
