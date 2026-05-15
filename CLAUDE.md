@@ -1,46 +1,216 @@
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
+# Git 开发规范
 
-This project is indexed by GitNexus as **eucalAI_backend** (8989 symbols, 18385 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+## 一、分支策略
 
-> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+### 核心原则
 
-## Always Do
+- `main` 为生产分支，**禁止直接 push**，只接受 PR 合入
+- `develop` 为日常集成分支，所有功能从此切出，完成后合回
+- 功能分支生命周期短，合并后立即删除
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+### 分支流向
 
-## Never Do
+```
+日常开发：develop → feat/xxx  → PR → develop
+发布上线：develop             → PR → main（打 tag）
+紧急修复：main    → hotfix/xxx → PR → main + develop
+```
 
-- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+### 分支命名规范
 
-## Resources
+| 前缀            | 用途                   | 示例                           |
+| ------------- | ---------------------- | ------------------------------ |
+| `feat/`       | 新功能开发             | `feat/user-login`              |
+| `fix/`        | 非紧急 bug 修复        | `fix/order-calc-error`         |
+| `hotfix/`     | 生产环境紧急修复       | `hotfix/payment-crash`         |
+| `refactor/`   | 重构，不改变行为       | `refactor/auth-module`         |
+| `perf/`       | 性能优化               | `perf/db-query-optimize`       |
+| `test/`       | 补充测试               | `test/user-service-unit`       |
+| `docs/`       | 文档变更               | `docs/api-readme`              |
+| `chore/`      | 构建/依赖/配置等杂项   | `chore/upgrade-webpack`        |
+| `ci/`         | CI/CD 流程变更         | `ci/add-lint-check`            |
+| `revert/`     | 回滚某次提交           | `revert/feat-user-login`       |
+| `release/`    | 发布准备               | `release/v1.2.0`               |
+| `experiment/` | 实验性探索，不一定合入 | `experiment/new-render-engine` |
 
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/eucalAI_backend/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/eucalAI_backend/clusters` | All functional areas |
-| `gitnexus://repo/eucalAI_backend/processes` | All execution flows |
-| `gitnexus://repo/eucalAI_backend/process/{name}` | Step-by-step execution trace |
+**命名约定：**
+- 全小写，用 `-` 连字符，不用下划线
+- 可携带 issue 编号：`feat/42-user-login`
 
-## CLI
+---
 
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+## 二、Commit 规范
 
-<!-- gitnexus:end -->
+### 格式
+
+```
+<类型>(<scope>): <简短描述>
+```
+
+### 示例
+
+```
+feat(auth): 新增用户登录功能
+fix(order): 修复金额计算精度问题
+refactor(user): 拆分用户服务模块
+docs: 更新 API 接口文档
+chore: 升级 webpack 到 5.0
+```
+
+### 约定
+
+- `scope` 可选，填模块名
+- 描述用动词开头，不超过 50 字
+- 类型与分支前缀保持一致
+
+---
+
+## 三、PR 规范
+
+### PR 标题格式
+
+与 commit 规范保持一致：
+
+```
+feat: 新增用户登录功能
+fix: 修复订单金额计算错误
+hotfix: 修复支付崩溃问题
+refactor: 重构认证模块
+docs: 补充 API 文档
+```
+
+### PR 目标分支
+
+| 场景     | base 分支  |
+| -------- | ---------- |
+| 日常开发 | `develop`  |
+| 发布上线 | `main`     |
+| 紧急修复 | `main`     |
+
+### 合并方式
+
+统一使用 **Squash and merge**，将多个 commit 压成一个，保持主干历史干净。
+
+---
+
+## 四、完整开发流程
+
+### 日常功能开发
+
+```bash
+# 1. 从 develop 切出功能分支
+git checkout develop
+git pull origin develop
+git checkout -b feat/user-login
+
+# 2. 开发并提交
+git add .
+git commit -m "feat(auth): 新增用户登录功能"
+
+# 3. 推送到远端
+git push origin feat/user-login
+
+# 4. GitHub 上创建 PR
+#    base: develop ← compare: feat/user-login
+
+# 5. Review 通过后 Squash and merge
+
+# 6. 合并后清理分支
+git checkout develop
+git pull origin develop
+git branch -d feat/user-login
+```
+
+### 发布上线
+
+```bash
+# develop → PR → main
+# 合并后打 tag
+
+git checkout main
+git pull origin main
+git tag -a v1.0.0 -m "release: v1.0.0"
+git push origin v1.0.0
+```
+
+### 紧急修复（hotfix）
+
+```bash
+# 1. 从 main 切出
+git checkout main
+git pull origin main
+git checkout -b hotfix/payment-crash
+
+# 2. 修复并提交
+git commit -m "hotfix: 修复支付崩溃问题"
+
+# 3. PR → main，合并后打 tag
+
+# 4. 同步到 develop
+git checkout develop
+git cherry-pick <commit-hash>
+git push origin develop
+```
+
+---
+
+## 五、版本 Tag 规范
+
+遵循语义化版本 `v<主版本>.<次版本>.<补丁>`：
+
+| 场景           | 示例     |
+| -------------- | -------- |
+| 首次发布       | `v1.0.0` |
+| 新增功能       | `v1.1.0` |
+| bug 修复       | `v1.1.1` |
+| 破坏性变更     | `v2.0.0` |
+
+---
+
+## 六、PR 模板
+
+> 存放于 `.github/pull_request_template.md`
+
+```markdown
+## 改动说明
+
+简述做了什么，为什么这么做
+
+## 改动类型
+
+- [ ] feat 新功能
+- [ ] fix bug 修复
+- [ ] hotfix 紧急修复
+- [ ] refactor 重构
+- [ ] perf 性能优化
+- [ ] test 测试
+- [ ] docs 文档
+- [ ] chore 杂项
+- [ ] ci CI/CD 变更
+- [ ] revert 回滚
+
+## 测试情况
+
+- [ ] 本地自测通过
+- [ ] 涉及的边界 case 已验证
+
+## 相关 issue
+
+closes #issue编号（如有）
+```
+
+---
+
+## 七、分支保护配置
+
+GitHub Settings → Branches → Add classic branch protection rule
+
+```
+Branch name pattern: main
+
+✅ Require a pull request before merging
+✅ Do not allow bypassing the above settings
+```
 
 ## 用户标识规范
 
