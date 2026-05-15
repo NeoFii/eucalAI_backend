@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from common.observability import get_request_id, log_event
+from common.observability import get_request_id
 from core.dependencies import (
     extract_client_ip,
     get_calllog_gateway,
@@ -31,7 +30,6 @@ from services.anthropic_convert import (
 )
 from services.channel_selector import ChannelRateLimited
 from services.routing import route_and_resolve
-from services.upstream import strip_think_tags
 from utils.billing import compute_cost, extract_cached_tokens
 from utils.logging_config import build_db_request_preview, get_app_logger, log_upstream_call
 from utils.text import compute_input_hash, stringify_message_content
@@ -46,6 +44,145 @@ def _anthropic_error(status_code: int, error_type: str, message: str) -> JSONRes
         content={"type": "error", "error": {"type": error_type, "message": message}},
     )
 
+
+async def _stream_native_anthropic_sse(
+    raw_stream,
+    *,
+    request_id: str,
+    selected_model: str,
+    target_info: dict,
+    openai_messages: list,
+    config_version,
+    config_source: str,
+    router_trace_id: str,
+    t_start: float,
+    t_stream_start: float,
+    call_log_created: bool,
+    calllog,
+    settings,
+):
+    """Stream raw Anthropic SDK events as SSE for native pass-through path."""
+    collected_content = ""
+    input_tokens = 0
+    output_tokens = 0
+    cached_tokens = 0
+    stream_ok = False
+    abort_reason: str | None = None
+    stream_exc: BaseException | None = None
+    try:
+        async for event in raw_stream:
+            event_type = event.type
+            event_dict = event.model_dump(exclude_none=True)
+            if event_type == "message_start":
+                msg = event_dict.get("message", {})
+                msg["model"] = selected_model
+                u = msg.get("usage", {})
+                input_tokens = u.get("input_tokens", 0)
+                cached_tokens = u.get("cache_read_input_tokens", 0)
+            elif event_type == "content_block_delta":
+                delta = event_dict.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    collected_content += delta.get("text", "")
+            elif event_type == "message_delta":
+                u = event_dict.get("usage", {})
+                output_tokens = u.get("output_tokens", output_tokens)
+            yield f"event: {event_type}\ndata: {json.dumps(event_dict, ensure_ascii=False)}\n\n"
+        stream_ok = True
+    except (asyncio.CancelledError, GeneratorExit):
+        abort_reason = "client_cancelled"
+        raise
+    except Exception as exc:
+        abort_reason = "stream_error"
+        stream_exc = exc
+    finally:
+        final_latency = (time.monotonic() - t_stream_start) * 1000
+        log_upstream_call(
+            request_id=request_id,
+            selected_model=selected_model,
+            provider_slug=target_info["provider_slug"],
+            upstream_model=target_info["upstream_model"],
+            api_base=target_info["api_base"],
+            status_code=200 if stream_ok else 502,
+            ok=stream_ok,
+            latency_ms=final_latency,
+            is_stream=True,
+            response_preview=collected_content[:300],
+            config_version=config_version,
+            config_source=config_source,
+            router_trace_id=router_trace_id,
+        )
+        if call_log_created:
+            from core.exceptions import sanitize_error as _sanitize
+            total_tokens = input_tokens + output_tokens
+            final_status = 200 if stream_ok else (502 if abort_reason == "stream_error" else 499)
+            update_kwargs: dict = {
+                "request_id": request_id,
+                "status": final_status,
+                "duration_ms": int((time.monotonic() - t_start) * 1000),
+                "upstream_latency_ms": int(final_latency),
+                "request_preview": build_db_request_preview(openai_messages, collected_content),
+                "error_code": None if stream_ok else (
+                    "upstream_stream_error" if abort_reason == "stream_error" else "client_aborted"
+                ),
+            }
+            if abort_reason == "stream_error" and stream_exc is not None:
+                update_kwargs["error_msg"] = _sanitize(stream_exc)[:512]
+            if stream_ok:
+                prompt_tokens = input_tokens
+                completion_tokens = output_tokens
+                user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
+                cost, provider_cost, cost_detail = compute_cost(
+                    prompt_tokens, completion_tokens, cached_tokens,
+                    user_input_price=user_prices.get("input", 0),
+                    user_output_price=user_prices.get("output", 0),
+                    user_cached_price=user_prices.get("cached_input", 0),
+                    provider_input_price=target_info.get("input_price_per_million", 0),
+                    provider_output_price=target_info.get("output_price_per_million", 0),
+                    provider_cached_price=target_info.get("cached_input_price_per_million", 0),
+                )
+                update_kwargs.update(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cached_tokens=cached_tokens,
+                    total_tokens=total_tokens,
+                    cost=cost,
+                    provider_cost=provider_cost,
+                    cost_detail=cost_detail,
+                )
+            update_coro = calllog.update_call_log(**update_kwargs)
+            if abort_reason == "client_cancelled":
+                update_task = asyncio.ensure_future(update_coro)
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.shield(update_task)
+            else:
+                await update_coro
+
+
+@router.get("/v1/anthropic/v1/models")
+@router.get("/v1/anthropic/models")
+async def list_anthropic_models(
+    raw_request: Request,
+    principal: ValidatedApiKey = Depends(require_api_key),
+):
+    config = get_config_manager().load()
+    aliases = config.get("user_facing_aliases") or [config["router_alias"]]
+    seen: list[str] = []
+    for item in aliases:
+        if item not in seen:
+            seen.append(item)
+    return JSONResponse(content={
+        "data": [
+            {
+                "id": item,
+                "type": "model",
+                "display_name": item,
+                "created_at": "2024-01-01T00:00:00Z",
+            }
+            for item in seen
+        ],
+    })
+
+@router.post("/v1/anthropic/v1/messages")
 @router.post("/v1/anthropic/messages")
 async def messages(
     request: AnthropicMessagesRequest,
@@ -178,6 +315,8 @@ async def messages(
             forward_payload=forward_payload,
             is_stream=is_stream,
             max_retries=max_channel_retries,
+            incoming_protocol="anthropic",
+            anthropic_request=request,
         )
     except UpstreamCallFailed as fail:
         target_info = fail.target_info
@@ -207,9 +346,29 @@ async def messages(
             )
         return _anthropic_error(502, "api_error", "upstream service error")
 
+    # Detect native Anthropic pass-through (response is already in Anthropic format)
+    is_native_passthrough = (
+        settings.USE_DIRECT_SDK
+        and target_info.get("provider_slug") in settings.ANTHROPIC_NATIVE_SLUGS
+    )
+
     # --- Streaming response ---
     if is_stream:
         t_stream_start = time.monotonic()
+
+        if is_native_passthrough:
+            return StreamingResponse(
+                _stream_native_anthropic_sse(
+                    litellm_response, request_id=request_id, selected_model=selected_model,
+                    target_info=target_info, openai_messages=openai_messages,
+                    config_version=config_version, config_source=config_source,
+                    router_trace_id=router_trace_id, t_start=t_start,
+                    t_stream_start=t_stream_start, call_log_created=call_log_created,
+                    calllog=calllog, settings=settings,
+                ),
+                media_type="text/event-stream",
+                headers={"cache-control": "no-cache", "connection": "keep-alive"},
+            )
         converter = AnthropicStreamConverter(selected_model)
 
         async def _stream_anthropic_sse():
@@ -314,18 +473,33 @@ async def messages(
         )
 
     # --- Non-streaming response ---
-    response_payload = litellm_response.model_dump(exclude_none=True)
-    response_payload["model"] = selected_model
+    if is_native_passthrough:
+        anthropic_response = litellm_response.model_dump(exclude_none=True)
+        anthropic_response["model"] = selected_model
+        usage = anthropic_response.get("usage", {})
+        prompt_tokens = usage.get("input_tokens", 0)
+        completion_tokens = usage.get("output_tokens", 0)
+        cached_tokens = usage.get("cache_read_input_tokens", 0)
+        total_tokens = prompt_tokens + completion_tokens
+    else:
+        response_payload = litellm_response.model_dump(exclude_none=True)
+        response_payload["model"] = selected_model
+        anthropic_response = openai_to_anthropic_response(response_payload, selected_model)
+        usage = response_payload.get("usage") or {}
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        cached_tokens = extract_cached_tokens(usage)
+        total_tokens = usage.get("total_tokens", 0)
 
-    choices = response_payload.get("choices") or []
-    for choice in choices:
-        if not isinstance(choice, dict):
-            continue
-        message = choice.get("message")
-        if isinstance(message, dict):
-            content = message.get("content")
-            if isinstance(content, str) and "<think>" in content:
-                message["content"] = strip_think_tags(content)
+    resp_preview = ""
+    if is_native_passthrough:
+        content_blocks = anthropic_response.get("content", [])
+        for block in content_blocks:
+            if isinstance(block, dict) and block.get("type") == "text":
+                resp_preview = block.get("text", "")[:300]
+                break
+    else:
+        resp_preview = str(anthropic_response.get("content", [{}])[0].get("text", ""))[:300]
 
     log_upstream_call(
         request_id=request_id,
@@ -336,20 +510,13 @@ async def messages(
         status_code=200, ok=True,
         latency_ms=upstream_latency_ms,
         is_stream=False,
-        response_preview=str((choices[0].get("message") or {}).get("content", ""))[:300] if choices else "",
+        response_preview=resp_preview,
         config_version=config_version,
         config_source=config_source,
         router_trace_id=router_trace_id,
     )
 
-    anthropic_response = openai_to_anthropic_response(response_payload, selected_model)
-
     if call_log_created:
-        usage = response_payload.get("usage") or {}
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-        cached_tokens = extract_cached_tokens(usage)
-        total_tokens = usage.get("total_tokens", 0)
         user_prices = get_config_manager().load().get("model_prices", {}).get(selected_model, {})
         cost, provider_cost, cost_detail = compute_cost(
             prompt_tokens, completion_tokens, cached_tokens,
@@ -372,7 +539,7 @@ async def messages(
             cost=cost,
             provider_cost=provider_cost,
             cost_detail=cost_detail,
-            request_preview=build_db_request_preview(openai_messages, str(anthropic_response.get("content", [{}])[0].get("text", ""))[:300]),
+            request_preview=build_db_request_preview(openai_messages, resp_preview),
         )
 
     return JSONResponse(content=anthropic_response)

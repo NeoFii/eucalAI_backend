@@ -62,6 +62,9 @@ class RouterSettings(BaseServiceSettings):
 
     ROUTER_RUNTIME_CONFIG: str = ""
 
+    ANTHROPIC_NATIVE_SLUGS: list = ["anthropic"]
+    SDK_CLIENT_POOL_MAX_SIZE: int = 64
+
 
 @lru_cache
 def get_settings() -> RouterSettings:

@@ -31,7 +31,7 @@ class RouteRequestListItem(DateTimeModel):
     duration_ms: Optional[int] = None
     upstream_latency_ms: Optional[int] = None
     is_stream: bool
-    status: int
+    status: Optional[int] = None
     error_code: Optional[str] = None
     error_msg: Optional[str] = None
     prompt_tokens: int = 0
@@ -66,7 +66,7 @@ class RouteCompareItem(DateTimeModel):
     routing_tier: Optional[int] = None
     total_score_0_10: Optional[Decimal] = None
     score_source: Optional[str] = None
-    status: int
+    status: Optional[int] = None
     duration_ms: Optional[int] = None
     upstream_latency_ms: Optional[int] = None
     cost: int = 0

@@ -35,6 +35,7 @@ def create_app(
     from services.config_manager import ConfigManager
     from services.inference_client import InferenceClient
     from services.channel_selector import ChannelSelector
+    from services.sdk_clients import SdkClientPool
 
     settings = get_settings()
     runtime_config_path = runtime_config_path or _default_asset(
@@ -77,6 +78,8 @@ def create_app(
         auto_disable_threshold=settings.CHANNEL_AUTO_DISABLE_FAILURE_THRESHOLD,
         auto_disable_cooldown_seconds=settings.CHANNEL_AUTO_DISABLE_COOLDOWN_SECONDS,
     )
+
+    sdk_client_pool = SdkClientPool(max_size=settings.SDK_CLIENT_POOL_MAX_SIZE)
 
     _health_refresh_task = None
     _redis_conn = None
@@ -144,6 +147,7 @@ def create_app(
             calllog_buffer=_calllog_buffer,
             rate_limiter=rate_limiter,
             affinity_store=affinity_store,
+            sdk_client_pool=sdk_client_pool,
         )
 
         health_redis_url = settings.CHANNEL_HEALTH_REDIS_URL
@@ -167,6 +171,7 @@ def create_app(
             await _calllog_buffer.stop()
         await config_manager.stop()
         await inference_client.close()
+        await sdk_client_pool.close_all()
         await InternalHttpPool.close()
         if _redis_conn is not None:
             await _redis_conn.aclose()

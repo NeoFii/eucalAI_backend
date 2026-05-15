@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from common.observability import get_request_id, log_event
@@ -26,6 +26,25 @@ from utils.text import compute_input_hash, stringify_message_content
 
 router = APIRouter()
 logger = get_app_logger()
+
+
+def _openai_error(
+    status_code: int,
+    message: str,
+    error_type: str | None = None,
+    code: str | None = None,
+) -> JSONResponse:
+    if error_type is None:
+        error_type = {
+            401: "invalid_request_error",
+            402: "invalid_request_error",
+            403: "invalid_request_error",
+            429: "rate_limit_error",
+        }.get(status_code, "server_error")
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"message": message, "type": error_type, "param": None, "code": code}},
+    )
 
 
 @router.post("/v1/chat/completions")
@@ -73,7 +92,7 @@ async def chat_completions(
                 error_msg="余额不足",
                 duration_ms=int((time.monotonic() - t_start) * 1000),
             )
-        raise HTTPException(status_code=402, detail="insufficient balance")
+        return _openai_error(402, "insufficient balance", code="insufficient_balance")
 
     affinity_key = raw_request.headers.get("x-conversation-id") or getattr(request, "user", None)
 
@@ -109,7 +128,7 @@ async def chat_completions(
             errorDetail=str(exc.detail)[:256],
             totalLatencyMs=int((time.monotonic() - t_start) * 1000),
         )
-        raise
+        return _openai_error(exc.status_code, str(exc.detail), code=exc.error_code)
     except ChannelRateLimited:
         if call_log_created:
             await calllog.update_call_log(
@@ -132,7 +151,12 @@ async def chat_completions(
             errorDetail="all channels for this model are rate-limited",
             totalLatencyMs=int((time.monotonic() - t_start) * 1000),
         )
-        raise
+        return _openai_error(
+            429,
+            "All upstream channels are currently rate-limited. Please retry later.",
+            "rate_limit_error",
+            "rate_limit_exceeded",
+        )
     config_version = route_meta.get("config_version")
     config_source = route_meta.get("config_source", "")
 
@@ -187,6 +211,7 @@ async def chat_completions(
             forward_payload=forward_payload,
             is_stream=is_stream,
             max_retries=max_channel_retries,
+            incoming_protocol="openai",
         )
     except UpstreamCallFailed as fail:
         target_info = fail.target_info
@@ -236,7 +261,7 @@ async def chat_completions(
             upstreamLatencyMs=round(upstream_latency_ms, 2),
             totalLatencyMs=int((time.monotonic() - t_start) * 1000),
         )
-        raise HTTPException(status_code=502, detail="upstream service error") from fail.exc
+        return _openai_error(502, "upstream service error", "server_error")
 
     headers = {}
     if is_stream:

@@ -7,11 +7,10 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-import litellm
-
-from core.dependencies import get_channel_selector, get_config_manager, get_rate_limiter
+from core.dependencies import get_channel_selector, get_config_manager, get_rate_limiter, get_sdk_client_pool
 from services.retry_policy import extract_status_code, should_retry
 from services.routing import resolve_target
+from services.upstream_dispatch import dispatch
 
 _logger = logging.getLogger("router_service")
 
@@ -33,10 +32,12 @@ async def upstream_call_with_retry(
     is_stream: bool,
     max_retries: int,
     timeout: float = 45.0,
+    incoming_protocol: str = "openai",
+    anthropic_request: Any | None = None,
 ) -> tuple[Any, dict[str, Any], float]:
-    """Execute litellm.acompletion with channel retry and tier descent.
+    """Execute upstream call with channel retry and tier descent.
 
-    Returns (litellm_response, final_target_info, upstream_latency_ms).
+    Returns (response, final_target_info, upstream_latency_ms).
     Raises UpstreamCallFailed if all attempts are exhausted.
     """
     channel_slug = target_info.get("channel_slug")
@@ -47,16 +48,15 @@ async def upstream_call_with_retry(
         if channel_slug:
             tried_slugs.add(channel_slug)
         try:
-            response = await litellm.acompletion(
-                model=target_info["upstream_model"],
+            pool = get_sdk_client_pool()
+            response = await dispatch(
+                pool, target_info,
                 messages=messages,
-                api_key=target_info["api_key"],
-                api_base=target_info["api_base"],
-                base_url=target_info["api_base"],
-                custom_llm_provider="openai",
+                forward_payload=forward_payload,
                 stream=is_stream,
                 timeout=timeout,
-                **forward_payload,
+                incoming_protocol=incoming_protocol,
+                anthropic_request=anthropic_request,
             )
             if channel_slug:
                 get_channel_selector().report_success(channel_slug)

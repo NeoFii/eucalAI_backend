@@ -146,7 +146,7 @@ class ApiCallLogItem(DateTimeModel):
     cached_tokens: int
     total_tokens: int
     cost: int
-    status: int
+    status: Optional[int] = None
     duration_ms: Optional[int] = None
     is_stream: bool
     routing_tier: Optional[int] = None
