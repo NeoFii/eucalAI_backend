@@ -28,7 +28,7 @@ class InternalUsageLogItem(BaseModel):
     cached_tokens: int
     total_tokens: int
     cost: int
-    status: int
+    status: int | None = None
     duration_ms: int | None = None
     is_stream: bool
     error_code: str | None = None

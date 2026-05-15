@@ -186,7 +186,7 @@ class UserUsageLogItem(DateTimeModel):
     cached_tokens: int
     total_tokens: int
     cost: int
-    status: int
+    status: Optional[int] = None
     duration_ms: Optional[int] = None
     is_stream: bool
     config_version: Optional[int] = None
