@@ -29,7 +29,7 @@ class RouteRequestListItem(BaseModel):
     duration_ms: int | None = None
     upstream_latency_ms: int | None = None
     is_stream: bool
-    status: int
+    status: int | None = None
     error_code: str | None = None
     error_msg: str | None = None
     prompt_tokens: int = 0
@@ -75,7 +75,7 @@ class RouteCompareItem(BaseModel):
     routing_tier: int | None = None
     total_score_0_10: Decimal | None = None
     score_source: str | None = None
-    status: int
+    status: int | None = None
     duration_ms: int | None = None
     upstream_latency_ms: int | None = None
     cost: int = 0
