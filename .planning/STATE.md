@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 1 planned
-last_updated: "2026-05-18T15:30:00.000Z"
-last_activity: 2026-05-18 — Phase 1 planned (3 plans, 3 waves)
+status: executing
+stopped_at: Plan 01-01 complete
+last_updated: "2026-05-18T16:00:00.000Z"
+last_activity: 2026-05-18 — Plan 01-01 executed (directory structure + pyproject.toml)
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 3
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 1 of 10 (Project Scaffold & Common Layer)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-05-18 — Roadmap created
+Plan: 1 of 3 in current phase (01-01 complete)
+Status: Ready for plan 01-02
+Last activity: 2026-05-18 — Plan 01-01 executed
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [▓░░░░░░░░░] 3%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Recent decisions affecting current work:
 - [Roadmap]: Fine granularity (10 phases) — split infra into scaffold + DB, domain into models + controllers, relay into core + adapters, deploy into testing + cutover
 - [Roadmap]: Phase 5 (Admin) can parallel Phase 4 (User) — both depend only on Phase 3
 - [Roadmap]: Phase 8 (Inference) can parallel Phase 7 (Protocol) — both depend only on Phase 6
+- [01-01]: ruff lint config moved to [tool.ruff.lint] section for ruff 0.4+ compatibility
 
 ### Pending Todos
 
@@ -81,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-18T14:35:06.329Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-project-scaffold-common-layer/01-CONTEXT.md
+Last session: 2026-05-18T16:00:00.000Z
+Stopped at: Plan 01-01 complete, ready for 01-02
+Resume file: .planning/phases/01-project-scaffold-common-layer/01-01-SUMMARY.md

@@ -35,7 +35,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 **Plans**: 3 plans, 3 waves
 
 Plans:
-- [ ] 01-01: Directory structure and pyproject.toml
+- [x] 01-01: Directory structure and pyproject.toml
 - [ ] 01-02: Common layer merge and Settings class
 - [ ] 01-03: Lifespan skeleton and health endpoint
 
@@ -189,7 +189,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Scaffold & Common Layer | 0/3 | Planned | - |
+| 1. Project Scaffold & Common Layer | 1/3 | Executing | - |
 | 2. Database & Redis Infrastructure | 0/4 | Not started | - |
 | 3. Models & Repositories Migration | 0/3 | Not started | - |
 | 4. User Domain Controllers | 0/3 | Not started | - |
