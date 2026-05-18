@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import List, Optional
 
 from api_service.common.config import BaseServiceSettings
 
@@ -19,6 +18,8 @@ class ApiServiceSettings(BaseServiceSettings):
 
     # ── Database ──────────────────────────────────────────────────────────
     DATABASE_URL: str = "mysql+aiomysql://root:password@localhost:3306/eucal_ai"
+    DATABASE_POOL_SIZE: int = 5
+    DATABASE_MAX_OVERFLOW: int = 10
 
     # ── Redis ─────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
@@ -31,9 +32,9 @@ class ApiServiceSettings(BaseServiceSettings):
 
     # ── Admin ─────────────────────────────────────────────────────────────
     BOOTSTRAP_SUPERADMIN_ENABLED: bool = False
-    BOOTSTRAP_SUPERADMIN_EMAIL: Optional[str] = None
-    BOOTSTRAP_SUPERADMIN_PASSWORD: Optional[str] = None
-    BOOTSTRAP_SUPERADMIN_NAME: Optional[str] = None
+    BOOTSTRAP_SUPERADMIN_EMAIL: str | None = None
+    BOOTSTRAP_SUPERADMIN_PASSWORD: str | None = None
+    BOOTSTRAP_SUPERADMIN_NAME: str | None = None
     PROVIDER_SECRET_MASTER_KEY: str = ""
     ADMIN_TOKEN_EXPIRE_MINUTES: int = 480
 
@@ -57,7 +58,7 @@ class ApiServiceSettings(BaseServiceSettings):
     RATE_LIMIT_DEFAULT_USER_RPM: int = 20
     RATE_LIMIT_GLOBAL_RPM: int = 0
     SDK_CLIENT_POOL_MAX_SIZE: int = 64
-    ANTHROPIC_NATIVE_SLUGS: List[str] = ["anthropic"]
+    ANTHROPIC_NATIVE_SLUGS: list[str] = ["anthropic"]
     CHANNEL_AFFINITY_ENABLED: bool = False
     CHANNEL_AFFINITY_TTL: int = 3600
 
