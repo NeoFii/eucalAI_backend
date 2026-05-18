@@ -54,7 +54,7 @@ Plans:
 Plans:
 - [x] 02-01: SQLAlchemy async engine and session factory
 - [x] 02-02: Redis connection pools (3 logical DBs)
-- [ ] 02-03: Snowflake ID with per-worker safety
+- [x] 02-03: Snowflake ID with per-worker safety
 - [ ] 02-04: Alembic init and baseline migration
 
 ### Phase 3: Models & Repositories Migration
@@ -190,7 +190,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
-| 2. Database & Redis Infrastructure | 2/4 | In Progress | - |
+| 2. Database & Redis Infrastructure | 3/4 | In Progress | - |
 | 3. Models & Repositories Migration | 0/3 | Not started | - |
 | 4. User Domain Controllers | 0/3 | Not started | - |
 | 5. Admin Domain Controllers | 0/3 | Not started | - |
