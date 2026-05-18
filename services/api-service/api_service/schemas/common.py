@@ -1,42 +1,11 @@
-"""Shared schema primitives for api-service packages."""
+"""Deprecated — D-04 hoisted to api_service.common.schemas. Do not add new symbols here.
+
+This module is kept as an empty stub so that Python keeps the legacy package
+import path resolvable (some external tooling references the module). All
+exports have moved to `api_service.common.schemas`. Phase 4 / Phase 5 code
+MUST import from the new path; importing the legacy per-domain envelope
+class names from here will raise ImportError by design (Pitfall 8 — legacy
+alias erased).
+"""
 
 from __future__ import annotations
-
-from datetime import datetime
-from typing import Generic, Optional, TypeVar
-
-from pydantic import BaseModel, Field, model_serializer
-
-from api_service.common.utils.timezone import format_iso
-
-T = TypeVar("T")
-
-
-class DateTimeModel(BaseModel):
-    """Serialize datetimes as ISO strings."""
-
-    @model_serializer(mode="wrap")
-    def serialize_model(self, handler):
-        data = handler(self)
-        # Pitfall 7 (CRITICAL): iterate over list(data.items()) copy so that
-        # mutating data[key] does not invalidate the iterator. Do NOT lint-clean.
-        for key, value in list(data.items()):
-            if isinstance(value, datetime):
-                data[key] = format_iso(value)
-        return data
-
-
-class AuthBaseResponse(BaseModel):
-    code: int = Field(default=200, description="Status code")
-    message: str = Field(default="success", description="Message")
-
-
-class AuthErrorResponse(AuthBaseResponse):
-    code: int = Field(default=400, description="Status code")
-    message: str = Field(default="error", description="Message")
-
-
-class ApiResponse(BaseModel, Generic[T]):
-    code: int = Field(default=200)
-    message: str = Field(default="success")
-    data: Optional[T] = None

@@ -1,11 +1,23 @@
-"""Shared pytest fixtures for api-service tests (Phase 4 Wave 0)."""
+"""Shared pytest fixtures for api-service tests (Phase 4 Wave 0).
+
+Plan 05-01 (Task 2) extends this with admin-domain fixtures
+(`mock_admin`, `mock_super_admin`, `mock_cache_redis`, `mock_internal_client`).
+"""
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
+# Provide reasonable test defaults BEFORE any pydantic-settings model loads.
+# Individual test modules historically set these per-file; centralising here
+# also lets new test files (Plan 05-01 / test_schemas_hoist.py) import
+# settings without per-file env boilerplate.
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-at-least-32-characters-long")
+os.environ.setdefault("INTERNAL_SECRET", "test-internal-secret-at-least-32-characters-long")
+
+import pytest  # noqa: E402
 
 
 @pytest.fixture

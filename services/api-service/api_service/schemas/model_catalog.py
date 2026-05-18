@@ -2,7 +2,8 @@
 
 Ported from admin-service `src/schemas/model_catalog.py` (D-06: read subset
 only). The 6 classes below mirror the source verbatim — only the import path
-for `DateTimeModel` is rewritten to the api-service `schemas/common.py`.
+for `DateTimeModel` is rewritten to the api-service `common/schemas.py`
+(D-04 hoist, applied in Plan 05-01 / Task 1a).
 
 Admin write payload schemas and the admin response envelope are intentionally
 absent at Phase 4; Phase 5 will append them to this same file when the admin
@@ -15,7 +16,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from api_service.schemas.common import DateTimeModel
+from api_service.common.schemas import DateTimeModel
 
 
 class ModelVendorItem(DateTimeModel):
