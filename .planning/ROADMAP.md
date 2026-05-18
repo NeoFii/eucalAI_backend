@@ -126,13 +126,17 @@ Plans:
   4. Audit log records admin operations
   5. Super-admin bootstrap initialization works on fresh deployment
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
+**Wave 1**
 
-- [ ] 05-01: Admin auth and super-admin bootstrap
-- [ ] 05-02: Pool/Channel/Model/Routing config CRUD
-- [ ] 05-03: Proxy elimination (user mgmt, dashboard, redemption, route monitor, service logs)
+- [ ] 05-01-PLAN.md — Admin auth + super-admin bootstrap + D-04 schemas hoist + HMAC sender port + AdminAuditService foundation (ADMIN-01, ADMIN-12; gates 05-02/05-03)
+
+**Wave 2** *(blocked on 05-01 completion; 05-02 and 05-03 run in parallel)*
+
+- [ ] 05-02-PLAN.md — Pool/Channel/Model Catalog/Routing Settings CRUD + Admin-on-admin accounts + Audit log queries + Health-check ARQ cron + D-05 (mc:* SCAN+DEL) + D-06 (routing_config:version INCR) (ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-08)
+- [ ] 05-03-PLAN.md — Proxy elimination: user management / dashboard / vouchers / route-monitor / service-logs services replacing 5 gateways; service-logs HMAC HTTP to inference only (D-03) (ADMIN-03, ADMIN-07, ADMIN-09, ADMIN-10, ADMIN-11)
 
 ### Phase 6: Relay Core
 
