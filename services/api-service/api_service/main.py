@@ -118,6 +118,25 @@ registry.register(
 )
 
 
+async def _init_arq_pool() -> None:
+    """Initialize ARQ Redis pool (db/1) for enqueueing background jobs."""
+    from api_service.core.arq_pool import init_arq_pool
+
+    await init_arq_pool()
+
+
+async def _shutdown_arq_pool() -> None:
+    """Close ARQ Redis pool."""
+    from api_service.core.arq_pool import close_arq_pool
+
+    await close_arq_pool()
+
+
+registry.register(
+    "arq_pool", init_fn=_init_arq_pool, shutdown_fn=_shutdown_arq_pool, priority=40
+)
+
+
 # ── Lifespan Context Manager ─────────────────────────────────────────────────
 
 
