@@ -14,7 +14,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - [x] **Phase 1: Project Scaffold & Common Layer** - Directory structure, settings, common utilities, lifespan skeleton
 - [x] **Phase 2: Database & Redis Infrastructure** - SQLAlchemy engine, Redis pools, Snowflake ID, Alembic baseline
 - [x] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
-- [ ] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints
+- [x] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints (completed 2026-05-18)
 - [ ] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls)
 - [ ] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache
 - [ ] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting
@@ -111,7 +111,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 04-03-PLAN.md — Model catalog read service + cache + final router wiring (4 public endpoints, 3 tests)
+- [x] 04-03-PLAN.md — Model catalog read service + cache + final router wiring (4 public endpoints, 3 tests)
 
 ### Phase 5: Admin Domain Controllers
 
@@ -244,7 +244,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
 | 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
 | 3. Models & Repositories Migration | 3/3 | Complete | 2026-05-19 |
-| 4. User Domain Controllers | 2/3 | In Progress|  |
+| 4. User Domain Controllers | 3/3 | Complete   | 2026-05-18 |
 | 5. Admin Domain Controllers | 0/3 | Not started | - |
 | 6. Relay Core | 0/3 | Not started | - |
 | 7. Protocol Adapters & Streaming | 0/3 | Not started | - |
