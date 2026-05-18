@@ -36,7 +36,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 
 Plans:
 - [x] 01-01: Directory structure and pyproject.toml
-- [ ] 01-02: Common layer merge and Settings class
+- [x] 01-02: Common layer merge and Settings class
 - [ ] 01-03: Lifespan skeleton and health endpoint
 
 ### Phase 2: Database & Redis Infrastructure

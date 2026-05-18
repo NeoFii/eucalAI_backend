@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Plan 01-01 complete
-last_updated: "2026-05-18T16:00:00.000Z"
-last_activity: 2026-05-18 — Plan 01-01 executed (directory structure + pyproject.toml)
+stopped_at: Plan 01-02 complete
+last_updated: "2026-05-18T18:00:00.000Z"
+last_activity: 2026-05-18 — Plan 01-02 executed (common layer merge + ApiServiceSettings)
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 3
+  completed_plans: 2
+  percent: 7
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 1 of 10 (Project Scaffold & Common Layer)
-Plan: 1 of 3 in current phase (01-01 complete)
-Status: Ready for plan 01-02
-Last activity: 2026-05-18 — Plan 01-01 executed
+Plan: 2 of 3 in current phase (01-02 complete)
+Status: Ready for plan 01-03
+Last activity: 2026-05-18 — Plan 01-02 executed
 
-Progress: [▓░░░░░░░░░] 3%
+Progress: [▓▓░░░░░░░░] 7%
 
 ## Performance Metrics
 
@@ -64,6 +64,10 @@ Recent decisions affecting current work:
 - [Roadmap]: Phase 5 (Admin) can parallel Phase 4 (User) — both depend only on Phase 3
 - [Roadmap]: Phase 8 (Inference) can parallel Phase 7 (Protocol) — both depend only on Phase 6
 - [01-01]: ruff lint config moved to [tool.ruff.lint] section for ruff 0.4+ compatibility
+- [01-02]: D-02 directory structure enforced (infra/, security/, http/, utils/)
+- [01-02]: Base(DeclarativeBase) added as shared ORM base in infra/db/base.py
+- [01-02]: schema_version.py updated to single api-service config
+- [01-02]: internal_auth.py only contains receiver-side verification (D-04)
 
 ### Pending Todos
 
@@ -82,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-18T16:00:00.000Z
-Stopped at: Plan 01-01 complete, ready for 01-02
-Resume file: .planning/phases/01-project-scaffold-common-layer/01-01-SUMMARY.md
+Last session: 2026-05-18T18:00:00.000Z
+Stopped at: Plan 01-02 complete, ready for 01-03
+Resume file: .planning/phases/01-project-scaffold-common-layer/01-02-SUMMARY.md
