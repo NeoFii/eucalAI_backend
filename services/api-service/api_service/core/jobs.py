@@ -1,15 +1,21 @@
 """ARQ worker jobs for api-service user domain.
 
-Wave 0 (this file): 4 cron jobs ported from user-service.
+Wave 0 (Task 1 of plan 04-01): 4 cron jobs ported from user-service.
 Wave 1 (Task 2 of plan 04-01): adds send_verification_email + _send_smtp_sync helpers.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import smtplib
+import ssl
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from urllib.parse import urlparse
 
+from arq import Retry
 from arq.connections import RedisSettings
 from arq.cron import cron
 from sqlalchemy import select, text
@@ -21,6 +27,9 @@ from api_service.core.db import close_db, create_engine, get_db_context, init_se
 from api_service.models import EmailVerificationCode
 
 logger = logging.getLogger(__name__)
+
+# Pitfall 9: this string MUST equal the registered function `__name__` (see below).
+_JOB_SEND_VERIFICATION_EMAIL = "send_verification_email"
 
 
 def build_redis_settings(redis_url: str | None = None) -> RedisSettings:
@@ -133,6 +142,76 @@ async def reconcile_balance_ledger(ctx: dict) -> None:
             logger.info("Balance reconciliation passed: no drift detected")
 
 
+def _build_message(email: str, code: str, purpose: str) -> tuple[str, str]:
+    """Subject/body builder for the verification email (register/login/verify/reset)."""
+    code_expire = settings.EMAIL_CODE_EXPIRE_MINUTES
+    if purpose == "register":
+        return (
+            "[Eucal AI] Registration verification code",
+            f"Your verification code is {code}. It expires in {code_expire} minutes.",
+        )
+    if purpose == "login":
+        return (
+            "[Eucal AI] Login verification code",
+            f"Your login code is {code}. It expires in {code_expire} minutes.",
+        )
+    if purpose == "verify":
+        return (
+            "[Eucal AI] Email verification code",
+            f"Your email verification code is {code}. It expires in {code_expire} minutes.",
+        )
+    return (
+        "[Eucal AI] Password reset verification code",
+        f"Your password reset code is {code}. It expires in {code_expire} minutes.",
+    )
+
+
+def _send_smtp_sync(email: str, code: str, purpose: str) -> None:
+    """Blocking SMTP send — wrapped in asyncio.to_thread by the async job below."""
+    if not settings.SMTP_HOST or not settings.SMTP_USER:
+        # Mock mode (matches source: silent no-op when SMTP not configured).
+        logger.debug("emailSendMock email=%s purpose=%s", email, purpose)
+        return
+
+    context = ssl.create_default_context()
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+        if settings.SMTP_TLS:
+            server.starttls(context=context)
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+
+        subject, body = _build_message(email, code, purpose)
+        message = MIMEMultipart("alternative")
+        message["From"] = f"{settings.SMTP_FROM} <{settings.SMTP_USER}>"
+        message["To"] = email
+        message["Subject"] = subject
+        message.attach(MIMEText(body, "plain", "utf-8"))
+        server.sendmail(settings.SMTP_USER, email, message.as_string())
+
+
+async def send_verification_email(ctx: dict, email: str, code: str, purpose: str) -> None:
+    """ARQ job — send a verification email synchronously inside a worker thread.
+
+    Retries up to 3 times with linear backoff (5s, 10s, 15s) on SMTP errors.
+    After 3 attempts, logs `emailSendFailedPermanently` and swallows the error
+    so ARQ does not retry indefinitely (D-02 acceptable tradeoff).
+    """
+    try:
+        await asyncio.to_thread(_send_smtp_sync, email, code, purpose)
+    except Exception as exc:  # noqa: BLE001 — broad on purpose, log + Retry
+        job_try = ctx.get("job_try", 1)
+        if job_try < 3:
+            logger.warning("emailSendRetry attempt=%d email=%s error=%s", job_try, email, exc)
+            raise Retry(defer=job_try * 5) from exc
+        log_event(
+            logger,
+            logging.ERROR,
+            "emailSendFailedPermanently",
+            email=email,
+            purpose=purpose,
+            error=str(exc),
+        )
+
+
 def get_worker_settings_kwargs() -> dict:
     """Return the kwargs dict to be applied to WorkerSettings."""
     return {
@@ -141,6 +220,7 @@ def get_worker_settings_kwargs() -> dict:
             cleanup_expired_verification_codes,
             cleanup_expired_sessions,
             reconcile_balance_ledger,
+            send_verification_email,
         ],
         "cron_jobs": [
             cron(aggregate_usage_stats, minute=0),
