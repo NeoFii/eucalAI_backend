@@ -49,6 +49,19 @@ class ApiServiceSettings(BaseServiceSettings):
     LOGIN_MAX_FAILURES: int = 5
     EMAIL_CODE_EXPIRE_MINUTES: int = 5
 
+    # ── User-domain extras (Phase 4) ──────────────────────────────────────
+    LOGIN_LOCK_DURATION_HOURS: int = 1
+    MAX_CODE_ERRORS: int = 5
+    CODE_ERROR_LOCK_HOURS: int = 24
+    CODE_DAILY_SEND_LIMIT: int = 3
+    VERIFICATION_CODE_RETENTION_DAYS: int = 7
+    MIN_TOPUP_AMOUNT: int = 1_000_000
+    MAX_TOPUP_AMOUNT: int = 10_000_000_000
+    USER_WORKER_CONCURRENCY: int = 5
+    USER_JOB_TIMEOUT_SECONDS: int = 300
+    # TODO(phase-5): read from system_settings table when admin domain ships
+    DEFAULT_USER_RPM: int = 20
+
     # ── Relay ─────────────────────────────────────────────────────────────
     CHANNEL_MAX_RETRIES: int = 2
     CHANNEL_COOLDOWN_SECONDS: float = 30.0
