@@ -12,7 +12,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 
 - [x] **Phase 1: Project Scaffold & Common Layer** - Directory structure, settings, common utilities, lifespan skeleton
 - [x] **Phase 2: Database & Redis Infrastructure** - SQLAlchemy engine, Redis pools, Snowflake ID, Alembic baseline
-- [ ] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
+- [x] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
 - [ ] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints
 - [ ] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls)
 - [ ] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache
