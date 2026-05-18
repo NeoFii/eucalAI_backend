@@ -56,6 +56,12 @@
   - 04-02: API Key + Billing controllers（/keys 5 + /billing 8 端点 + api_key_service + balance_service + topup_order_service + voucher_service + usage_stat_service + schemas/keys.py + schemas/billing.py）
   - 04-03: Model catalog + email service（/models 等 4 端点 + model_catalog_service + email_service + schemas/model_catalog.py + send_verification_email ARQ job）
 
+### Research-driven Decisions (2026-05-19 锁定，回应 RESEARCH.md Open Questions)
+- **D-09 (回应 O-1):** `/auth/me` 的 `rpm` 字段使用 `settings.DEFAULT_USER_RPM` 常量兜底，Phase 4 不读 system_settings 表/不调 admin。需要在 `ApiServiceSettings` 中新增 `DEFAULT_USER_RPM: int = 60`（与现 user-service 默认一致）。Phase 5 admin 域接入真正的 system_settings 表读写后可改为读 DB。
+- **D-10 (回应 O-2):** Phase 4 创建的 `api_service/schemas/common.py` 在 Phase 5 admin schemas 落地时**扩展同一文件**（不拆 user/admin 副本，不上移到 common/schemas/）。Phase 4 当前内容直接复制 user-service `schemas/common.py`（`ApiResponse[T]` / `DateTimeModel` / `AuthBaseResponse` / `AuthErrorResponse`）。
+- **D-11 (回应 O-3):** auth_service 迁移时**保留** `get_valid_code_or_raise` 内部的 `await db.commit()` 调用（即在 service 层显式 commit，不依赖外层 controller 的 `get_db` 自动提交）。与源 user-service 行为 1:1，避免引入事务边界差异。
+- **D-12:** Phase 4 Wave 0 必须先落地 RESEARCH.md "Repository API mismatch" 章节列出的迁移基础（settings keys 补齐、`utils/` 三个辅助模块、ARQ pool wiring、schemas/common.py）。后续 04-01/02/03 的 service/controller 才能编译通过。Wave 0 任务全部放进 04-01 Plan 的前置 wave（不另开第 4 个 plan，沿用 D-08 三拆分）。
+
 ### Claude's Discretion
 - Service 层模式：源混用 @staticmethod 类 与 模块级单例（email_service）。统一采用 user-service CLAUDE.md 规定的 `@staticmethod + db: AsyncSession 首参` 模式；email_service 在保留 SMTP 配置状态的前提下也可改为 staticmethod（无状态 + 配置从 settings 读取）
 - Router 挂载：源 controller 直接 `@router.post("/auth/register")`；可保留同样形式，也可改为 `APIRouter(prefix="/auth")` + 路径不含 /auth — 二者最终 URL 一致，planner 自选更清晰风格
