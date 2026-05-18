@@ -37,9 +37,17 @@ async def _init_logging() -> None:
 
 async def _init_snowflake() -> None:
     """Configure snowflake ID generator with process-unique worker_id."""
+    worker_id = os.getpid() % 32
     configure_snowflake(
-        worker_id=os.getpid() % 32,
+        worker_id=worker_id,
         datacenter_id=settings.SNOWFLAKE_DATACENTER_ID,
+    )
+    log_event(
+        logger,
+        logging.INFO,
+        "snowflake_configured",
+        worker_id=worker_id,
+        pid=os.getpid(),
     )
 
 
