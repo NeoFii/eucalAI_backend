@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 # Set required env vars before importing app (settings validation needs them)
@@ -14,20 +15,16 @@ os.environ.setdefault("PROVIDER_SECRET_MASTER_KEY", "test-master-key-for-testing
 
 from api_service.main import app  # noqa: E402
 
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
+pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
 
-@pytest.mark.anyio
 async def test_health_returns_200(client: AsyncClient):
     response = await client.get("/health")
     assert response.status_code == 200
@@ -36,7 +33,6 @@ async def test_health_returns_200(client: AsyncClient):
     assert body["service"] == "api-service"
 
 
-@pytest.mark.anyio
 async def test_health_includes_version(client: AsyncClient):
     response = await client.get("/health")
     assert response.status_code == 200
@@ -45,7 +41,6 @@ async def test_health_includes_version(client: AsyncClient):
     assert isinstance(body["version"], str)
 
 
-@pytest.mark.anyio
 async def test_ready_returns_200(client: AsyncClient):
     response = await client.get("/ready")
     assert response.status_code == 200
