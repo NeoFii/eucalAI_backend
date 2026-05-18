@@ -1,9 +1,9 @@
 """Public api-service schema exports.
 
 Phase 4 schemas land incrementally:
-- 04-01 (this plan): auth + common
+- 04-01: auth + common
 - 04-02: keys + billing
-- 04-03: model_catalog
+- 04-03 (final): model_catalog (read-only subset; admin writes in Phase 5)
 """
 
 from api_service.schemas.auth import (
@@ -56,6 +56,14 @@ from api_service.schemas.keys import (
     ApiKeyItem,
     ApiKeyUpdateRequest,
 )
+from api_service.schemas.model_catalog import (
+    ModelCategoryBrief,
+    ModelCategoryItem,
+    ModelVendorBrief,
+    ModelVendorItem,
+    SupportedModelDetail,
+    SupportedModelItem,
+)
 
 __all__ = [
     "ApiCallLogItem",
@@ -76,6 +84,10 @@ __all__ = [
     "LoginResponseData",
     "LoginWithCodeRequest",
     "LogoutResponse",
+    "ModelCategoryBrief",
+    "ModelCategoryItem",
+    "ModelVendorBrief",
+    "ModelVendorItem",
     "RefreshResponse",
     "RefreshResponseData",
     "RefreshTokenResponse",
@@ -85,6 +97,8 @@ __all__ = [
     "RegisterResponseData",
     "ResetPasswordRequest",
     "SendEmailCodeRequest",
+    "SupportedModelDetail",
+    "SupportedModelItem",
     "TopupOrderItem",
     "UsageAnalyticsBucket",
     "UsageAnalyticsBucketCost",
