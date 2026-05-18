@@ -10,7 +10,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Project Scaffold & Common Layer** - Directory structure, settings, common utilities, lifespan skeleton
+- [x] **Phase 1: Project Scaffold & Common Layer** - Directory structure, settings, common utilities, lifespan skeleton
 - [ ] **Phase 2: Database & Redis Infrastructure** - SQLAlchemy engine, Redis pools, Snowflake ID, Alembic baseline
 - [ ] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
 - [ ] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints
@@ -37,7 +37,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 Plans:
 - [x] 01-01: Directory structure and pyproject.toml
 - [x] 01-02: Common layer merge and Settings class
-- [ ] 01-03: Lifespan skeleton and health endpoint
+- [x] 01-03: Lifespan skeleton and health endpoint
 
 ### Phase 2: Database & Redis Infrastructure
 **Goal**: api-service connects to the merged database and Redis with production-safe pool settings
@@ -189,7 +189,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Scaffold & Common Layer | 1/3 | Executing | - |
+| 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
 | 2. Database & Redis Infrastructure | 0/4 | Not started | - |
 | 3. Models & Repositories Migration | 0/3 | Not started | - |
 | 4. User Domain Controllers | 0/3 | Not started | - |
