@@ -32,7 +32,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
   2. Common layer modules (observability, HMAC internal, exceptions, utils) importable from api-service
   3. Unified Settings class loads all config from environment variables
   4. Lifespan context manager skeleton exists (resource init/shutdown hooks wired)
-**Plans**: TBD
+**Plans**: 3 plans, 3 waves
 
 Plans:
 - [ ] 01-01: Directory structure and pyproject.toml
@@ -189,7 +189,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Scaffold & Common Layer | 0/3 | Not started | - |
+| 1. Project Scaffold & Common Layer | 0/3 | Planned | - |
 | 2. Database & Redis Infrastructure | 0/4 | Not started | - |
 | 3. Models & Repositories Migration | 0/3 | Not started | - |
 | 4. User Domain Controllers | 0/3 | Not started | - |
