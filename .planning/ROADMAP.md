@@ -107,7 +107,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-02-PLAN.md — API Key + Billing controllers (5 services, 13 endpoints, SELECT FOR UPDATE + ref_id idempotency, 8 tests)
+- [x] 04-02-PLAN.md — API Key + Billing controllers (5 services, 13 endpoints, SELECT FOR UPDATE + ref_id idempotency, 8 tests)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -244,7 +244,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
 | 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
 | 3. Models & Repositories Migration | 3/3 | Complete | 2026-05-19 |
-| 4. User Domain Controllers | 1/3 | In Progress|  |
+| 4. User Domain Controllers | 2/3 | In Progress|  |
 | 5. Admin Domain Controllers | 0/3 | Not started | - |
 | 6. Relay Core | 0/3 | Not started | - |
 | 7. Protocol Adapters & Streaming | 0/3 | Not started | - |
