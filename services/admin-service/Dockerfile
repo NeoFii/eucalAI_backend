@@ -1,12 +1,11 @@
-# syntax=docker/dockerfile:1
 # admin-service: admin auth, model catalog, routing config, audit logs
 
 FROM python:3.11-slim AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i "s/deb.debian.org/mirrors.aliyun.com/g" /etc/apt/sources.list.d/debian.sources && apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev pkg-config && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir uv -i https://mirrors.aliyun.com/pypi/simple/
 
 WORKDIR /app
 COPY pyproject.toml ./
@@ -20,7 +19,7 @@ RUN uv venv /app/.venv && \
 
 FROM python:3.11-slim AS runner
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i "s/deb.debian.org/mirrors.aliyun.com/g" /etc/apt/sources.list.d/debian.sources && apt-get update && apt-get install -y --no-install-recommends \
     libpq5 && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --shell /bin/bash appuser && \
@@ -28,6 +27,7 @@ RUN useradd --create-home --shell /bin/bash appuser && \
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
+COPY --chown=appuser:appuser src/ /app/src/
 COPY --chown=appuser:appuser migrations/ /app/migrations/
 COPY --chown=appuser:appuser scripts/ /app/scripts/
 COPY --chown=appuser:appuser entrypoint.sh /app/entrypoint.sh
