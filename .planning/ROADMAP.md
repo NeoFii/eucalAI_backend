@@ -11,7 +11,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Project Scaffold & Common Layer** - Directory structure, settings, common utilities, lifespan skeleton
-- [ ] **Phase 2: Database & Redis Infrastructure** - SQLAlchemy engine, Redis pools, Snowflake ID, Alembic baseline
+- [x] **Phase 2: Database & Redis Infrastructure** - SQLAlchemy engine, Redis pools, Snowflake ID, Alembic baseline
 - [ ] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
 - [ ] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints
 - [ ] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls)
@@ -55,7 +55,7 @@ Plans:
 - [x] 02-01: SQLAlchemy async engine and session factory
 - [x] 02-02: Redis connection pools (3 logical DBs)
 - [x] 02-03: Snowflake ID with per-worker safety
-- [ ] 02-04: Alembic init and baseline migration
+- [x] 02-04: Alembic init and baseline migration
 
 ### Phase 3: Models & Repositories Migration
 **Goal**: All ORM models and repository classes are available in api-service, passing unit tests
@@ -190,7 +190,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
-| 2. Database & Redis Infrastructure | 3/4 | In Progress | - |
+| 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
 | 3. Models & Repositories Migration | 0/3 | Not started | - |
 | 4. User Domain Controllers | 0/3 | Not started | - |
 | 5. Admin Domain Controllers | 0/3 | Not started | - |
