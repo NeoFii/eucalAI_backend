@@ -70,7 +70,7 @@ Plans:
 Plans:
 - [x] 03-01: ORM models consolidation
 - [x] 03-02: Repository layer migration
-- [ ] 03-03: Auth dependencies (JWT cookie extraction)
+- [x] 03-03: Auth dependencies (JWT cookie extraction)
 
 ### Phase 4: User Domain Controllers
 **Goal**: All user-facing endpoints (auth, API keys, billing, models) work identically to current user-service
@@ -191,7 +191,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 |-------|----------------|--------|-----------|
 | 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
 | 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
-| 3. Models & Repositories Migration | 2/3 | In Progress | - |
+| 3. Models & Repositories Migration | 3/3 | Complete | 2026-05-19 |
 | 4. User Domain Controllers | 0/3 | Not started | - |
 | 5. Admin Domain Controllers | 0/3 | Not started | - |
 | 6. Relay Core | 0/3 | Not started | - |
