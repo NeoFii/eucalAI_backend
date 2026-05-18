@@ -976,29 +976,31 @@ async def update_setting(db, key, value, *, actor_admin_id, ip_address, user_age
 - A3 (drop `resolve_for_internal`) — confirms scope cut; low-risk but worth surfacing.
 - A6 (Phase 4 dependency) — coordination question for execution ordering.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **O-1: Cookie path `/` vs `/api/v1/admin`**
+> **All 5 questions resolved 2026-05-19 by user decision in /gsd:plan-phase plan-check loop.** CONTEXT.md D-08 locks O-1. O-2/O-3/O-4 deferred to in-plan read-source tasks. O-5 documented in plan metadata.
+
+1. **O-1: Cookie path `/` vs `/api/v1/admin`** — **RESOLVED: `path="/"`** (locked as CONTEXT D-08)
    - What we know: Source uses `path="/"` with an explicit comment that Next.js middleware needs to read it. CONTEXT `<specifics>` suggests `path=/api/v1/admin`.
    - What's unclear: Did the user write `<specifics>` thinking about cookie security, unaware of the Next.js middleware requirement? Or has the admin frontend changed?
    - Recommendation: Default to source `path="/"`. Flag in plan-check for explicit user confirmation.
 
-2. **O-2: `HealthCheckService` cron schedule**
+2. **O-2: `HealthCheckService` cron schedule** — **RESOLVED: read source in Plan 05-02 first task**
    - What we know: Source registers it via ARQ cron in admin-service `core/jobs.py`. Source file not yet inspected for exact schedule.
    - What's unclear: Every 30 min? Every 6 h? Tied to settings?
    - Recommendation: Read source `services/admin-service/src/core/jobs.py` during 05-02 planning and port verbatim. If source uses a settings key (likely `HEALTH_CHECK_CRON_SCHEDULE` or similar), add it to api-service settings.
 
-3. **O-3: `inference-service` `/api/v1/internal/logs` endpoint path**
+3. **O-3: `inference-service` `/api/v1/internal/logs` endpoint path** — **RESOLVED: grep inference-service codebase in Plan 05-03 service_logs task**
    - What we know: admin-service gateway calls `/internal/logs` (no `/api/v1` prefix — source `service_logs.py:83`). The endpoint in inference-service likely lives at `/api/v1/internal/logs` based on inference-service conventions, but source uses just `/internal/logs`.
    - What's unclear: Which path does inference-service actually serve today?
    - Recommendation: Plan 05-03 task: verify `inference-service` log endpoint path by grepping its codebase (or via README). If `/internal/logs` is correct, preserve. If it's `/api/v1/internal/logs`, port with new path.
 
-4. **O-4: `AdminAuditCategory` Literal definition order**
+4. **O-4: `AdminAuditCategory` Literal definition order** — **RESOLVED: read source `schemas/audit_log.py` in Plan 05-02 audit task**
    - What we know: Source `schemas/audit_log.py:13` defines `AdminAuditCategory = Literal["all", ...other categories...]`. The "..." is unverified.
    - What's unclear: Full Literal set hasn't been read; planner must read this exhaustively before porting.
    - Recommendation: Plan 05-02 first-task includes a `Read` of `services/admin-service/src/schemas/audit_log.py` to capture the exact Literal members.
 
-5. **O-5: ARQ worker registration for health check post-merge**
+5. **O-5: ARQ worker registration for health check post-merge** — **RESOLVED: single worker (Phase 4's ARQ worker) per planner recommendation, documented in plan metadata**
    - What we know: Phase 4's `api_service/core/jobs.py` registers 4 user-domain cron jobs. Phase 5 needs to add `run_health_checks`. Source admin-service had a separate ARQ worker process — Phase 5 must decide: do health checks run in the same ARQ worker as Phase 4's user-domain jobs, or do they need a separate worker?
    - Recommendation: Single worker. Health check is async, semaphore-limited (concurrency=5), and runs once every N hours. Adding it to the user-domain ARQ worker has zero hot-path impact. Plan 05-02 last task: append `run_health_checks` to `api_service/core/jobs.py:WorkerSettings.functions` and add a `cron(...)` entry to `WorkerSettings.cron_jobs`.
 

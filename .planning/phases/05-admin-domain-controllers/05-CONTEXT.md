@@ -102,6 +102,19 @@
     - schemas/user_management.py + route_monitor.py + service_logs.py + voucher.py
     - 删除 `gateways/` 目录（5 个 gateway 全部作废）
 
+### Cookie 路径 (新增,2026-05-19 解决 RESEARCH O-1)
+- **D-08:** admin cookie 路径锁定为 `path="/"`（**覆盖 `<specifics>` 第 241 行 `/api/v1/admin` 的建议**）
+  - 理由：源码 `services/admin-service/src/controllers/auth.py` 有明确注释,Next.js 页面级中间件需要 `path="/"` 才能读取 admin cookie；admin 前端实际依赖此行为
+  - 适用范围：`admin_access_token` + `admin_refresh_token` 两个 cookie 的 `Set-Cookie` 都用 `path="/"`
+  - 安全性：cookie 仍是 `httpOnly=True` + `SameSite=Lax`,虽然路径更宽,实际攻击面有限
+  - `<specifics>` 第 241 行（"path 设为 /api/v1/admin"）**作废** — 以本决策为准
+
+### 已解决的开放问题 (2026-05-19, RESEARCH O-2~O-5)
+- **O-2 (HealthCheckService cron 排程)：** Plan 05-02 首任务读 `services/admin-service/src/core/jobs.py`,把 cron 排程 verbatim 移植
+- **O-3 (inference-service `/internal/logs` 路径)：** Plan 05-03 service_logs 任务先 grep inference-service 代码库确认实际路径(`/internal/logs` 还是 `/api/v1/internal/logs`),再固化到代码
+- **O-4 (AdminAuditCategory Literal 全量成员)：** Plan 05-02 audit_log schemas 任务读 `services/admin-service/src/schemas/audit_log.py:13` 全量抄录 Literal
+- **O-5 (ARQ worker 注册)：** 健康检查跑在 Phase 4 同一个 ARQ worker 里(并发=5,信号量限制,N 小时一次,对 hot path 零影响),planner 在 plan 元数据里记录此理由
+
 ### Claude's Discretion
 - Service 内 @staticmethod vs 实例方法：沿用 Phase 4 决定，统一 @staticmethod + `db: AsyncSession` 首参（pool_service 599 行较大可内部按 section 组织）
 - bootstrap_service 触发时机：建议 lifespan 启动钩子（registry.register("super_admin_bootstrap", ...) priority 较低，在 DB 之后），planner 可酌情改为 CLI 命令
