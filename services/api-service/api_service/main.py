@@ -74,6 +74,42 @@ registry.register(
 )
 
 
+async def _init_redis() -> None:
+    """Initialize Redis db/0 pool (session/rate-limit)."""
+    from api_service.common.infra.redis import init_redis
+
+    await init_redis(settings.REDIS_URL)
+
+
+async def _shutdown_redis() -> None:
+    """Close Redis db/0 pool."""
+    from api_service.common.infra.redis import close_redis
+
+    await close_redis()
+
+
+registry.register("redis", init_fn=_init_redis, shutdown_fn=_shutdown_redis, priority=30)
+
+
+async def _init_cache_redis() -> None:
+    """Initialize Cache Redis db/2 pool."""
+    from api_service.common.infra.cache import init_cache_redis
+
+    await init_cache_redis(settings.CACHE_REDIS_URL)
+
+
+async def _shutdown_cache_redis() -> None:
+    """Close Cache Redis db/2 pool."""
+    from api_service.common.infra.cache import close_cache_redis
+
+    await close_cache_redis()
+
+
+registry.register(
+    "cache_redis", init_fn=_init_cache_redis, shutdown_fn=_shutdown_cache_redis, priority=30
+)
+
+
 # ── Lifespan Context Manager ─────────────────────────────────────────────────
 
 
@@ -132,14 +168,26 @@ async def health():
 
 @app.get("/ready")
 async def ready():
-    """Readiness probe — checks database connectivity."""
+    """Readiness probe — checks database, Redis db/0, and Cache Redis db/2."""
     from api_service.common.health import build_readiness_response, check_database_ready
+    from api_service.common.infra.cache import check_cache_redis_ready
+    from api_service.common.infra.redis import check_redis_ready
     from api_service.core.db import get_engine
 
     async def _db_check():
         return await check_database_ready(get_engine)
 
+    async def _combined_redis_check() -> tuple[bool, str | None]:
+        ok, err = await check_redis_ready()
+        if not ok:
+            return False, f"Redis db/0: {err}"
+        ok, err = await check_cache_redis_ready()
+        if not ok:
+            return False, f"Cache Redis db/2: {err}"
+        return True, None
+
     return await build_readiness_response(
         service_name=settings.SERVICE_NAME,
         database_check=_db_check,
+        redis_check=_combined_redis_check,
     )
