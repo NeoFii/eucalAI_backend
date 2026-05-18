@@ -93,4 +93,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-18 after initialization*
+*Last updated: 2026-05-19 after Phase 04 (user-domain-controllers) complete — all /auth, /keys, /billing, /models endpoints (27 paths) ported into api-service. ARQ pool wired for async email. Phase 4 verification status: human_needed (6 staging items deferred to UAT)*
