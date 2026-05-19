@@ -153,3 +153,17 @@ from api_service.schemas.admin.user_management import (  # noqa: E402
     UserUsageStatItem,
     UserUsageStatListResponse,
 )
+from api_service.schemas.admin.voucher import (  # noqa: E402
+    GenerateVoucherCodesRequest,
+    VoucherCodeCreateResponse,
+    VoucherCodeItem,
+    VoucherCodeListResponse,
+    VoucherCodeResponse,
+    VoucherOperationResponse,
+)
+from api_service.schemas.admin.route_monitor import (  # noqa: E402
+    RouteAggregateResponse,
+    RouteCompareResponse,
+    RouteRequestDetailResponse,
+    RouteRequestListResponse,
+)
