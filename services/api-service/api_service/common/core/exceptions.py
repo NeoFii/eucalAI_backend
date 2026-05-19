@@ -363,3 +363,41 @@ class ServiceUnavailableException(APIException):
             detail=detail,
             code="service_unavailable",
         )
+
+
+# ==================== 管理员域异常 (Plan 05-01 Task 1b — Pitfall 15) ====================
+
+
+class AdminConflictException(APIException):
+    """
+    管理员资源冲突异常 (HTTP 409)
+
+    Raised when an admin mutation conflicts with existing state — e.g.,
+    creating a second admin with an already-registered email, attempting
+    to demote the only remaining super-admin, etc.
+    """
+
+    def __init__(self, detail: str = "Admin resource conflict"):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=detail,
+            code="admin_conflict",
+        )
+
+
+class AdminPermissionDeniedException(APIException):
+    """
+    管理员权限不足异常 (HTTP 403)
+
+    Raised by `require_active_admin` / `require_super_admin` when the
+    authenticated admin lacks the required role or status. Distinct from
+    `AuthenticationException` (401) so the response code disambiguates
+    "not logged in" vs. "logged in but not authorized".
+    """
+
+    def __init__(self, detail: str = "Admin permission denied"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+            code="admin_permission_denied",
+        )

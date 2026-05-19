@@ -7,7 +7,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from api_service.schemas.common import AuthBaseResponse, DateTimeModel
+from api_service.common.schemas import BaseResponse, DateTimeModel
 from api_service.common.utils.email import normalize_email
 from api_service.common.utils.password_policy import check_password_strength
 
@@ -56,7 +56,7 @@ class RegisterResponseData(DateTimeModel):
     expires_in: Optional[int] = Field(default=None, description="Access token expiry seconds")
 
 
-class RegisterResponse(AuthBaseResponse):
+class RegisterResponse(BaseResponse):
     data: Optional[RegisterResponseData] = None
 
 
@@ -94,7 +94,7 @@ class LoginResponseData(BaseModel):
     expires_in: Optional[int] = Field(default=None, description="Access token expiry seconds")
 
 
-class LoginResponse(AuthBaseResponse):
+class LoginResponse(BaseResponse):
     data: Optional[LoginResponseData] = None
 
 
@@ -116,7 +116,7 @@ class UserInfoResponseData(DateTimeModel):
     )
 
 
-class UserInfoResponse(AuthBaseResponse):
+class UserInfoResponse(BaseResponse):
     data: Optional[UserInfoResponseData] = None
 
 
@@ -133,7 +133,7 @@ class ChangePasswordRequest(BaseModel):
         return self
 
 
-class ChangePasswordResponse(AuthBaseResponse):
+class ChangePasswordResponse(BaseResponse):
     """Change password response."""
 
 
@@ -143,7 +143,7 @@ class RefreshResponseData(BaseModel):
     expires_in: int = Field(..., description="Access token expiry seconds")
 
 
-class RefreshResponse(AuthBaseResponse):
+class RefreshResponse(BaseResponse):
     data: Optional[RefreshResponseData] = None
 
 
@@ -154,7 +154,7 @@ RefreshTokenResponse = RefreshResponse
 RefreshTokenResponseData = RefreshResponseData
 
 
-class LogoutResponse(AuthBaseResponse):
+class LogoutResponse(BaseResponse):
     """Logout response."""
 
 

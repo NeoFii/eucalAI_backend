@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api_service.core.db import get_db
 from api_service.models import User
 from api_service.core.policies import require_active_user
-from api_service.schemas.common import ApiResponse, AuthBaseResponse
+from api_service.common.schemas import ApiResponse, BaseResponse
 from api_service.schemas.keys import (
     ApiKeyCreateData,
     ApiKeyCreateRequest,
@@ -85,21 +85,22 @@ async def update_key(
     }
 
 
-@router.post("/{key_id}/disable", response_model=AuthBaseResponse, summary="Disable API key")
+@router.post("/{key_id}/disable", response_model=BaseResponse, summary="Disable API key")
 async def disable_key(
     key_id: int,
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db),
-) -> AuthBaseResponse:
+) -> BaseResponse:
     await ApiKeyService.disable(db, key_id=key_id, user_id=int(current_user.id))
-    return AuthBaseResponse(code=200, message="success")
+    return BaseResponse(code=200, message="success")
 
 
-@router.delete("/{key_id}", response_model=AuthBaseResponse, summary="Delete API key")
+@router.delete("/{key_id}", response_model=BaseResponse, summary="Delete API key")
 async def delete_key(
     key_id: int,
     current_user: User = Depends(require_active_user),
     db: AsyncSession = Depends(get_db),
-) -> AuthBaseResponse:
+) -> BaseResponse:
     await ApiKeyService.delete(db, key_id=key_id, user_id=int(current_user.id))
-    return AuthBaseResponse(code=200, message="deleted")
+    return BaseResponse(code=200, message="deleted")
+

@@ -8,7 +8,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, computed_field
 from pydantic import Field
 
-from api_service.schemas.common import DateTimeModel
+from api_service.common.schemas import DateTimeModel
 
 
 class BalanceResponseData(BaseModel):

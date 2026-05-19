@@ -8,7 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api_service.common.utils.timezone import to_shanghai_naive
-from api_service.schemas.common import DateTimeModel
+from api_service.common.schemas import DateTimeModel
 from api_service.common.utils.api_key_policy import normalize_allow_ips, normalize_allowed_models
 
 

@@ -14,7 +14,7 @@ from api_service.common.utils.timezone import now
 from api_service.core.db import get_db
 from api_service.models import User
 from api_service.core.policies import require_active_user
-from api_service.schemas.common import ApiResponse
+from api_service.common.schemas import ApiResponse
 from api_service.schemas.billing import (
     ApiCallLogItem,
     BalanceResponseData,

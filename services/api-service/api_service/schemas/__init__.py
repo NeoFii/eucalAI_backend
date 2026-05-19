@@ -4,8 +4,18 @@ Phase 4 schemas land incrementally:
 - 04-01: auth + common
 - 04-02: keys + billing
 - 04-03 (final): model_catalog (read-only subset; admin writes in Phase 5)
+
+Plan 05-01 / Task 1a: response envelope primitives are now hoisted to
+`api_service.common.schemas` (D-04). Re-export them here for backward
+compatibility with code that does `from api_service.schemas import ApiResponse`.
 """
 
+from api_service.common.schemas import (
+    ApiResponse,
+    BaseResponse,
+    DateTimeModel,
+    ErrorResponse,
+)
 from api_service.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponse,
@@ -44,12 +54,6 @@ from api_service.schemas.billing import (
     VoucherRedeemResponseData,
     VoucherRedemptionItem,
 )
-from api_service.schemas.common import (
-    ApiResponse,
-    AuthBaseResponse,
-    AuthErrorResponse,
-    DateTimeModel,
-)
 from api_service.schemas.keys import (
     ApiKeyCreateData,
     ApiKeyCreateRequest,
@@ -72,13 +76,13 @@ __all__ = [
     "ApiKeyItem",
     "ApiKeyUpdateRequest",
     "ApiResponse",
-    "AuthBaseResponse",
-    "AuthErrorResponse",
     "BalanceResponseData",
     "BalanceTransactionItem",
+    "BaseResponse",
     "ChangePasswordRequest",
     "ChangePasswordResponse",
     "DateTimeModel",
+    "ErrorResponse",
     "LoginRequest",
     "LoginResponse",
     "LoginResponseData",

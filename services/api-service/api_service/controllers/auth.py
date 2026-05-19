@@ -47,7 +47,7 @@ from api_service.schemas.auth import (
     UserInfoResponseData,
     VerifyEmailRequest,
 )
-from api_service.schemas.common import AuthBaseResponse
+from api_service.common.schemas import BaseResponse
 from api_service.services.auth_service import AuthService
 from api_service.services.email_service import EmailService
 
@@ -339,14 +339,14 @@ async def change_password(
 
 @router.post(
     "/auth/reset-password",
-    response_model=AuthBaseResponse,
+    response_model=BaseResponse,
     summary="重置密码",
     description="通过邮箱验证码重置密码",
 )
 async def reset_password(
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
-) -> AuthBaseResponse:
+) -> BaseResponse:
     try:
         await AuthService.reset_password(
             db, request.email, request.code, request.new_password, request.lang
@@ -355,19 +355,19 @@ async def reset_password(
         logger.exception("重置密码失败")
         raise
 
-    return AuthBaseResponse(code=200, message="密码重置成功")
+    return BaseResponse(code=200, message="密码重置成功")
 
 
 @router.post(
     "/auth/send-email-code",
-    response_model=AuthBaseResponse,
+    response_model=BaseResponse,
     summary="发送邮箱验证码",
     description="发送邮箱验证码用于注册或重置密码",
 )
 async def send_email_code(
     request: SendEmailCodeRequest,
     db: AsyncSession = Depends(get_db),
-) -> AuthBaseResponse:
+) -> BaseResponse:
     try:
         # Pitfall 4: EmailService is a class, not a module instance.
         sent, message = await EmailService.send_verification_code(
@@ -380,23 +380,23 @@ async def send_email_code(
     if not sent:
         raise ServiceUnavailableException(detail=message)
 
-    return AuthBaseResponse(code=200, message="验证码已发送")
+    return BaseResponse(code=200, message="验证码已发送")
 
 
 @router.post(
     "/auth/verify-email",
-    response_model=AuthBaseResponse,
+    response_model=BaseResponse,
     summary="验证邮箱",
     description="验证邮箱验证码（用于确认邮箱所有权）",
 )
 async def verify_email(
     request: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db),
-) -> AuthBaseResponse:
+) -> BaseResponse:
     try:
         await AuthService.verify_email(db, request.email, request.code)
     except Exception:
         logger.exception("验证邮箱失败")
         raise
 
-    return AuthBaseResponse(code=200, message="邮箱验证成功")
+    return BaseResponse(code=200, message="邮箱验证成功")
