@@ -56,6 +56,16 @@ class ApiServiceSettings(BaseServiceSettings):
     INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD: int = 5
     INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 30
 
+    # ── Channel health checks (Plan 05-02 Task 3) ──────────────────────
+    # Source: services/admin-service/src/core/config.py — ported verbatim.
+    # Consumed by `HealthCheckService` (services/admin/health_check_service.py)
+    # which runs every 10 minutes on the existing api-service ARQ worker
+    # (CONTEXT 已解决的开放问题 O-2 + O-5).
+    HEALTH_CHECK_TIMEOUT_SECONDS: float = 15.0
+    HEALTH_CHECK_LLM_PROBE_ENABLED: bool = True
+    HEALTH_CHECK_LLM_PROBE_MAX_TOKENS: int = 5
+    HEALTH_CHECK_RATE_LIMIT_DELAY: float = 0.5
+
     # ── User ──────────────────────────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
