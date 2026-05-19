@@ -86,6 +86,7 @@ class AdminEndUserService:
         user = await _resolve_user(db, target_uid)
         before_status = user.status
         user.status = status
+        await db.flush()
         return {"before_status": before_status, "after_status": status}
 
     @staticmethod
