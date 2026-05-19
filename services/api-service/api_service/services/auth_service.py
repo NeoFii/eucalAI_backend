@@ -294,7 +294,7 @@ class AuthService:
             raise WeakPasswordException(detail=msg)
 
         user.password_hash = await hash_password_async(new_password)
-        await AuthService._revoke_all_user_sessions(db, user.id)
+        await AuthService.revoke_all_user_sessions(db, user.id)
         await db.commit()
         log_event(logger, logging.INFO, "userPasswordChanged", uid=user.uid)
 
@@ -339,7 +339,7 @@ class AuthService:
         return access_token, refresh_token
 
     @staticmethod
-    async def _revoke_all_user_sessions(db: AsyncSession, user_id: int) -> None:
+    async def revoke_all_user_sessions(db: AsyncSession, user_id: int) -> None:
         """注销用户的所有会话"""
         user_repo = UserRepository(db)
         sessions = await user_repo.list_active_sessions_for_user(user_id)
@@ -408,6 +408,6 @@ class AuthService:
 
         user.password_hash = await hash_password_async(new_password)
         EmailService.mark_code_used(code_record)
-        await AuthService._revoke_all_user_sessions(db, user.id)
+        await AuthService.revoke_all_user_sessions(db, user.id)
         await db.commit()
         log_event(logger, logging.INFO, "userPasswordReset", uid=user.uid)

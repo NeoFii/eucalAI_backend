@@ -96,7 +96,7 @@ class AdminEndUserService:
         user = await _resolve_user(db, target_uid)
         user.password_hash = await hash_password_async(new_password)
         # T-5-07: revoke ALL active sessions for the target user
-        await AuthService._revoke_all_user_sessions(db, user.id)
+        await AuthService.revoke_all_user_sessions(db, user.id)
         return user
 
     @staticmethod
