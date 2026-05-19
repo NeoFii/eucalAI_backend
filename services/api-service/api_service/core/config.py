@@ -38,6 +38,24 @@ class ApiServiceSettings(BaseServiceSettings):
     PROVIDER_SECRET_MASTER_KEY: str = ""
     ADMIN_TOKEN_EXPIRE_MINUTES: int = 480
 
+    # ── Admin bootstrap behaviour (Plan 05-01 Task 1b — RESEARCH Settings Gap) ──
+    # When True, startup raises RuntimeError if no active super-admin exists
+    # AND `BOOTSTRAP_SUPERADMIN_ENABLED=False`. Fails loud rather than silent.
+    BOOTSTRAP_SUPERADMIN_REQUIRE_ON_STARTUP: bool = True
+    # When True, an existing super-admin's password is reset to
+    # `BOOTSTRAP_SUPERADMIN_PASSWORD` on every startup (env-driven rotation).
+    BOOTSTRAP_SUPERADMIN_RESET_PASSWORD_IF_EXISTS: bool = False
+    # When True, an existing super-admin's display name is overwritten with
+    # `BOOTSTRAP_SUPERADMIN_NAME` on every startup.
+    BOOTSTRAP_SUPERADMIN_UPDATE_NAME_IF_EXISTS: bool = False
+
+    # ── Internal HTTP client circuit breaker (Plan 05-01 Task 1b override) ──
+    # Override BaseServiceSettings defaults (threshold=3, cooldown=30.0s) with
+    # admin-domain values validated by the source. Plan 05-03 consumes these
+    # when wiring the inference-service log fetch.
+    INTERNAL_HTTP_CIRCUIT_BREAKER_THRESHOLD: int = 5
+    INTERNAL_HTTP_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 30
+
     # ── User ──────────────────────────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

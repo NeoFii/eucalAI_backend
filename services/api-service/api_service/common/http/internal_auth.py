@@ -1,73 +1,33 @@
 """Internal service authentication — signature verification (receiver side).
 
 Only contains the verification/dependency logic for protecting internal endpoints.
-Calling-side logic (httpx pool, circuit breaker, request helpers) is NOT included here;
-it will be handled by InferenceClient in Phase 6.
+Calling-side logic (httpx pool, circuit breaker, request helpers) is in
+`api_service/common/internal.py` (HMAC sender). Both sides share the canonical
+HMAC primitives from `api_service/common/http/internal_signing.py`.
+
+Plan 05-01 / Task 1b (Pitfall 1 dedupe): the four canonicalisation helpers and
+`_build_internal_signature` previously inlined here are now imported from
+`internal_signing.py` so there is exactly one source of truth.
 """
 
 from __future__ import annotations
 
-import hashlib
 import hmac
-import json
 import time
-from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import Header, HTTPException, Request, status
 
-INTERNAL_CALLER_HEADER = "X-Internal-Service"
-INTERNAL_TIMESTAMP_HEADER = "X-Internal-Timestamp"
-INTERNAL_SIGNATURE_HEADER = "X-Internal-Signature"
+from api_service.common.http.internal_signing import (
+    INTERNAL_CALLER_HEADER,
+    INTERNAL_SIGNATURE_HEADER,
+    INTERNAL_TIMESTAMP_HEADER,
+    _build_internal_signature,
+    _canonicalize_request_body,
+    _canonicalize_request_target,
+)
+
 INVALID_INTERNAL_SECRET_DETAIL = "Invalid internal secret"
 INVALID_INTERNAL_CALLER_DETAIL = "Invalid internal caller"
-
-
-def _canonicalize_request_body(body: bytes) -> str:
-    if not body:
-        return ""
-    try:
-        parsed = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return body.decode("utf-8", errors="ignore")
-    if parsed is None:
-        return ""
-    return json.dumps(parsed, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def _canonicalize_query_pairs(pairs: list[tuple[str, str]]) -> str:
-    if not pairs:
-        return ""
-    normalized = sorted((str(key), str(value)) for key, value in pairs)
-    return urlencode(normalized, doseq=True)
-
-
-def _canonicalize_request_query(raw_query: str) -> str:
-    if not raw_query:
-        return ""
-    return _canonicalize_query_pairs(parse_qsl(raw_query, keep_blank_values=True))
-
-
-def _canonicalize_request_target(path: str, *, raw_query: str = "") -> str:
-    split = urlsplit(path)
-    normalized_path = split.path or path or "/"
-    query = _canonicalize_request_query(raw_query or split.query)
-    if query:
-        return f"{normalized_path}?{query}"
-    return normalized_path
-
-
-def _build_internal_signature(
-    *,
-    secret: str,
-    caller_service: str,
-    method: str,
-    request_target: str,
-    timestamp: str,
-    canonical_body: str,
-) -> str:
-    body_digest = hashlib.sha256(canonical_body.encode("utf-8")).hexdigest()
-    payload = f"{caller_service}|{method.upper()}|{request_target}|{timestamp}|{body_digest}"
-    return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def verify_internal_signature(
