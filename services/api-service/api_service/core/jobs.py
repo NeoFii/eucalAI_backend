@@ -2,6 +2,16 @@
 
 Wave 0 (Task 1 of plan 04-01): 4 cron jobs ported from user-service.
 Wave 1 (Task 2 of plan 04-01): adds send_verification_email + _send_smtp_sync helpers.
+Plan 05-02 Wave 2 Task 3: adds `run_health_checks` admin cron.
+
+# Phase 5 pre-flight notes (CONTEXT 已解决的开放问题 O-2 + O-4)
+# - Source cron cadence verified at services/admin-service/src/core/jobs.py:66:
+#       cron(check_channel_health, minute={0, 10, 20, 30, 40, 50})
+#   → ported verbatim below as `cron(run_health_checks, minute={...})`.
+# - AdminAuditCategory Literal members verified to match source at
+#   services/api-service/api_service/schemas/admin/audit_log.py:21 (all 8
+#   members preserved: all, governance, auth, user_management,
+#   model_catalog, routing_config, voucher, pool).
 """
 
 from __future__ import annotations
@@ -212,6 +222,29 @@ async def send_verification_email(ctx: dict, email: str, code: str, purpose: str
         )
 
 
+async def run_health_checks(ctx: dict) -> None:
+    """ARQ job — proactive channel health probing.
+
+    Ported from `services/admin-service/src/core/jobs.py:check_channel_health`
+    in Plan 05-02 / Task 3 (CONTEXT O-2 + O-5). Runs every 10 minutes on the
+    existing api-service ARQ worker (no separate worker process — the 2h4g
+    constraint forbids a second 350MB resident worker).
+
+    Concurrency is bounded inside `HealthCheckService.run_health_checks`
+    by `HEALTH_CHECK_CONCURRENCY=5` (asyncio.Semaphore), so even when many
+    pool accounts are configured, in-flight upstream probes never exceed 5.
+    """
+    del ctx
+    # Lazy import — the admin service module loads health_check_service, which
+    # in turn imports from `services.admin.pool_service` for the _extract_balance
+    # helper. Keeping it lazy avoids forcing the admin service tree to load
+    # for non-admin worker invocations.
+    from api_service.services.admin.health_check_service import HealthCheckService
+
+    async with get_db_context() as db:
+        await HealthCheckService.run_health_checks(db)
+
+
 def get_worker_settings_kwargs() -> dict:
     """Return the kwargs dict to be applied to WorkerSettings."""
     return {
@@ -221,12 +254,16 @@ def get_worker_settings_kwargs() -> dict:
             cleanup_expired_sessions,
             reconcile_balance_ledger,
             send_verification_email,
+            run_health_checks,
         ],
         "cron_jobs": [
             cron(aggregate_usage_stats, minute=0),
             cron(cleanup_expired_verification_codes, hour=3, minute=0),
             cron(cleanup_expired_sessions, hour=3, minute=30),
             cron(reconcile_balance_ledger, hour=4, minute=30),
+            # Plan 05-02 / Task 3 — source cadence verbatim (O-2):
+            # services/admin-service/src/core/jobs.py:66.
+            cron(run_health_checks, minute={0, 10, 20, 30, 40, 50}),
         ],
         "redis_settings": build_redis_settings(),
         "max_jobs": settings.USER_WORKER_CONCURRENCY,
