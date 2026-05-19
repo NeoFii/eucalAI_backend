@@ -57,7 +57,7 @@ Plans:
   4. Alembic baseline migration covers all tables from both original databases
   5. Lifespan properly creates and disposes DB engine and Redis pools on shutdown
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
@@ -77,7 +77,7 @@ Plans:
   2. Repository classes execute basic CRUD operations against test database
   3. Auth dependency functions (get_current_user, get_current_admin) resolve correctly
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
@@ -151,13 +151,13 @@ Plans:
   4. Call log writes via asyncio.create_task directly to DB (no HTTP buffer)
   5. Channel selection with circuit breaker and retry logic works
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
-- [ ] 06-01: API Key local auth + balance check
-- [ ] 06-02: RoutingConfigCache (DB + Redis + invalidation)
-- [ ] 06-03: Call lifecycle, billing integration, channel selection
+- [ ] 06-01-PLAN.md — API Key local auth + RelayBillingService (RELAY-05, RELAY-06, RELAY-10)
+- [ ] 06-02-PLAN.md — RoutingConfigCache + runtime_config + upstream (RELAY-07, RELAY-08)
+- [ ] 06-03-PLAN.md — CallLog writer + ChannelSelector + InferenceClient + routing + lifespan (RELAY-09, RELAY-13, RELAY-14)
 
 ### Phase 7: Protocol Adapters & Streaming
 
@@ -172,7 +172,7 @@ Plans:
   4. GET /v1/models returns model list consistent with user's available models
   5. Three-tier rate limiting (per-key, per-user, global) rejects excess requests with 429
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
@@ -190,7 +190,7 @@ Plans:
   1. /api/v1/internal/routing-config/* endpoints respond with valid HMAC signatures
   2. inference-service fetches routing config from api-service URL without errors
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
@@ -208,7 +208,7 @@ Plans:
   3. api-service with 4 workers stays under 1.5GB memory on 2h4g server
   4. No Snowflake ID collisions under concurrent load
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
@@ -227,7 +227,7 @@ Plans:
   2. Frontend API_URL switched to api-service, all user flows work
   3. Old services stopped, no functionality regression observed over 24h monitoring
 
-**Plans**: TBD
+**Plans**: 3 plans, 2 waves
 
 Plans:
 
