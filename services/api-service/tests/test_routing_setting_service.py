@@ -5,9 +5,10 @@ Plan 05-02 / Task 2 behaviours covered:
 - `test_validate_rejects_unavailable`: tier_N_model slug missing from
   pool coverage raises ValidationException.
 - `test_validate_rejects_no_routing_slug`: tier_N_model slug exists in
-  pools but no model catalog has that `routing_slug` ⇒ ValidationException.
-- `test_resolve_for_internal_not_present` (Pitfall 4): the source
-  method `resolve_for_internal` is intentionally NOT ported.
+  pools but no model catalog has that `routing_slug` => ValidationException.
+- `test_resolve_for_internal_present` (Phase 8): the method exists.
+- `test_resolve_for_internal_returns_expected_keys` (Phase 8): returns
+  all 8 expected keys with correct types.
 - `test_bump_version_increments_redis`: D-06 contract — `_bump_version`
   calls `redis.incr('routing_config:version')`.
 - `test_bump_version_fail_open`: D-06 Redis errors are logged but do not
@@ -35,9 +36,61 @@ from api_service.services.admin.routing_setting_service import (  # noqa: E402
 )
 
 
-def test_resolve_for_internal_not_present():
-    """Pitfall 4: `resolve_for_internal` must NOT be ported."""
-    assert not hasattr(RoutingSettingService, "resolve_for_internal")
+def test_resolve_for_internal_present():
+    """Phase 8: `resolve_for_internal` is now ported and available."""
+    assert hasattr(RoutingSettingService, "resolve_for_internal")
+
+
+@pytest.mark.asyncio
+async def test_resolve_for_internal_returns_expected_keys():
+    """Phase 8: resolve_for_internal returns all 8 expected keys."""
+    db = AsyncMock()
+
+    # Build mock settings that cover the expected key patterns
+    mock_settings = []
+    for route in ["纠错", "工具调用", "通用任务", "任务拆解", "编程"]:
+        setting = MagicMock()
+        setting.key = f"weight_{route}"
+        setting.value = "1.0"
+        mock_settings.append(setting)
+
+    for tier in range(1, 6):
+        setting = MagicMock()
+        setting.key = f"tier_{tier}_model"
+        setting.value = f"model-{tier}"
+        mock_settings.append(setting)
+
+    for key, value in [
+        ("router_alias", "auto"),
+        ("user_facing_aliases", "auto,smart"),
+        ("score_bands", "0-3:5,3-5:4"),
+        ("default_user_rpm", "30"),
+        ("system_rpm_cap", "500"),
+    ]:
+        setting = MagicMock()
+        setting.key = key
+        setting.value = value
+        mock_settings.append(setting)
+
+    with patch(
+        "api_service.services.admin.routing_setting_service.RoutingSettingRepository"
+    ) as MockRepo:
+        MockRepo.return_value.get_all = AsyncMock(return_value=mock_settings)
+        result = await RoutingSettingService.resolve_for_internal(db)
+
+    expected_keys = {
+        "router_alias", "user_facing_aliases", "route_order",
+        "weights", "score_bands", "tier_model_map",
+        "default_user_rpm", "system_rpm_cap",
+    }
+    assert set(result.keys()) == expected_keys
+    assert result["router_alias"] == "auto"
+    assert result["user_facing_aliases"] == ["auto", "smart"]
+    assert result["route_order"] == ["纠错", "工具调用", "通用任务", "任务拆解", "编程"]
+    assert result["weights"]["纠错"] == 1.0
+    assert result["tier_model_map"]["1"] == "model-1"
+    assert result["default_user_rpm"] == 30
+    assert result["system_rpm_cap"] == 500
 
 
 @pytest.mark.asyncio

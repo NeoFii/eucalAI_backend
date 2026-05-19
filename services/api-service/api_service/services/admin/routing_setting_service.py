@@ -1,9 +1,9 @@
 """Routing settings service (admin domain).
 
-Ported from `services/admin-service/src/services/routing_setting_service.py`
-LINES 1-185 ONLY in Plan 05-02 / Task 2.  Pitfall 4: source lines 186-240
-(`resolve_for_internal`) are explicitly **NOT** ported — they only fed the
-deleted internal HMAC endpoints (CONTEXT D-01b).
+Ported from `services/admin-service/src/services/routing_setting_service.py`.
+Phase 05-02 / Task 2 ported lines 1-185. Phase 08-01 / Task 1 ports
+`resolve_for_internal` (lines 186-240) to support the internal HMAC endpoint
+consumed by inference-service.
 
 Rewrites applied (standard set):
 
@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -256,6 +257,62 @@ class RoutingSettingService:
                 )
         if catalog_missing:
             raise ValidationException("；".join(catalog_missing))
+
+    # ------------------------------------------------------------------
+    # Internal config resolution (Phase 8 — inference-service endpoint)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    async def resolve_for_internal(db: AsyncSession) -> dict[str, Any]:
+        """Assemble routing settings into the dict format expected by inference-service.
+
+        Returns a flat dict with keys: router_alias, user_facing_aliases,
+        route_order, weights, score_bands, tier_model_map, default_user_rpm,
+        system_rpm_cap.
+        """
+        repo = RoutingSettingRepository(db)
+        all_settings = await repo.get_all()
+        kv = {s.key: s.value for s in all_settings}
+
+        weights = {}
+        for route in FIVEWAY_ROUTE_ORDER:
+            w = kv.get(f"weight_{route}", "1.0")
+            weights[route] = float(w)
+
+        tier_model_map = {}
+        for tier in range(1, 6):
+            tier_model_map[str(tier)] = kv.get(f"tier_{tier}_model", "")
+
+        router_alias = kv.get("router_alias", "auto")
+        raw_aliases = kv.get("user_facing_aliases", router_alias)
+        user_facing_aliases = [a.strip() for a in raw_aliases.split(",") if a.strip()]
+        if not user_facing_aliases:
+            user_facing_aliases = [router_alias]
+
+        try:
+            default_user_rpm = int(kv.get("default_user_rpm", "20") or "20")
+        except (TypeError, ValueError):
+            default_user_rpm = 20
+        if default_user_rpm < 1:
+            default_user_rpm = 20
+
+        try:
+            system_rpm_cap = int(kv.get("system_rpm_cap", "1000") or "1000")
+        except (TypeError, ValueError):
+            system_rpm_cap = 1000
+        if system_rpm_cap < 1:
+            system_rpm_cap = 1000
+
+        return {
+            "router_alias": router_alias,
+            "user_facing_aliases": user_facing_aliases,
+            "route_order": list(FIVEWAY_ROUTE_ORDER),
+            "weights": weights,
+            "score_bands": kv.get("score_bands", "0-3:5,3-5:4,5-7:3,7-9:2,9-10:1"),
+            "tier_model_map": tier_model_map,
+            "default_user_rpm": default_user_rpm,
+            "system_rpm_cap": system_rpm_cap,
+        }
 
 
 __all__ = ["ROUTING_CONFIG_VERSION_KEY", "RoutingSettingService"]
