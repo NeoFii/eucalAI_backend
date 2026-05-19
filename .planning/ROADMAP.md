@@ -16,7 +16,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - [x] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
 - [x] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints (completed 2026-05-18)
 - [x] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls) (completed 2026-05-19)
-- [ ] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache
+- [x] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache (completed 2026-05-19)
 - [ ] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting
 - [ ] **Phase 8: Inference Service Update** - Internal HMAC endpoints, inference-service URL repoint
 - [ ] **Phase 9: Integration Testing** - End-to-end validation of all domains working together
@@ -155,9 +155,9 @@ Plans:
 
 Plans:
 
-- [ ] 06-01-PLAN.md — API Key local auth + RelayBillingService (RELAY-05, RELAY-06, RELAY-10)
-- [ ] 06-02-PLAN.md — RoutingConfigCache + runtime_config + upstream (RELAY-07, RELAY-08)
-- [ ] 06-03-PLAN.md — CallLog writer + ChannelSelector + InferenceClient + routing + lifespan (RELAY-09, RELAY-13, RELAY-14)
+- [x] 06-01-PLAN.md — API Key local auth + RelayBillingService (RELAY-05, RELAY-06, RELAY-10)
+- [x] 06-02-PLAN.md — RoutingConfigCache + runtime_config + upstream (RELAY-07, RELAY-08)
+- [x] 06-03-PLAN.md — CallLog writer + ChannelSelector + InferenceClient + routing + lifespan (RELAY-09, RELAY-13, RELAY-14)
 
 ### Phase 7: Protocol Adapters & Streaming
 
