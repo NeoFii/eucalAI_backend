@@ -18,7 +18,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - [x] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls) (completed 2026-05-19)
 - [x] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache (completed 2026-05-19)
 - [ ] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting
-- [ ] **Phase 8: Inference Service Update** - Internal HMAC endpoints, inference-service URL repoint
+- [x] **Phase 8: Inference Service Update** - Internal HMAC endpoints, inference-service URL repoint (completed 2026-05-19)
 - [ ] **Phase 9: Integration Testing** - End-to-end validation of all domains working together
 - [ ] **Phase 10: Production Cutover** - DB merge, deployment, frontend switch, old service teardown
 
@@ -205,8 +205,8 @@ Plans:
 
 Plans:
 
-- [ ] 08-01-PLAN.md — Internal HMAC endpoint (resolve_for_internal + controller + router mount)
-- [ ] 08-02-PLAN.md — Inference-service gateway rename + API_SERVICE_URL config repoint
+- [x] 08-01-PLAN.md — Internal HMAC endpoint (resolve_for_internal + controller + router mount)
+- [x] 08-02-PLAN.md — Inference-service gateway rename + API_SERVICE_URL config repoint
 
 ### Phase 9: Integration Testing
 
