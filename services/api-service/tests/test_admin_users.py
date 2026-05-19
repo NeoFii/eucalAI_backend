@@ -161,7 +161,7 @@ async def test_reset_password_revokes_sessions(mock_user_obj, mock_super_admin_o
         repo_instance.get_by_uid = AsyncMock(return_value=mock_user_obj)
         MockRepo.return_value = repo_instance
 
-        MockAuth._revoke_all_user_sessions = AsyncMock()
+        MockAuth.revoke_all_user_sessions = AsyncMock()
         MockAudit.record = AsyncMock()
 
         transport = ASGITransport(app=app)
@@ -173,7 +173,7 @@ async def test_reset_password_revokes_sessions(mock_user_obj, mock_super_admin_o
 
         assert resp.status_code == 200
         # Sessions were revoked
-        MockAuth._revoke_all_user_sessions.assert_awaited_once_with(mock_db, mock_user_obj.id)
+        MockAuth.revoke_all_user_sessions.assert_awaited_once_with(mock_db, mock_user_obj.id)
         # Password was updated
         assert mock_user_obj.password_hash == "$2b$12$newhash"
 

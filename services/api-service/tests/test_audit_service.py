@@ -55,9 +55,9 @@ async def test_update_label_invalidates_cache():
     assert action_def.label == "new label"
     # Module-level cache for action defs invalidated (must be None for reload).
     assert svc._action_defs_cache is None
-    # And the flush + commit pair ran.
+    # Flush ran inside service; commit is now the controller's responsibility.
     db.flush.assert_awaited_once()
-    db.commit.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
