@@ -7,7 +7,7 @@ Uses httpx AsyncClient with ASGITransport to test the actual FastAPI app.
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-at-least-32-characters-long")
 os.environ.setdefault("INTERNAL_SECRET", "test-internal-secret-at-least-32-characters-long")
@@ -15,29 +15,15 @@ os.environ.setdefault("INTERNAL_SECRET", "test-internal-secret-at-least-32-chara
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from api_service.relay.auth import ValidatedApiKey
+from api_service.main import app
+from api_service.relay.auth import require_api_key
+from tests.relay.conftest import make_test_principal
 
 
-def _make_principal(allowed_models: str = "") -> ValidatedApiKey:
-    """Create a test ValidatedApiKey principal with configurable allowed_models."""
-    return ValidatedApiKey(
-        id=1,
-        user_id=1,
-        key_hash="testhash123",
-        status=1,
-        quota_mode=0,
-        quota_limit=0,
-        quota_used=0,
-        allowed_models=allowed_models,
-        allow_ips=None,
-        expires_at=None,
-        user_rpm_limit=60,
-        balance=10000,
-    )
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 
 def _mock_config_cache(user_facing_aliases: list[str]) -> MagicMock:
-    """Create a mock RoutingConfigCache that returns given aliases."""
     cache = MagicMock()
     cache.load.return_value = {
         "user_facing_aliases": user_facing_aliases,
@@ -53,24 +39,20 @@ def _mock_config_cache(user_facing_aliases: list[str]) -> MagicMock:
 @pytest.mark.asyncio
 async def test_list_models_all():
     """GET /v1/models with allowed_models='' returns all user_facing_aliases."""
-    principal = _make_principal(allowed_models="")
+    principal = make_test_principal(allowed_models="")
+
+    async def _dep():
+        return principal
+
     config_cache = _mock_config_cache(["gpt-4", "claude-3", "gemini-pro"])
-
-    with (
-        patch("api_service.relay.auth.require_api_key", return_value=principal),
-        patch(
-            "api_service.relay.dependencies.get_routing_config_cache",
-            return_value=config_cache,
-        ),
-    ):
-        from api_service.main import app
-
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get(
-                "/v1/models",
-                headers={"Authorization": "Bearer sk-test123"},
-            )
+    app.dependency_overrides[require_api_key] = _dep
+    try:
+        with patch("api_service.controllers.relay.models.get_routing_config_cache", return_value=config_cache):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/v1/models", headers={"Authorization": "Bearer sk-test123"})
+    finally:
+        app.dependency_overrides.clear()
 
     assert resp.status_code == 200
     data = resp.json()
@@ -84,24 +66,20 @@ async def test_list_models_all():
 @pytest.mark.asyncio
 async def test_list_models_filtered():
     """GET /v1/models with allowed_models='gpt-4,claude-3' returns only intersection."""
-    principal = _make_principal(allowed_models="gpt-4,claude-3")
+    principal = make_test_principal(allowed_models="gpt-4,claude-3")
+
+    async def _dep():
+        return principal
+
     config_cache = _mock_config_cache(["gpt-4", "claude-3", "gemini-pro"])
-
-    with (
-        patch("api_service.relay.auth.require_api_key", return_value=principal),
-        patch(
-            "api_service.relay.dependencies.get_routing_config_cache",
-            return_value=config_cache,
-        ),
-    ):
-        from api_service.main import app
-
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get(
-                "/v1/models",
-                headers={"Authorization": "Bearer sk-test123"},
-            )
+    app.dependency_overrides[require_api_key] = _dep
+    try:
+        with patch("api_service.controllers.relay.models.get_routing_config_cache", return_value=config_cache):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/v1/models", headers={"Authorization": "Bearer sk-test123"})
+    finally:
+        app.dependency_overrides.clear()
 
     assert resp.status_code == 200
     data = resp.json()
@@ -114,24 +92,20 @@ async def test_list_models_filtered():
 @pytest.mark.asyncio
 async def test_list_models_format():
     """Each model object has correct format: id, object='model', created=0, owned_by."""
-    principal = _make_principal(allowed_models="")
+    principal = make_test_principal(allowed_models="")
+
+    async def _dep():
+        return principal
+
     config_cache = _mock_config_cache(["gpt-4"])
-
-    with (
-        patch("api_service.relay.auth.require_api_key", return_value=principal),
-        patch(
-            "api_service.relay.dependencies.get_routing_config_cache",
-            return_value=config_cache,
-        ),
-    ):
-        from api_service.main import app
-
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get(
-                "/v1/models",
-                headers={"Authorization": "Bearer sk-test123"},
-            )
+    app.dependency_overrides[require_api_key] = _dep
+    try:
+        with patch("api_service.controllers.relay.models.get_routing_config_cache", return_value=config_cache):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/v1/models", headers={"Authorization": "Bearer sk-test123"})
+    finally:
+        app.dependency_overrides.clear()
 
     assert resp.status_code == 200
     data = resp.json()
@@ -145,24 +119,20 @@ async def test_list_models_format():
 @pytest.mark.asyncio
 async def test_list_models_sorted():
     """Models are returned sorted alphabetically by id."""
-    principal = _make_principal(allowed_models="")
+    principal = make_test_principal(allowed_models="")
+
+    async def _dep():
+        return principal
+
     config_cache = _mock_config_cache(["gemini-pro", "claude-3", "gpt-4", "aya-expanse"])
-
-    with (
-        patch("api_service.relay.auth.require_api_key", return_value=principal),
-        patch(
-            "api_service.relay.dependencies.get_routing_config_cache",
-            return_value=config_cache,
-        ),
-    ):
-        from api_service.main import app
-
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get(
-                "/v1/models",
-                headers={"Authorization": "Bearer sk-test123"},
-            )
+    app.dependency_overrides[require_api_key] = _dep
+    try:
+        with patch("api_service.controllers.relay.models.get_routing_config_cache", return_value=config_cache):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/v1/models", headers={"Authorization": "Bearer sk-test123"})
+    finally:
+        app.dependency_overrides.clear()
 
     assert resp.status_code == 200
     data = resp.json()
@@ -173,8 +143,7 @@ async def test_list_models_sorted():
 @pytest.mark.asyncio
 async def test_list_models_no_auth():
     """GET /v1/models without auth returns 401."""
-    from api_service.main import app
-
+    app.dependency_overrides.clear()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/v1/models")

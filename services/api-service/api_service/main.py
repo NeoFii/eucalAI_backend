@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api_service.common.core.exception_handlers import register_exception_handlers
+from api_service.relay.rate_limiter import RateLimitExceeded
 from api_service.common.observability import (
     configure_logging_from_settings,
     install_observability,
@@ -198,6 +199,17 @@ install_observability(app, service_name=settings.SERVICE_NAME)
 # ── Exception Handlers ───────────────────────────────────────────────────────
 
 register_exception_handlers(app)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request, exc: RateLimitExceeded):
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=429,
+        content={"error": {"message": exc.message, "type": "rate_limit_error"}},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 

@@ -6,7 +6,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from api_service.relay.auth import ValidatedApiKey
 from api_service.relay.sdk_clients import SdkClientPool
+
+
+def make_test_principal(**overrides) -> ValidatedApiKey:
+    """Create a test ValidatedApiKey principal with sensible defaults."""
+    defaults = dict(
+        id=1,
+        user_id=1,
+        key_hash="testhash123",
+        status=1,
+        quota_mode=0,
+        quota_limit=0,
+        quota_used=0,
+        allowed_models="",
+        allow_ips=None,
+        expires_at=None,
+        user_rpm_limit=60,
+        balance=10000,
+    )
+    defaults.update(overrides)
+    return ValidatedApiKey(**defaults)
 
 
 @pytest.fixture

@@ -31,6 +31,8 @@ async def list_models(
     else:
         visible_models = list(all_models)
 
+    visible_models.sort()
+
     return {
         "object": "list",
         "data": [
