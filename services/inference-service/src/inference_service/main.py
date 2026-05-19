@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         from common.internal import close_internal_clients
-        from inference_service.gateways.admin_config import AdminConfigGateway
+        from inference_service.gateways.api_service_config import ApiServiceConfigGateway
         from inference_service.services.classify_service import init_gpu_semaphore
         from inference_service.services.config_manager import ConfigManager
         from inference_service.services.router_engine import HybridIntegratedDifficultyRouter
@@ -57,7 +57,7 @@ def create_app() -> FastAPI:
         log_event(logger, logging.INFO, "serviceStarting", service=settings.SERVICE_NAME)
         model_paths = load_model_paths(model_paths_config)
 
-        gateway = AdminConfigGateway()
+        gateway = ApiServiceConfigGateway()
         config_mgr = ConfigManager(
             gateway=gateway,
             runtime_config_path=runtime_config_path,

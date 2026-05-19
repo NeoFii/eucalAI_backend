@@ -11,7 +11,7 @@ from typing import Any, Dict
 from common.internal import InternalServiceResponseError
 from common.observability import log_event
 from inference_service.core.exceptions import InferenceConfigError
-from inference_service.gateways.admin_config import AdminConfigGateway
+from inference_service.gateways.api_service_config import ApiServiceConfigGateway
 from inference_service.utils.runtime_config import normalize_inference_config
 
 _logger = logging.getLogger("inference_service")
@@ -23,7 +23,7 @@ class ConfigManager:
     def __init__(
         self,
         *,
-        gateway: AdminConfigGateway,
+        gateway: ApiServiceConfigGateway,
         runtime_config_path: str,
         refresh_interval_seconds: int = 60,
     ) -> None:
