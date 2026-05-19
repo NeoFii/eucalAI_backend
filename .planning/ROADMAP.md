@@ -15,7 +15,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - [x] **Phase 2: Database & Redis Infrastructure** - SQLAlchemy engine, Redis pools, Snowflake ID, Alembic baseline
 - [x] **Phase 3: Models & Repositories Migration** - ORM models and repository layer from user-service + admin-service
 - [x] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints (completed 2026-05-18)
-- [ ] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls)
+- [x] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls) (completed 2026-05-19)
 - [ ] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache
 - [ ] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting
 - [ ] **Phase 8: Inference Service Update** - Internal HMAC endpoints, inference-service URL repoint
@@ -135,8 +135,8 @@ Plans:
 
 **Wave 2** *(blocked on 05-01 completion; 05-02 and 05-03 run in parallel)*
 
-- [ ] 05-02-PLAN.md — Pool/Channel/Model Catalog/Routing Settings CRUD + Admin-on-admin accounts + Audit log queries + Health-check ARQ cron + D-05 (mc:* SCAN+DEL) + D-06 (routing_config:version INCR) (ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-08)
-- [ ] 05-03-PLAN.md — Proxy elimination: user management / dashboard / vouchers / route-monitor / service-logs services replacing 5 gateways; service-logs HMAC HTTP to inference only (D-03) (ADMIN-03, ADMIN-07, ADMIN-09, ADMIN-10, ADMIN-11)
+- [x] 05-02-PLAN.md — Pool/Channel/Model Catalog/Routing Settings CRUD + Admin-on-admin accounts + Audit log queries + Health-check ARQ cron + D-05 (mc:* SCAN+DEL) + D-06 (routing_config:version INCR) (ADMIN-04, ADMIN-05, ADMIN-06, ADMIN-08)
+- [x] 05-03-PLAN.md — Proxy elimination: user management / dashboard / vouchers / route-monitor / service-logs services replacing 5 gateways; service-logs HMAC HTTP to inference only (D-03) (ADMIN-03, ADMIN-07, ADMIN-09, ADMIN-10, ADMIN-11)
 
 ### Phase 6: Relay Core
 
@@ -245,7 +245,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
 | 3. Models & Repositories Migration | 3/3 | Complete | 2026-05-19 |
 | 4. User Domain Controllers | 3/3 | Complete   | 2026-05-18 |
-| 5. Admin Domain Controllers | 1/3 | In Progress|  |
+| 5. Admin Domain Controllers | 3/3 | Complete   | 2026-05-19 |
 | 6. Relay Core | 0/3 | Not started | - |
 | 7. Protocol Adapters & Streaming | 0/3 | Not started | - |
 | 8. Inference Service Update | 0/1 | Not started | - |
