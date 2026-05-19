@@ -82,6 +82,27 @@ registry.register(
 )
 
 
+# ── Phase 5: super-admin bootstrap (priority=25, after DB=20, before Redis=30) ──
+async def _bootstrap_super_admin() -> None:
+    """Idempotently create the bootstrap super admin if none exists.
+
+    Wired at priority=25 so it runs AFTER the database engine is initialised
+    (priority=20) but BEFORE Redis comes up (priority=30). Pitfall 6 — order
+    matters because the bootstrap acquires a MySQL named lock and requires
+    a live DB session.
+    """
+    from api_service.services.admin.bootstrap_service import AdminBootstrapService
+
+    await AdminBootstrapService.ensure_super_admin()
+
+
+registry.register(
+    "super_admin_bootstrap",
+    init_fn=_bootstrap_super_admin,
+    priority=25,
+)
+
+
 async def _init_redis() -> None:
     """Initialize Redis db/0 pool (session/rate-limit)."""
     from api_service.common.infra.redis import init_redis
