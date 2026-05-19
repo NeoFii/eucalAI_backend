@@ -201,11 +201,12 @@ Plans:
   1. /api/v1/internal/routing-config/* endpoints respond with valid HMAC signatures
   2. inference-service fetches routing config from api-service URL without errors
 
-**Plans**: 3 plans, 2 waves
+**Plans**: 2 plans, 2 waves
 
 Plans:
 
-- [ ] 08-01: Internal HMAC endpoints + inference-service config update
+- [ ] 08-01-PLAN.md — Internal HMAC endpoint (resolve_for_internal + controller + router mount)
+- [ ] 08-02-PLAN.md — Inference-service gateway rename + API_SERVICE_URL config repoint
 
 ### Phase 9: Integration Testing
 
