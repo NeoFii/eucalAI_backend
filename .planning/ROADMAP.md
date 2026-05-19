@@ -175,10 +175,21 @@ Plans:
 **Plans**: 3 plans, 2 waves
 
 Plans:
+**Wave 1**
 
-- [ ] 07-01: OpenAI Chat adapter + SSE streaming
-- [ ] 07-02: Anthropic Messages + OpenAI Responses adapters
-- [ ] 07-03: Rate limiting (per-key, per-user, global)
+- [ ] 07-01-PLAN.md — SdkClientPool + Token Bucket 限流 + backends + dispatch + Protocol 定义 + schemas
+
+**Wave 2** *(blocked on Wave 1 completion; 07-02 and 07-03 run in parallel)*
+
+- [ ] 07-02-PLAN.md — CallLifecycle 编排器 + 三个 ProtocolAdapter + 流式处理 + 四个 relay 端点挂载
+- [ ] 07-03-PLAN.md — 集成测试：四个端点 + SSE 格式 + 限流 429 验证
+
+
+
+
+
+
+
 
 ### Phase 8: Inference Service Update
 
