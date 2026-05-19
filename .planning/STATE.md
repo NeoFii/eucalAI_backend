@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 context gathered
+stopped_at: Phase 8 planned
 last_updated: "2026-05-19T14:25:07.574Z"
 last_activity: 2026-05-19
 progress:
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** 用户通过 API Key 调用 LLM 转发端点时，请求必须低延迟、高可靠地完成鉴权→路由→转发→计费全链路。
-**Current focus:** Phase 7 — protocol adapters & streaming
+**Current focus:** Phase 8 — inference service update
 
 ## Current Position
 
-Phase: 7
-Plan: 3 plans ready (07-01, 07-02, 07-03)
+Phase: 8
+Plan: 2 plans ready (08-01, 08-02)
 Status: Ready to execute
 Last activity: 2026-05-19
 
