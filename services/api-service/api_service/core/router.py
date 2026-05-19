@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from api_service.controllers import auth, billing, keys, model_catalog
+from api_service.controllers import auth, billing, internal, keys, model_catalog
 from api_service.controllers.admin import admin_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -18,4 +18,5 @@ api_router.include_router(model_catalog.router)  # Phase 4-03: /model-vendors, /
 # do NOT pass prefix= here or paths will become /api/v1/admin/admin/*.
 api_router.include_router(admin_router)
 # Phase 7: Relay routes (mounted at app level, not under /api/v1)
-# Phase 8: Internal routes
+# Phase 8: Internal HMAC endpoints
+api_router.include_router(internal.router)
