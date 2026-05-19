@@ -77,6 +77,66 @@ async def list_users(
     )
 
 
+@router.get("/usage/logs", response_model=UserUsageLogListResponse, summary="List usage logs")
+async def list_usage_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user_uid: str | None = None,
+    model_name: str | None = None,
+    request_id: str | None = None,
+    api_key_id: int | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    _current_admin: AdminUser = Depends(require_active_admin),
+    db: AsyncSession = Depends(get_db),
+) -> UserUsageLogListResponse:
+    items, total = await AdminEndUserService.list_user_usage_logs(
+        db,
+        target_uid=user_uid,
+        page=page,
+        page_size=page_size,
+        model_name=model_name,
+        request_id=request_id,
+        api_key_id=api_key_id,
+        start=start,
+        end=end,
+    )
+    return UserUsageLogListResponse(
+        data={
+            "items": [
+                UserUsageLogItem.model_validate(i, from_attributes=True).model_dump(mode="json")
+                for i in items
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
+    )
+
+
+@router.get("/usage/stats", response_model=UserUsageStatListResponse, summary="List usage stats")
+async def list_usage_stats(
+    user_uid: str | None = None,
+    model_name: str | None = None,
+    api_key_id: int | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    _current_admin: AdminUser = Depends(require_active_admin),
+    db: AsyncSession = Depends(get_db),
+) -> UserUsageStatListResponse:
+    items = await AdminEndUserService.list_user_usage_stats(
+        db,
+        target_uid=user_uid,
+        model_name=model_name,
+        api_key_id=api_key_id,
+        start=start,
+        end=end,
+    )
+    return UserUsageStatListResponse(
+        data=[UserUsageStatItem.model_validate(i, from_attributes=True).model_dump(mode="json") for i in items],
+    )
+
+
 @router.get("/{uid}", response_model=UserDetailResponse, summary="User detail")
 async def get_user_detail(
     uid: str,
@@ -356,66 +416,6 @@ async def enable_user_api_key(
     )
     await db.commit()
     return UserOperationResponse(message="API Key 已启用")
-
-
-@router.get("/usage/logs", response_model=UserUsageLogListResponse, summary="List usage logs")
-async def list_usage_logs(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    user_uid: str | None = None,
-    model_name: str | None = None,
-    request_id: str | None = None,
-    api_key_id: int | None = None,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    _current_admin: AdminUser = Depends(require_active_admin),
-    db: AsyncSession = Depends(get_db),
-) -> UserUsageLogListResponse:
-    items, total = await AdminEndUserService.list_user_usage_logs(
-        db,
-        target_uid=user_uid,
-        page=page,
-        page_size=page_size,
-        model_name=model_name,
-        request_id=request_id,
-        api_key_id=api_key_id,
-        start=start,
-        end=end,
-    )
-    return UserUsageLogListResponse(
-        data={
-            "items": [
-                UserUsageLogItem.model_validate(i, from_attributes=True).model_dump(mode="json")
-                for i in items
-            ],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
-    )
-
-
-@router.get("/usage/stats", response_model=UserUsageStatListResponse, summary="List usage stats")
-async def list_usage_stats(
-    user_uid: str | None = None,
-    model_name: str | None = None,
-    api_key_id: int | None = None,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    _current_admin: AdminUser = Depends(require_active_admin),
-    db: AsyncSession = Depends(get_db),
-) -> UserUsageStatListResponse:
-    items = await AdminEndUserService.list_user_usage_stats(
-        db,
-        target_uid=user_uid,
-        model_name=model_name,
-        api_key_id=api_key_id,
-        start=start,
-        end=end,
-    )
-    return UserUsageStatListResponse(
-        data=[UserUsageStatItem.model_validate(i, from_attributes=True).model_dump(mode="json") for i in items],
-    )
 
 
 @router.get(
