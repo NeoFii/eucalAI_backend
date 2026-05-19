@@ -162,6 +162,7 @@ async def update_action_label(
     action_def = await AdminAuditService.update_action_label(db, code, body.label)
     if action_def is None:
         raise NotFoundException(f"Action definition '{code}' not found")
+    await db.commit()
     return UpdateActionLabelResponse(
         code=200,
         message="success",

@@ -95,7 +95,6 @@ class AdminAuditService:
             return None
         action_def.label = label
         await db.flush()
-        await db.commit()
         global _action_defs_cache
         _action_defs_cache = None
         return action_def
