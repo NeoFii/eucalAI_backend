@@ -27,6 +27,9 @@ admin_router.include_router(_admin_auth.router)
 
 # === Plan 05-02 imports (Wave 2) ===
 # (05-02 inserts router include + schema re-exports below this line)
+from api_service.controllers.admin import pools as _admin_pools  # noqa: E402
+
+admin_router.include_router(_admin_pools.router)
 
 # === Plan 05-03 imports (Wave 2) ===
 # (05-03 inserts router include + schema re-exports below this line)

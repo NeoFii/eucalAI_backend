@@ -80,5 +80,32 @@ __all__ = [
 
 # === Plan 05-02 imports (Wave 2) ===
 # (05-02 inserts schema re-exports below this line)
+from api_service.schemas.admin.pool import (  # noqa: E402
+    AccountBalanceResult,
+    AvailableModelSlugItem,
+    AvailableModelSlugsResponse,
+    CheckBalancesResponse,
+    CheckBalancesResult,
+    ModelCostInfo,
+    ModelCostPoolItem,
+    ModelCostResponse,
+    PoolAccountCreate,
+    PoolAccountItem,
+    PoolAccountResponse,
+    PoolAccountUpdate,
+    PoolCreate,
+    PoolDetail,
+    PoolDetailResponse,
+    PoolItem,
+    PoolListResponse,
+    PoolModelCreate,
+    PoolModelItem,
+    PoolModelResponse,
+    PoolModelUpdate,
+    PoolResponse,
+    PoolUpdate,
+    SyncModelsResponse,
+    SyncModelsResult,
+)
 # === Plan 05-03 imports (Wave 2) ===
 # (05-03 inserts schema re-exports below this line)
