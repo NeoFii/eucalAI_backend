@@ -48,11 +48,13 @@ async def require_active_admin(
 async def require_super_admin(
     admin: AdminUser = Depends(get_current_admin),
 ) -> AdminUser:
-    """Require an admin whose role is SUPER_ADMIN.
+    """Require an admin whose status is ACTIVE and role is SUPER_ADMIN.
 
     Used by privileged write endpoints (pool / model_catalog / routing
     settings / admin-on-admin CRUD).
     """
+    if admin.status != AdminStatus.ACTIVE:
+        raise AdminPermissionDeniedException("Admin account inactive")
     if admin.role != AdminRole.SUPER_ADMIN:
         raise AdminPermissionDeniedException("Super admin permission required")
     return admin
