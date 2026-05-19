@@ -167,3 +167,8 @@ from api_service.schemas.admin.route_monitor import (  # noqa: E402
     RouteRequestDetailResponse,
     RouteRequestListResponse,
 )
+from api_service.schemas.admin.service_logs import (  # noqa: E402
+    ServiceLogEntry,
+    ServiceLogResult,
+    ServiceLogsResponseData,
+)

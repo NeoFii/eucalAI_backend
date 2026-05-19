@@ -55,5 +55,9 @@ admin_router.include_router(_admin_dashboard.router)
 admin_router.include_router(_admin_vouchers.router)
 admin_router.include_router(_admin_route_monitor.router)
 
+from api_service.controllers.admin import service_logs as _admin_service_logs  # noqa: E402
+
+admin_router.include_router(_admin_service_logs.router)
+
 
 __all__ = ["admin_router"]
