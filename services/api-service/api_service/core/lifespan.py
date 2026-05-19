@@ -106,6 +106,8 @@ def register_relay_resources(registry: LifespanRegistry) -> None:
       - inference_client at 25
       - channel_selector at 25
       - channel_affinity at 25
+      - sdk_client_pool at 25
+      - rate_limiter at 25
     """
     from api_service.common.infra.cache import get_cache_redis
     from api_service.core.config import settings
@@ -115,6 +117,8 @@ def register_relay_resources(registry: LifespanRegistry) -> None:
     from api_service.relay.config_cache import RoutingConfigCache
     from api_service.relay.dependencies import init_relay_globals, shutdown_relay
     from api_service.relay.inference_client import InferenceClient
+    from api_service.relay.rate_limiter import RateLimiter
+    from api_service.relay.sdk_clients import SdkClientPool
 
     # Shared state for init/shutdown closures
     _state: dict = {}
@@ -151,12 +155,25 @@ def register_relay_resources(registry: LifespanRegistry) -> None:
             ttl=settings.CHANNEL_AFFINITY_TTL,
         )
 
+        # 5. SdkClientPool
+        sdk_client_pool = SdkClientPool(max_size=settings.SDK_CLIENT_POOL_MAX_SIZE)
+        _state["sdk_client_pool"] = sdk_client_pool
+
+        # 6. RateLimiter
+        rate_limiter = RateLimiter(
+            redis=cache_redis,
+            default_user_rpm=settings.RATE_LIMIT_DEFAULT_USER_RPM,
+            global_rpm=settings.RATE_LIMIT_GLOBAL_RPM,
+        )
+
         # Wire all singletons
         init_relay_globals(
             config_cache=config_cache,
             inference_client=inference_client,
             channel_selector=channel_selector,
             affinity_store=affinity_store,
+            sdk_client_pool=sdk_client_pool,
+            rate_limiter=rate_limiter,
         )
         _state["initialized"] = True
 
