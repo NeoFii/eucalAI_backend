@@ -93,4 +93,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 after Phase 04 (user-domain-controllers) complete — all /auth, /keys, /billing, /models endpoints (27 paths) ported into api-service. ARQ pool wired for async email. Phase 4 verification status: human_needed (6 staging items deferred to UAT)*
+*Last updated: 2026-05-19 after Phase 05 (admin-domain-controllers) complete — all admin controllers (69 endpoints across 11 controllers) ported into api-service. 5 HTTP gateway proxies eliminated, replaced with same-process service calls. Admin auth, audit logging, pool/model-catalog/routing CRUD, health-check ARQ cron all operational. 184 tests passing.*
