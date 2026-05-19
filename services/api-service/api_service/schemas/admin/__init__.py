@@ -132,3 +132,38 @@ from api_service.schemas.admin.routing_setting import (  # noqa: E402
 )
 # === Plan 05-03 imports (Wave 2) ===
 # (05-03 inserts schema re-exports below this line)
+from api_service.schemas.admin.user_management import (  # noqa: E402
+    AdjustUserBalanceRequest,
+    ResetUserPasswordRequest,
+    TopupUserRequest,
+    UpdateUserRpmRequest,
+    UpdateUserStatusRequest,
+    UserApiKeyItem,
+    UserApiKeyListResponse,
+    UserDetailData,
+    UserDetailResponse,
+    UserListItem,
+    UserListResponse,
+    UserOperationResponse,
+    UserTransactionItem,
+    UserTransactionListResponse,
+    UserUsageAnalyticsResponse,
+    UserUsageLogItem,
+    UserUsageLogListResponse,
+    UserUsageStatItem,
+    UserUsageStatListResponse,
+)
+from api_service.schemas.admin.voucher import (  # noqa: E402
+    GenerateVoucherCodesRequest,
+    VoucherCodeCreateResponse,
+    VoucherCodeItem,
+    VoucherCodeListResponse,
+    VoucherCodeResponse,
+    VoucherOperationResponse,
+)
+from api_service.schemas.admin.route_monitor import (  # noqa: E402
+    RouteAggregateResponse,
+    RouteCompareResponse,
+    RouteRequestDetailResponse,
+    RouteRequestListResponse,
+)

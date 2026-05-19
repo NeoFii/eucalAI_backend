@@ -43,6 +43,17 @@ admin_router.include_router(_admin_audit_logs.router)
 
 # === Plan 05-03 imports (Wave 2) ===
 # (05-03 inserts router include + schema re-exports below this line)
+from api_service.controllers.admin import users as _admin_users  # noqa: E402
+
+admin_router.include_router(_admin_users.router)
+
+from api_service.controllers.admin import dashboard as _admin_dashboard  # noqa: E402
+from api_service.controllers.admin import vouchers as _admin_vouchers  # noqa: E402
+from api_service.controllers.admin import route_monitor as _admin_route_monitor  # noqa: E402
+
+admin_router.include_router(_admin_dashboard.router)
+admin_router.include_router(_admin_vouchers.router)
+admin_router.include_router(_admin_route_monitor.router)
 
 
 __all__ = ["admin_router"]
