@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 04 complete, ready to execute Phase 05 (plans already in place)
-last_updated: "2026-05-18T23:41:48.129Z"
+status: ready_to_plan
+stopped_at: Phase 05 complete (3/3) — ready to discuss Phase 6
+last_updated: 2026-05-19T03:37:25.050Z
 last_activity: 2026-05-18 -- Phase 05 execution started
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 16
   percent: 40
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** 用户通过 API Key 调用 LLM 转发端点时，请求必须低延迟、高可靠地完成鉴权→路由→转发→计费全链路。
-**Current focus:** Phase 05 — admin-domain-controllers
+**Current focus:** Phase 6 — relay core
 
 ## Current Position
 
-Phase: 05 (admin-domain-controllers) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 05
-Last activity: 2026-05-18 -- Phase 05 execution started
+Phase: 6
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-19
 
 Progress: [▓▓▓▓░░░░░░] 37%
 
@@ -36,7 +36,7 @@ Progress: [▓▓▓▓░░░░░░] 37%
 
 **Velocity:**
 
-- Total plans completed: 13
+- Total plans completed: 16
 - Average duration: ~10min
 - Total execution time: ~102 min
 
@@ -48,6 +48,7 @@ Progress: [▓▓▓▓░░░░░░] 37%
 | 2 | 4/4 | ~30min | ~8min |
 | 3 | 3/3 | ~27min | ~9min |
 | 04 | 3 | - | - |
+| 05 | 3 | - | - |
 
 **Recent Trend:**
 
