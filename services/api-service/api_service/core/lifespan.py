@@ -96,3 +96,76 @@ class LifespanRegistry:
                     exc_info=True,
                 )
         self._initialized.clear()
+
+
+def register_relay_resources(registry: LifespanRegistry) -> None:
+    """Register relay-core singletons with the lifespan registry.
+
+    Priority ordering:
+      - routing_config_cache at 20 (must load before routing can work)
+      - inference_client at 25
+      - channel_selector at 25
+      - channel_affinity at 25
+    """
+    from api_service.common.infra.cache import get_cache_redis
+    from api_service.core.config import settings
+    from api_service.core.db import get_db_context
+    from api_service.relay.channel_affinity import ChannelAffinityStore
+    from api_service.relay.channel_selector import ChannelSelector
+    from api_service.relay.config_cache import RoutingConfigCache
+    from api_service.relay.dependencies import init_relay_globals, shutdown_relay
+    from api_service.relay.inference_client import InferenceClient
+
+    # Shared state for init/shutdown closures
+    _state: dict = {}
+
+    async def _init_relay() -> None:
+        cache_redis = get_cache_redis()
+
+        # 1. RoutingConfigCache (priority=20 — must succeed, D-12)
+        config_cache = RoutingConfigCache(cache_redis)
+        from api_service.common.infra.db.runtime import ServiceDatabaseRuntime
+        from api_service.core.db import _runtime
+        session_factory = _runtime._session_factory
+        if session_factory is None:
+            raise RuntimeError("DB session factory not initialized before relay startup")
+        await config_cache.start(session_factory)
+
+        # 2. InferenceClient
+        inference_client = InferenceClient(
+            base_url=settings.INFERENCE_SERVICE_URL,
+            secret=settings.INFERENCE_SERVICE_SECRET,
+        )
+
+        # 3. ChannelSelector
+        channel_selector = ChannelSelector(
+            cooldown_seconds=settings.CHANNEL_COOLDOWN_SECONDS,
+            auto_disable_enabled=settings.CHANNEL_AUTO_DISABLE_ENABLED,
+            auto_disable_threshold=settings.CHANNEL_AUTO_DISABLE_FAILURE_THRESHOLD,
+        )
+
+        # 4. ChannelAffinityStore
+        affinity_redis = cache_redis if settings.CHANNEL_AFFINITY_ENABLED else None
+        affinity_store = ChannelAffinityStore(
+            redis=affinity_redis,
+            ttl=settings.CHANNEL_AFFINITY_TTL,
+        )
+
+        # Wire all singletons
+        init_relay_globals(
+            config_cache=config_cache,
+            inference_client=inference_client,
+            channel_selector=channel_selector,
+            affinity_store=affinity_store,
+        )
+        _state["initialized"] = True
+
+    async def _shutdown_relay() -> None:
+        await shutdown_relay()
+
+    registry.register(
+        name="relay_core",
+        init_fn=_init_relay,
+        shutdown_fn=_shutdown_relay,
+        priority=20,
+    )
