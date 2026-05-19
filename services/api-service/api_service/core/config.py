@@ -91,6 +91,13 @@ class ApiServiceSettings(BaseServiceSettings):
     DEFAULT_USER_RPM: int = 20
 
     # ── Relay ─────────────────────────────────────────────────────────────
+    # Billing (D-04, D-05)
+    TRUST_QUOTA: int = 10_000_000  # 10 yuan in micro-units; balance > this skips pre-consume
+    RELAY_BILLING_FALLBACK_COST: int = 100_000  # 0.1 yuan fallback when model price unknown
+    # Token cache (D-02)
+    RELAY_TOKEN_CACHE_TTL: int = 60  # seconds
+    RELAY_TOKEN_CACHE_MAXSIZE: int = 2048
+
     CHANNEL_MAX_RETRIES: int = 2
     CHANNEL_COOLDOWN_SECONDS: float = 30.0
     CHANNEL_AUTO_DISABLE_ENABLED: bool = True
