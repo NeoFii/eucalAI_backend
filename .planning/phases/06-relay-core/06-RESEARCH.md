@@ -560,22 +560,19 @@ class ValidatedApiKey:
 
 **If this table is empty:** 大部分声明基于已验证的源代码（router-service + new-api），风险较低。
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **model_channels 和 model_prices 的 DB 构建逻辑**
+1. **model_channels 和 model_prices 的 DB 构建逻辑** — RESOLVED in 06-02-PLAN.md
    - What we know: normalize_runtime_config 期望 `model_channels: {model: [channel_list]}` 和 `model_prices: {model: {input, output, cached_input}}`
-   - What's unclear: 这些数据从哪些表聚合？pool_accounts + pool_model_configs + model_catalog？还是 routing_settings 表中有 JSON 字段？
-   - Recommendation: 参考 admin-service 的 `resolve_for_internal()` 逻辑（Phase 5 未移植的部分），确认数据聚合 SQL。planner 需要在实现 config_cache.py 时明确这一点。
+   - Resolution: 从 pool_accounts + pool_model_configs + model_catalog 表聚合构建，参考 admin-service `resolve_for_internal()` 逻辑。Plan 06-02 Task 2 实现 normalize_runtime_config() 适配层。
 
-2. **Redis user:quota:{user_id} 的初始化时机**
+2. **Redis user:quota:{user_id} 的初始化时机** — RESOLVED in 06-01-PLAN.md
    - What we know: D-03 说 Redis 为余额热数据主源
-   - What's unclear: 用户首次请求时 Redis 中没有 quota key，是 fallback 到 DB 读取后写入 Redis？还是用户充值时主动写入？
-   - Recommendation: 首次请求时 DB 读取 → SET Redis（lazy initialization）。充值/admin 调整时也更新 Redis。
+   - Resolution: Lazy initialization — 首次请求时 DB 读取 → SET Redis。充值/admin 调整时也更新 Redis。Plan 06-01 Task 2 RelayBillingService 实现此逻辑。
 
-3. **TRUST_QUOTA 配置项的位置**
+3. **TRUST_QUOTA 配置项的位置** — RESOLVED in 06-01-PLAN.md
    - What we know: D-04 说 settings.TRUST_QUOTA 默认 10,000,000
-   - What's unclear: 是否需要支持 admin 动态修改（放入 routing_settings 表）？
-   - Recommendation: Phase 6 先作为 env 配置项（ApiServiceSettings.TRUST_QUOTA），Phase 9 可考虑动态化。
+   - Resolution: Phase 6 作为 env 配置项（ApiServiceSettings.TRUST_QUOTA = 10_000_000）。Plan 06-01 Task 1 添加到 Settings。
 
 ## Environment Availability
 
