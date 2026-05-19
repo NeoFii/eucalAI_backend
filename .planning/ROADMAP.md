@@ -131,7 +131,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Admin auth + super-admin bootstrap + D-04 schemas hoist + HMAC sender port + AdminAuditService foundation (ADMIN-01, ADMIN-12; gates 05-02/05-03)
+- [x] 05-01-PLAN.md — Admin auth + super-admin bootstrap + D-04 schemas hoist + HMAC sender port + AdminAuditService foundation (ADMIN-01, ADMIN-12; gates 05-02/05-03)
 
 **Wave 2** *(blocked on 05-01 completion; 05-02 and 05-03 run in parallel)*
 
@@ -245,7 +245,7 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
 | 3. Models & Repositories Migration | 3/3 | Complete | 2026-05-19 |
 | 4. User Domain Controllers | 3/3 | Complete   | 2026-05-18 |
-| 5. Admin Domain Controllers | 0/3 | Not started | - |
+| 5. Admin Domain Controllers | 1/3 | In Progress|  |
 | 6. Relay Core | 0/3 | Not started | - |
 | 7. Protocol Adapters & Streaming | 0/3 | Not started | - |
 | 8. Inference Service Update | 0/1 | Not started | - |
