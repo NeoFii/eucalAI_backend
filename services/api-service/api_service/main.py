@@ -203,6 +203,11 @@ register_exception_handlers(app)
 
 app.include_router(api_router)
 
+# Phase 7: Relay routes mounted at app root (not under /api/v1 prefix)
+from api_service.controllers.relay import relay_router  # noqa: E402
+
+app.include_router(relay_router)
+
 
 @app.get("/health")
 async def health():
