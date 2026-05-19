@@ -83,9 +83,11 @@ async def get_user_detail(
     _current_admin: AdminUser = Depends(require_active_admin),
     db: AsyncSession = Depends(get_db),
 ) -> UserDetailResponse:
+    from api_service.services.admin.admin_user_service import _UserNotFound
+
     try:
         data = await AdminEndUserService.get_user_detail(db, target_uid=uid)
-    except Exception:
+    except _UserNotFound:
         raise HTTPException(status_code=404, detail="User not found")
     return UserDetailResponse(data=UserDetailData(**data))
 
