@@ -53,7 +53,7 @@ async def test_four_workers_memory_under_limit():
     """
     env = {
         **os.environ,
-        "DATABASE_URL": "mysql+aiomysql://root:password@localhost:3306/eucal_ai_test",
+        "DATABASE_URL": "mysql+aiomysql://root:abc123@localhost:3306/eucal_ai_test",
         "REDIS_URL": "redis://127.0.0.1:6379/0",
         "CACHE_REDIS_URL": "redis://127.0.0.1:6379/2",
         "WORKER_QUEUE_REDIS_URL": "redis://127.0.0.1:6379/1",

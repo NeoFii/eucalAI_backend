@@ -11,13 +11,14 @@ transaction that is rolled back after the test completes.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 
 # Set env vars BEFORE any pydantic-settings model loads
 os.environ["JWT_SECRET_KEY"] = "integration-test-jwt-secret-key-at-least-32-chars"
 os.environ["INTERNAL_SECRET"] = "integration-test-internal-secret-at-least-32-chars"
-os.environ["DATABASE_URL"] = "mysql+aiomysql://root:password@localhost:3306/eucal_ai_test"
+os.environ["DATABASE_URL"] = "mysql+aiomysql://root:abc123@localhost:3306/eucal_ai_test"
 os.environ["CACHE_REDIS_URL"] = "redis://127.0.0.1:6379/2"
 os.environ["WORKER_QUEUE_REDIS_URL"] = "redis://127.0.0.1:6379/1"
 os.environ["REDIS_URL"] = "redis://127.0.0.1:6379/0"
@@ -49,10 +50,19 @@ from api_service.models import (  # noqa: E402
     User,
     UserApiKey,
 )
+from api_service.models.routing_setting import RoutingSetting  # noqa: E402
 
 TEST_API_KEY_RAW = "sk-test-integration-key"
 TEST_API_KEY_HASH = hashlib.sha256(TEST_API_KEY_RAW.encode()).hexdigest()
 MASTER_KEY_HEX = "a" * 64
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Session-scoped event loop for session-scoped async fixtures."""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -64,7 +74,7 @@ MASTER_KEY_HEX = "a" * 64
 async def engine():
     """Create async engine pointing to eucal_ai_test, create all tables."""
     eng = create_async_engine(
-        "mysql+aiomysql://root:password@localhost:3306/eucal_ai_test",
+        "mysql+aiomysql://root:abc123@localhost:3306/eucal_ai_test",
         echo=False,
         pool_size=5,
         max_overflow=5,
@@ -118,18 +128,22 @@ async def db_session(engine):
 
 
 @pytest_asyncio.fixture
-async def app_client(db_session, cache_redis):
+async def app_client(engine, session_factory, db_session, cache_redis):
     """ASGI test client with dependency overrides for DB and Redis."""
     from api_service.core.db import _runtime
     from api_service.common.infra import cache as cache_module
     from api_service.main import app
+
+    # Initialize the global runtime so get_db_context() works (used by relay auth)
+    _runtime._engine = engine.sync_engine if hasattr(engine, 'sync_engine') else engine
+    _runtime._engine = engine
+    _runtime._session_factory = session_factory
 
     # Override get_db to yield our transactional session
     async def _override_get_db():
         yield db_session
 
     # Store originals
-    original_get_cache_redis = cache_module.get_cache_redis
     original_cache_redis = cache_module._cache_redis
 
     # Override cache redis
@@ -146,6 +160,8 @@ async def app_client(db_session, cache_redis):
     finally:
         app.dependency_overrides.pop(_runtime.get_db, None)
         cache_module._cache_redis = original_cache_redis
+        _runtime._engine = None
+        _runtime._session_factory = None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -154,121 +170,170 @@ async def app_client(db_session, cache_redis):
 
 
 @pytest_asyncio.fixture
-async def seed_user(db_session):
-    """Insert a test user with high balance."""
-    user = User(
-        id=1,
-        uid="u_inttest",
-        email="inttest@test.com",
-        password_hash="$2b$12$dummyhashforintegrationtesting",
-        balance=1_000_000_000,  # 1000 yuan in micro-units
-        status=1,
-        rpm_limit=60,
-    )
-    db_session.add(user)
-    await db_session.flush()
-    return user
+async def seed_user(session_factory):
+    """Insert a test user with high balance (committed for relay auth visibility)."""
+    async with session_factory() as session:
+        user = User(
+            id=1,
+            uid="u_inttest",
+            email="inttest@test.com",
+            password_hash="$2b$12$dummyhashforintegrationtesting",
+            balance=1_000_000_000,  # 1000 yuan in micro-units
+            status=1,
+            rpm_limit=60,
+        )
+        session.add(user)
+        await session.commit()
+
+    yield user
+
+    async with session_factory() as session:
+        from sqlalchemy import text
+        await session.execute(text("DELETE FROM users WHERE id = 1"))
+        await session.commit()
 
 
 @pytest_asyncio.fixture
-async def seed_api_key(db_session, seed_user):
+async def seed_api_key(session_factory, seed_user):
     """Insert a test API key whose hash matches TEST_API_KEY_RAW."""
-    api_key = UserApiKey(
-        id=100,
-        user_id=seed_user.id,
-        key_hash=TEST_API_KEY_HASH,
-        key_prefix="sk-test-",
-        name="integration-test-key",
-        status=1,
-        quota_mode=0,
-        quota_limit=0,
-        quota_used=0,
-    )
-    db_session.add(api_key)
-    await db_session.flush()
-    return api_key
+    async with session_factory() as session:
+        api_key = UserApiKey(
+            id=100,
+            user_id=seed_user.id,
+            key_hash=TEST_API_KEY_HASH,
+            key_prefix="sk-test-",
+            name="integration-test-key",
+            status=1,
+            quota_mode=0,
+            quota_limit=0,
+            quota_used=0,
+        )
+        session.add(api_key)
+        await session.commit()
+
+    yield api_key
+
+    async with session_factory() as session:
+        from sqlalchemy import text
+        await session.execute(text("DELETE FROM user_api_keys WHERE id = 100"))
+        await session.commit()
+
 
 
 @pytest_asyncio.fixture
-async def seed_routing_config(db_session):
+async def seed_routing_config(session_factory):
     """Insert minimal routing config so 'gpt-4o-mini' can be routed.
 
-    Creates: ModelVendor -> ModelCatalog -> Pool -> PoolAccount -> PoolModelConfig.
+    Uses session_factory with commit so RoutingConfigCache.start() can see the data.
+    Creates: ModelVendor -> ModelCatalog -> Pool -> PoolAccount -> PoolModelConfig + RoutingSetting.
     """
-    # 1. ModelVendor
-    vendor = ModelVendor(
-        id=1000,
-        slug="openai",
-        name="OpenAI",
-        is_active=True,
-        sort_order=0,
-    )
-    db_session.add(vendor)
-    await db_session.flush()
+    async with session_factory() as session:
+        # 1. ModelVendor
+        vendor = ModelVendor(
+            id=1000,
+            slug="openai",
+            name="OpenAI",
+            is_active=True,
+            sort_order=0,
+        )
+        session.add(vendor)
+        await session.flush()
 
-    # 2. ModelCatalog with pricing
-    model = ModelCatalog(
-        id=2000,
-        slug="gpt-4o-mini",
-        routing_slug="gpt-4o-mini",
-        name="GPT-4o Mini",
-        vendor_id=vendor.id,
-        sale_input_per_million=150_000,   # 0.15 yuan per million tokens
-        sale_output_per_million=600_000,  # 0.6 yuan per million tokens
-        is_active=True,
-        sort_order=0,
-    )
-    db_session.add(model)
-    await db_session.flush()
+        # 2. ModelCatalog with pricing
+        model = ModelCatalog(
+            id=2000,
+            slug="gpt-4o-mini",
+            routing_slug="gpt-4o-mini",
+            name="GPT-4o Mini",
+            vendor_id=vendor.id,
+            sale_input_per_million=150_000,
+            sale_output_per_million=600_000,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add(model)
+        await session.flush()
 
-    # 3. Pool
-    pool = Pool(
-        id=3000,
-        slug="test-pool",
-        name="Test Pool",
-        base_url="https://api.openai.com/v1",
-        is_enabled=True,
-        priority=10,
-        weight=1,
-    )
-    db_session.add(pool)
-    await db_session.flush()
+        # 3. Pool
+        pool = Pool(
+            id=3000,
+            slug="test-pool",
+            name="Test Pool",
+            base_url="https://api.openai.com/v1",
+            is_enabled=True,
+            priority=10,
+            weight=1,
+        )
+        session.add(pool)
+        await session.flush()
 
-    # 4. PoolAccount with encrypted API key
-    enc = encrypt_api_key("sk-fake-upstream-key-for-testing", MASTER_KEY_HEX)
-    account = PoolAccount(
-        id=4000,
-        pool_id=pool.id,
-        name="test-account",
-        api_key_enc=enc,
-        mask="sk-f****ting",
-        balance=999_999_999,
-        status=0,  # ACTIVE
-        weight=1,
-    )
-    db_session.add(account)
-    await db_session.flush()
+        # 4. PoolAccount with encrypted API key
+        enc = encrypt_api_key("sk-fake-upstream-key-for-testing", MASTER_KEY_HEX)
+        account = PoolAccount(
+            id=4000,
+            pool_id=pool.id,
+            name="test-account",
+            api_key_enc=enc,
+            mask="sk-f****ting",
+            balance=999_999_999,
+            status=0,  # ACTIVE
+            weight=1,
+        )
+        session.add(account)
+        await session.flush()
 
-    # 5. PoolModelConfig linking pool to model
-    pmc = PoolModelConfig(
-        id=5000,
-        pool_id=pool.id,
-        model_slug="gpt-4o-mini",
-        upstream_model_id="gpt-4o-mini",
-        cost_input_per_million=75_000,
-        cost_output_per_million=300_000,
-        is_enabled=True,
-    )
-    db_session.add(pmc)
-    await db_session.flush()
+        # 5. PoolModelConfig linking pool to model
+        pmc = PoolModelConfig(
+            id=5000,
+            pool_id=pool.id,
+            model_slug="gpt-4o-mini",
+            upstream_model_id="gpt-4o-mini",
+            cost_input_per_million=75_000,
+            cost_output_per_million=300_000,
+            is_enabled=True,
+        )
+        session.add(pmc)
+        await session.flush()
 
-    return {
+        # 6. RoutingSetting — tier_model_map so routing config normalizes
+        tier_settings = [
+            ("tier_1_model", "gpt-4o-mini", "tier_model_map"),
+            ("tier_2_model", "gpt-4o-mini", "tier_model_map"),
+            ("tier_3_model", "gpt-4o-mini", "tier_model_map"),
+            ("tier_4_model", "gpt-4o-mini", "tier_model_map"),
+            ("tier_5_model", "gpt-4o-mini", "tier_model_map"),
+            ("user_facing_aliases", "gpt-4o-mini", "general"),
+        ]
+        for key, value, group in tier_settings:
+            session.add(RoutingSetting(
+                key=key,
+                value=value,
+                value_type="string",
+                group_name=group,
+                label=key,
+                sort_order=0,
+            ))
+        await session.flush()
+        await session.commit()
+
+    yield {
         "vendor": vendor,
         "model": model,
         "pool": pool,
         "account": account,
         "pool_model_config": pmc,
     }
+
+    # Cleanup committed data
+    async with session_factory() as session:
+        from sqlalchemy import text
+        await session.execute(text("DELETE FROM pool_model_configs WHERE id = 5000"))
+        await session.execute(text("DELETE FROM pool_accounts WHERE id = 4000"))
+        await session.execute(text("DELETE FROM pools WHERE id = 3000"))
+        await session.execute(text("DELETE FROM model_catalog WHERE id = 2000"))
+        await session.execute(text("DELETE FROM model_vendors WHERE id = 1000"))
+        await session.execute(text("DELETE FROM routing_settings WHERE `key` IN ('tier_1_model','tier_2_model','tier_3_model','tier_4_model','tier_5_model','user_facing_aliases')"))
+        await session.commit()
 
 
 @pytest_asyncio.fixture
