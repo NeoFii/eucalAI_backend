@@ -107,20 +107,15 @@ def _clear_auth_cookies(response: Response) -> None:
 async def register(
     request: RegisterRequest,
     response: Response,
+    request_obj: Request,
     db: AsyncSession = Depends(get_db),
-    request_obj: Request = None,
 ) -> RegisterResponse:
-    user_agent = request_obj.headers.get("user-agent") if request_obj else None
-    ip_address = request_obj.client.host if request_obj and request_obj.client else None
+    user_agent = request_obj.headers.get("user-agent")
+    ip_address = request_obj.client.host if request_obj.client else None
 
-    try:
-        user = await AuthService.register(db, request)
-        user, access_token, refresh_token = await AuthService.login(
-            db, user.email, request.password, user_agent, ip_address
-        )
-    except Exception:
-        logger.exception("用户注册失败")
-        raise
+    user, access_token, refresh_token = await AuthService.register(
+        db, request, user_agent, ip_address
+    )
 
     _set_auth_cookies(response, access_token, refresh_token)
 
@@ -146,19 +141,15 @@ async def register(
 async def login(
     request: LoginRequest,
     response: Response,
+    request_obj: Request,
     db: AsyncSession = Depends(get_db),
-    request_obj: Request = None,
 ) -> LoginResponse:
-    user_agent = request_obj.headers.get("user-agent") if request_obj else None
-    ip_address = request_obj.client.host if request_obj and request_obj.client else None
+    user_agent = request_obj.headers.get("user-agent")
+    ip_address = request_obj.client.host if request_obj.client else None
 
-    try:
-        user, access_token, refresh_token = await AuthService.login(
-            db, request.email, request.password, user_agent, ip_address
-        )
-    except Exception:
-        logger.exception("用户登录失败")
-        raise
+    user, access_token, refresh_token = await AuthService.login(
+        db, request.email, request.password, user_agent, ip_address
+    )
 
     _set_auth_cookies(response, access_token, refresh_token)
 
@@ -189,19 +180,15 @@ async def login(
 async def login_with_code(
     request: LoginWithCodeRequest,
     response: Response,
+    request_obj: Request,
     db: AsyncSession = Depends(get_db),
-    request_obj: Request = None,
 ) -> LoginResponse:
-    user_agent = request_obj.headers.get("user-agent") if request_obj else None
-    ip_address = request_obj.client.host if request_obj and request_obj.client else None
+    user_agent = request_obj.headers.get("user-agent")
+    ip_address = request_obj.client.host if request_obj.client else None
 
-    try:
-        user, access_token, refresh_token = await AuthService.login_with_code(
-            db, request.email, request.code, user_agent, ip_address
-        )
-    except Exception:
-        logger.exception("验证码登录失败")
-        raise
+    user, access_token, refresh_token = await AuthService.login_with_code(
+        db, request.email, request.code, user_agent, ip_address
+    )
 
     _set_auth_cookies(response, access_token, refresh_token)
 

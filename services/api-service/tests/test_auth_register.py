@@ -38,13 +38,11 @@ async def client():
 
 
 @pytest.mark.asyncio
-@patch("api_service.controllers.auth.AuthService.login", new_callable=AsyncMock)
 @patch("api_service.controllers.auth.AuthService.register", new_callable=AsyncMock)
-async def test_register_success(mock_register, mock_login, client):
+async def test_register_success(mock_register, client):
     """T-04-02 — register success: 201, cookies set, response contains uid (not user_id)."""
     user = _stub_user()
-    mock_register.return_value = user
-    mock_login.return_value = (user, "access-token-xyz", "refresh-token-xyz")
+    mock_register.return_value = (user, "access-token-xyz", "refresh-token-xyz")
 
     response = await client.post(
         "/api/v1/auth/register",

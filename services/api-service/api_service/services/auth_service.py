@@ -13,6 +13,7 @@ import logging
 from datetime import timedelta
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api_service.common.core.exceptions import (
@@ -70,34 +71,29 @@ class AuthService:
     """认证服务类"""
 
     @staticmethod
-    async def register(db: AsyncSession, data: RegisterRequest) -> User:
-        """用户注册"""
+    async def register(
+        db: AsyncSession,
+        data: RegisterRequest,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None,
+    ) -> tuple[User, str, str]:
+        """用户注册并创建会话（原子操作，单次 commit）"""
         email = normalize_email(data.email)
         user_repo = UserRepository(db)
 
-        # 检查邮箱是否已存在
         if await user_repo.get_by_email(email):
             raise EmailAlreadyExistsException()
 
-        # 检查密码强度
         ok, msg = check_password_strength(data.password, lang=data.lang)
         if not ok:
             raise WeakPasswordException(detail=msg)
 
-        # 验证邮箱验证码，但延迟到本地事务成功后再消费
         code_record = await EmailService.get_valid_code_or_raise(
             db, email, data.verification_code, "register"
         )
 
-        # 生成 NanoID UID
         uid = generate_nanoid_uid()
-
         password_hash = await hash_password_async(data.password)
-
-        # D-09: Phase 4 always reads DEFAULT_USER_RPM constant; admin DB read
-        # deferred to Phase 5. The legacy system-settings gateway is intentionally
-        # NOT imported here — Phase 4 has no cross-service HTTP for this read.
-        # TODO(phase-5): re-introduce dynamic DB read when admin domain ships
         snapshot_rpm = settings.DEFAULT_USER_RPM
 
         user = User(
@@ -111,11 +107,23 @@ class AuthService:
 
         user_repo.add(user)
         EmailService.mark_code_used(code_record)
-        await db.commit()
-        await db.refresh(user)
 
+        # flush 让 user 获得 DB 分配的 id，后续创建 session 需要 user.id
+        await db.flush()
+
+        access_token, refresh_token = await AuthService._create_session_and_tokens(
+            db, user, user_agent, ip_address
+        )
+
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            raise EmailAlreadyExistsException()
+
+        await db.refresh(user)
         log_event(logger, logging.INFO, "userRegisterSuccess", uid=user.uid)
-        return user
+        return user, access_token, refresh_token
 
     @staticmethod
     async def login(
