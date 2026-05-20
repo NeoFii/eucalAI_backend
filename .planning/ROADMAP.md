@@ -17,7 +17,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - [x] **Phase 4: User Domain Controllers** - Auth, API Key, billing, model catalog endpoints (completed 2026-05-18)
 - [x] **Phase 5: Admin Domain Controllers** - Admin auth, all management endpoints (direct service calls) (completed 2026-05-19)
 - [x] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache (completed 2026-05-19)
-- [ ] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting
+- [x] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting (completed 2026-05-19)
 - [x] **Phase 8: Inference Service Update** - Internal HMAC endpoints, inference-service URL repoint (completed 2026-05-19)
 - [x] **Phase 9: Integration Testing** - End-to-end validation of all domains working together (completed 2026-05-20)
 - [ ] **Phase 10: Production Cutover** - DB merge, deployment, frontend switch, old service teardown
@@ -177,19 +177,12 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — SdkClientPool + Token Bucket 限流 + backends + dispatch + Protocol 定义 + schemas
+- [x] 07-01-PLAN.md — SdkClientPool + Token Bucket 限流 + backends + dispatch + Protocol 定义 + schemas
 
 **Wave 2** *(blocked on Wave 1 completion; 07-02 and 07-03 run in parallel)*
 
-- [ ] 07-02-PLAN.md — CallLifecycle 编排器 + 三个 ProtocolAdapter + 流式处理 + 四个 relay 端点挂载
-- [ ] 07-03-PLAN.md — 集成测试：四个端点 + SSE 格式 + 限流 429 验证
-
-
-
-
-
-
-
+- [x] 07-02-PLAN.md — CallLifecycle 编排器 + 三个 ProtocolAdapter + 流式处理 + 四个 relay 端点挂载
+- [x] 07-03-PLAN.md — 集成测试：四个端点 + SSE 格式 + 限流 429 验证
 
 ### Phase 8: Inference Service Update
 
@@ -256,10 +249,10 @@ Phases execute in numeric order. Phase 5 can parallel Phase 4 (both depend on Ph
 | 1. Project Scaffold & Common Layer | 3/3 | Complete | 2026-05-18 |
 | 2. Database & Redis Infrastructure | 4/4 | Complete | 2026-05-19 |
 | 3. Models & Repositories Migration | 3/3 | Complete | 2026-05-19 |
-| 4. User Domain Controllers | 3/3 | Complete   | 2026-05-18 |
-| 5. Admin Domain Controllers | 3/3 | Complete   | 2026-05-19 |
-| 6. Relay Core | 0/3 | Not started | - |
-| 7. Protocol Adapters & Streaming | 0/3 | Not started | - |
-| 8. Inference Service Update | 0/1 | Not started | - |
-| 9. Integration Testing | 0/3 | Not started | - |
+| 4. User Domain Controllers | 3/3 | Complete | 2026-05-18 |
+| 5. Admin Domain Controllers | 3/3 | Complete | 2026-05-19 |
+| 6. Relay Core | 3/3 | Complete | 2026-05-19 |
+| 7. Protocol Adapters & Streaming | 3/3 | Complete | 2026-05-19 |
+| 8. Inference Service Update | 2/2 | Complete | 2026-05-19 |
+| 9. Integration Testing | 3/3 | Complete | 2026-05-20 |
 | 10. Production Cutover | 0/2 | Not started | - |

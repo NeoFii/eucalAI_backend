@@ -1,1 +1,0 @@
-"""Cross-service HTTP gateways."""
