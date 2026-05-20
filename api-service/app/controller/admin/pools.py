@@ -1,0 +1,289 @@
+"""Admin pool management endpoints.
+
+Ported from `services/admin-service/src/controllers/pools.py` in Plan 05-02
+/ Task 1. Rewrites applied:
+
+- `from core.dependencies import get_db_session` → `from app.core.db import get_db`
+- `from models import AdminUser` → `from app.model import AdminUser`
+- `from core.policies import require_super_admin` →
+  `from app.core.policies import require_super_admin`
+- `from schemas.common import AdminBaseResponse` →
+  `from app.common.schemas import BaseResponse`
+- `from schemas.pool import (...)` →
+  `from app.schema.admin.pool import (...)`
+- `from services.pool_service import PoolService` →
+  `from app.service.admin.pool_service import PoolService`
+- `from common.api import PaginatedResponse` →
+  `from app.common.api.pagination import PaginatedResponse`
+
+The router keeps `prefix="/pools"` so the final mount path is
+`/api/v1/admin/pools/*` (admin_router adds `/admin`, the api router adds
+`/api/v1`).
+"""
+# ruff: noqa: B008
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, Path, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.api.pagination import PaginatedResponse
+from app.common.schemas import BaseResponse
+from app.core.db import get_db
+from app.core.policies import require_super_admin
+from app.model import AdminUser
+from app.schema.admin.pool import (
+    AvailableModelSlugsResponse,
+    CheckBalancesResponse,
+    ModelCostResponse,
+    PoolAccountCreate,
+    PoolAccountResponse,
+    PoolAccountUpdate,
+    PoolCreate,
+    PoolDetailResponse,
+    PoolListResponse,
+    PoolModelCreate,
+    PoolModelResponse,
+    PoolModelUpdate,
+    PoolResponse,
+    PoolUpdate,
+    SyncModelsResponse,
+)
+from app.service.admin.pool_service import PoolService
+
+router = APIRouter(prefix="/pools", tags=["admin-pools"])
+
+_SLUG_PATH = Path(..., pattern=r"^[a-z0-9][a-z0-9._-]*$", max_length=64)
+_MODEL_SLUG_PATH = Path(..., max_length=120)
+
+
+# ------------------------------------------------------------------
+# Pool
+# ------------------------------------------------------------------
+
+@router.post("", response_model=PoolResponse, summary="Create pool")
+async def create_pool(
+    payload: PoolCreate,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolResponse:
+    item = await PoolService.create_pool(db, payload, actor_admin_id=current_admin.id)
+    return PoolResponse(data=item)
+
+
+@router.get("", response_model=PoolListResponse, summary="List pools")
+async def list_pools(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    _current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolListResponse:
+    items, total = await PoolService.list_pools(db, page=page, page_size=page_size)
+    return PoolListResponse(
+        data=PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
+    )
+
+
+@router.get(
+    "/available-models",
+    response_model=AvailableModelSlugsResponse,
+    summary="List model slugs with active pool coverage",
+)
+async def list_available_model_slugs(
+    _current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AvailableModelSlugsResponse:
+    items = await PoolService.get_available_model_slugs(db)
+    return AvailableModelSlugsResponse(data=items)
+
+
+@router.get(
+    "/model-cost/{model_slug:path}",
+    response_model=ModelCostResponse,
+    summary="Get cost pricing for a model slug across pools",
+)
+async def get_model_cost(
+    model_slug: str = Path(..., max_length=120),
+    _current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ModelCostResponse:
+    info = await PoolService.get_model_cost(db, model_slug)
+    return ModelCostResponse(data=info)
+
+
+@router.get("/{slug}", response_model=PoolDetailResponse, summary="Pool detail")
+async def get_pool(
+    slug: str = _SLUG_PATH,
+    _current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolDetailResponse:
+    detail = await PoolService.get_pool(db, slug)
+    return PoolDetailResponse(data=detail)
+
+
+@router.patch("/{slug}", response_model=PoolResponse, summary="Update pool")
+async def update_pool(
+    payload: PoolUpdate,
+    slug: str = _SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolResponse:
+    item = await PoolService.update_pool(
+        db, slug, payload, actor_admin_id=current_admin.id,
+    )
+    return PoolResponse(data=item)
+
+
+@router.delete("/{slug}", response_model=PoolResponse, summary="Disable pool")
+async def disable_pool(
+    slug: str = _SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolResponse:
+    item = await PoolService.disable_pool(db, slug, actor_admin_id=current_admin.id)
+    return PoolResponse(data=item)
+
+
+# ------------------------------------------------------------------
+# PoolModel
+# ------------------------------------------------------------------
+
+@router.post(
+    "/{slug}/models", response_model=PoolModelResponse, summary="Add pool model",
+)
+async def add_pool_model(
+    payload: PoolModelCreate,
+    slug: str = _SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolModelResponse:
+    item = await PoolService.add_pool_model(
+        db, slug, payload, actor_admin_id=current_admin.id,
+    )
+    return PoolModelResponse(data=item)
+
+
+@router.patch(
+    "/{slug}/models/{model_slug}",
+    response_model=PoolModelResponse,
+    summary="Update pool model",
+)
+async def update_pool_model(
+    payload: PoolModelUpdate,
+    slug: str = _SLUG_PATH,
+    model_slug: str = _MODEL_SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolModelResponse:
+    item = await PoolService.update_pool_model(
+        db, slug, model_slug, payload, actor_admin_id=current_admin.id,
+    )
+    return PoolModelResponse(data=item)
+
+
+@router.delete(
+    "/{slug}/models/{model_slug}",
+    response_model=BaseResponse,
+    summary="Remove pool model",
+)
+async def remove_pool_model(
+    slug: str = _SLUG_PATH,
+    model_slug: str = _MODEL_SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> BaseResponse:
+    await PoolService.remove_pool_model(
+        db, slug, model_slug, actor_admin_id=current_admin.id,
+    )
+    return BaseResponse()
+
+
+@router.post(
+    "/{slug}/models/sync",
+    response_model=SyncModelsResponse,
+    summary="Sync models from upstream",
+)
+async def sync_models(
+    slug: str = _SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> SyncModelsResponse:
+    result = await PoolService.sync_models(
+        db, slug, actor_admin_id=current_admin.id,
+    )
+    return SyncModelsResponse(data=result)
+
+
+# ------------------------------------------------------------------
+# PoolAccount
+# ------------------------------------------------------------------
+
+@router.post(
+    "/{slug}/accounts",
+    response_model=PoolAccountResponse,
+    summary="Add pool account",
+)
+async def add_pool_account(
+    payload: PoolAccountCreate,
+    slug: str = _SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolAccountResponse:
+    item = await PoolService.add_pool_account(
+        db, slug, payload, actor_admin_id=current_admin.id,
+    )
+    return PoolAccountResponse(data=item)
+
+
+@router.patch(
+    "/{slug}/accounts/{account_id}",
+    response_model=PoolAccountResponse,
+    summary="Update pool account",
+)
+async def update_pool_account(
+    payload: PoolAccountUpdate,
+    slug: str = _SLUG_PATH,
+    account_id: int = Path(...),
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolAccountResponse:
+    item = await PoolService.update_pool_account(
+        db, slug, account_id, payload, actor_admin_id=current_admin.id,
+    )
+    return PoolAccountResponse(data=item)
+
+
+@router.delete(
+    "/{slug}/accounts/{account_id}",
+    response_model=PoolAccountResponse,
+    summary="Disable pool account",
+)
+async def disable_pool_account(
+    slug: str = _SLUG_PATH,
+    account_id: int = Path(...),
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PoolAccountResponse:
+    item = await PoolService.disable_pool_account(
+        db, slug, account_id, actor_admin_id=current_admin.id,
+    )
+    return PoolAccountResponse(data=item)
+
+
+@router.post(
+    "/{slug}/accounts/check",
+    response_model=CheckBalancesResponse,
+    summary="Check account balances",
+)
+async def check_balances(
+    slug: str = _SLUG_PATH,
+    current_admin: AdminUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CheckBalancesResponse:
+    result = await PoolService.check_balances(
+        db, slug, actor_admin_id=current_admin.id,
+    )
+    return CheckBalancesResponse(data=result)
+
+
+__all__ = ["router"]
