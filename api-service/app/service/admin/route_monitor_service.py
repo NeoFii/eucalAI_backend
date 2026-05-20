@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.infra.db.query import ListParams
 from app.common.utils.timezone import now
 from app.repository.call_log_repository import CallLogRepository
 from app.repository.user_repository import UserRepository
@@ -37,7 +38,6 @@ class AdminRouteMonitorService:
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> tuple[list, int]:
-        # Resolve user_uid -> user_id if provided
         user_id: int | None = None
         if user_uid:
             user = await UserRepository(db).get_by_uid(user_uid)
@@ -46,10 +46,17 @@ class AdminRouteMonitorService:
             else:
                 return [], 0
 
-        repo = CallLogRepository(db)
-        return await repo.list_requests(
+        params = ListParams(
             page=page,
             page_size=page_size,
+            time_field="created_at" if (start or end) else None,
+            start=start,
+            end=end,
+        )
+
+        repo = CallLogRepository(db)
+        result = await repo.list_requests(
+            params=params,
             user_id=user_id,
             model_name=model_name,
             selected_model=selected_model,
@@ -60,9 +67,8 @@ class AdminRouteMonitorService:
             score_max=score_max,
             request_id=request_id,
             input_hash=input_hash,
-            start=start,
-            end=end,
         )
+        return result.items, result.total
 
     @staticmethod
     async def get_request_detail(db: AsyncSession, *, request_id: str):

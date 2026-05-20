@@ -137,7 +137,6 @@ class InferenceSettings(BaseServiceSettings):
     INFERENCE_ALLOW_INSECURE_DEV: bool = False
 
     ROUTER_MODEL_PATHS: str = ""
-    ROUTER_RUNTIME_CONFIG: str = ""
 
     API_SERVICE_URL: str = "http://127.0.0.1:8000"
 

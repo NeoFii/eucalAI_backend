@@ -19,8 +19,6 @@ class ServiceLogEntry(BaseModel):
     logger: str
     event: str
     message: Optional[str] = None
-    traceId: Optional[str] = None
-    spanId: Optional[str] = None
     requestId: Optional[str] = None
     uid: Optional[str] = None
     env: Optional[str] = None

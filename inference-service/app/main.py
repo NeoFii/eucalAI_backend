@@ -43,7 +43,6 @@ def create_app() -> FastAPI:
         ring_buffer_capacity=settings.LOG_RING_BUFFER_CAPACITY,
     )
 
-    runtime_config_path = _resolve_asset(settings.ROUTER_RUNTIME_CONFIG, "runtime_config.json")
     model_paths_config = _resolve_asset(settings.ROUTER_MODEL_PATHS, "model_paths.json")
 
     @asynccontextmanager
@@ -60,7 +59,6 @@ def create_app() -> FastAPI:
         gateway = ApiServiceConfigGateway()
         config_mgr = ConfigManager(
             gateway=gateway,
-            runtime_config_path=runtime_config_path,
             refresh_interval_seconds=settings.CONFIG_REFRESH_INTERVAL_SECONDS,
         )
         await config_mgr.start()

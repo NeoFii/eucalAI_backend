@@ -1,9 +1,8 @@
-"""ConfigManager: 3-tier config source (admin -> cached_previous -> local_fallback)."""
+"""ConfigManager: admin-service config with cached_previous fallback."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -18,21 +17,19 @@ _logger = logging.getLogger("inference_service")
 
 
 class ConfigManager:
-    """Manage routing configuration with admin-service as primary source."""
+    """Manage routing configuration with admin-service as sole source."""
 
     def __init__(
         self,
         *,
         gateway: ApiServiceConfigGateway,
-        runtime_config_path: str,
         refresh_interval_seconds: int = 60,
     ) -> None:
         self._gateway = gateway
-        self._runtime_config_path = runtime_config_path
         self._refresh_interval = refresh_interval_seconds
         self._cached_config: Dict[str, Any] | None = None
         self._config_version: int | None = None
-        self._config_source: str = "local_fallback"
+        self._config_source: str = "none"
         self._last_updated_at: datetime | None = None
         self._refresh_task: asyncio.Task | None = None
 
@@ -48,18 +45,7 @@ class ConfigManager:
     def last_updated_at(self) -> datetime | None:
         return self._last_updated_at
 
-    def _load_local_fallback(self) -> Dict[str, Any]:
-        """Load and normalize local config, stripping model_providers."""
-        import os
-        path = self._runtime_config_path
-        if not path or not os.path.exists(path):
-            raise RuntimeError(f"local runtime config not found: {path}")
-        with open(path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        return normalize_inference_config(raw)
-
     async def start(self) -> None:
-        admin_config = None
         try:
             admin_config = await self._gateway.fetch_active_config()
         except InternalServiceResponseError as exc:
@@ -67,39 +53,27 @@ class ConfigManager:
                 raise RuntimeError(
                     f"admin-service rejected credentials (HTTP {exc.status_code}): {exc.detail}"
                 ) from exc
-            _logger.warning("admin-service returned error, trying local fallback", exc_info=True)
-        except Exception:
-            _logger.warning("failed to fetch config from admin-service", exc_info=True)
-
-        if admin_config is not None:
-            try:
-                self._cached_config = normalize_inference_config(admin_config)
-                self._config_version = admin_config.get("version")
-                self._config_source = "admin"
-                self._last_updated_at = datetime.now(timezone.utc)
-                log_event(
-                    _logger, logging.INFO, "configLoadedFromAdmin",
-                    version=self._config_version,
-                )
-            except Exception:
-                _logger.warning(
-                    "admin config normalization failed, trying local fallback",
-                    exc_info=True,
-                )
-                admin_config = None
+            raise RuntimeError(
+                f"failed to fetch routing config from admin-service (HTTP {exc.status_code})"
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                "failed to fetch routing config from admin-service"
+            ) from exc
 
         if admin_config is None:
-            try:
-                local = self._load_local_fallback()
-                self._cached_config = local
-                self._config_version = None
-                self._config_source = "local_fallback"
-                self._last_updated_at = datetime.now(timezone.utc)
-                log_event(_logger, logging.INFO, "configLoadedFromLocal")
-            except Exception:
-                raise RuntimeError(
-                    "failed to load routing config from both admin-service and local file"
-                )
+            raise RuntimeError(
+                "admin-service returned no active routing config"
+            )
+
+        self._cached_config = normalize_inference_config(admin_config)
+        self._config_version = admin_config.get("version")
+        self._config_source = "admin"
+        self._last_updated_at = datetime.now(timezone.utc)
+        log_event(
+            _logger, logging.INFO, "configLoadedFromAdmin",
+            version=self._config_version,
+        )
 
         self._refresh_task = asyncio.create_task(self._poll_loop())
 
