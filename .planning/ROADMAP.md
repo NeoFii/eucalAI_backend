@@ -19,7 +19,7 @@ Consolidate 4 microservices (admin-service, user-service, router-service, infere
 - [x] **Phase 6: Relay Core** - Call lifecycle, API Key local auth, billing integration, config cache (completed 2026-05-19)
 - [ ] **Phase 7: Protocol Adapters & Streaming** - OpenAI/Anthropic/Responses endpoints, SSE, rate limiting
 - [x] **Phase 8: Inference Service Update** - Internal HMAC endpoints, inference-service URL repoint (completed 2026-05-19)
-- [ ] **Phase 9: Integration Testing** - End-to-end validation of all domains working together
+- [x] **Phase 9: Integration Testing** - End-to-end validation of all domains working together (completed 2026-05-20)
 - [ ] **Phase 10: Production Cutover** - DB merge, deployment, frontend switch, old service teardown
 
 ## Phase Details
@@ -224,9 +224,9 @@ Plans:
 
 Plans:
 
-- [ ] 09-01: End-to-end relay flow tests
-- [ ] 09-02: Cross-domain integration tests (admin -> relay cache)
-- [ ] 09-03: Resource and concurrency validation
+- [x] 09-01: End-to-end relay flow tests
+- [x] 09-02: Cross-domain integration tests (admin -> relay cache)
+- [x] 09-03: Resource and concurrency validation
 
 ### Phase 10: Production Cutover
 
